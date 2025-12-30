@@ -1,0 +1,218 @@
+:root {
+  /* =========================
+     1. PALETTE: ACCENTS & BRAND
+     ========================= */
+  --c-accent: #fa2d48;
+  --c-accent-hover: #ff4d65;
+
+  /* =========================
+     2. PALETTE: TEXT
+     ========================= */
+  --c-text-primary: #ffffff;
+  --c-text-secondary: rgba(255, 255, 255, 0.6);
+  --c-text-muted: #888888;
+  --c-text-inverse: #000000;
+
+  /* =========================
+     3. PALETTE: BACKGROUNDS
+     ========================= */
+  --c-bg-app: #000000;         /* Основной фон приложения */
+  --c-bg-main: #121212;        /* Фон контентной области */
+  --c-bg-sidebar: #000000;     /* Фон меню */
+  --c-bg-card: #1a1a1a;        /* Карточки */
+  --c-bg-placeholder: #222222; /* Заглушки для картинок */
+  --c-bg-glass: rgba(18, 18, 18, 0.95); /* Полупрозрачные панели */
+  --c-bg-toast: #333333;
+
+  /* =========================
+     4. PALETTE: INTERACTIVE SURFACES (White Alphas)
+     ========================= */
+  --c-surface-hover: rgba(255, 255, 255, 0.08);
+  --c-surface-active: rgba(255, 255, 255, 0.12);
+  --c-surface-input: #1a1a1a;
+  --c-surface-input-focus: rgba(255, 255, 255, 0.12);
+  --c-surface-button: rgba(255, 255, 255, 0.05);
+  --c-surface-button-hover: rgba(255, 255, 255, 0.1);
+  
+  /* Drag & Drop Surfaces */
+  --c-surface-drag-phantom: #1a1a1a;
+  --c-surface-drag-land: rgba(255, 255, 255, 0.05);
+
+  /* Progress Bars */
+  --c-rail-bg: rgba(255, 255, 255, 0.15);
+  --c-rail-bg-hover: rgba(255, 255, 255, 0.3);
+
+  /* Skeletons */
+  --c-skeleton-base: rgba(255, 255, 255, 0.1);
+
+  /* =========================
+     5. BORDERS & SEPARATORS
+     ========================= */
+  --c-border: rgba(255, 255, 255, 0.1);
+  --c-border-dim: rgba(255, 255, 255, 0.05);
+  --c-border-bright: rgba(255, 255, 255, 0.2);
+  --c-border-dashed: rgba(255, 255, 255, 0.2);
+  --c-border-dashed-hover: rgba(255, 255, 255, 0.5);
+
+  /* =========================
+     6. OVERLAYS & SHADOWS
+     ========================= */
+  --c-overlay-dim: rgba(0, 0, 0, 0.4);
+  --c-overlay-backdrop: rgba(0, 0, 0, 0.8);
+  
+  --c-shadow-card: rgba(0, 0, 0, 0.3);
+  --c-shadow-popover: rgba(0, 0, 0, 0.5);
+  --c-shadow-header: rgba(0, 0, 0, 0.5);
+  --c-shadow-phantom: rgba(0, 0, 0, 0.7);
+  --c-shadow-glow-accent: rgba(250, 45, 72, 0.5);
+
+  /* =========================
+     7. ICONS
+     ========================= */
+  --c-icon-idle: #9ca3af;
+  --c-icon-hover: #ffffff;
+  --c-icon-faint: rgba(255, 255, 255, 0.4);
+  --icon-stroke-width: 1.5px;
+
+  /* =========================
+     8. DIMENSIONS & RADIUS
+     ========================= */
+  --header-height: 64px;
+  --mini-player-height: 90px;
+  --sidebar-width: 260px;
+  
+  --radius-sm: 4px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --radius-xl: 20px;
+  --radius-full: 9999px;
+
+  /* =========================
+     9. Z-INDEX LAYERS
+     ========================= */
+  --z-base: 1;
+  --z-dock: 1000;
+  --z-modal: 2000;
+  --z-toast: 3000;
+  --z-drag-item: 9999;
+
+  /* =========================
+     10. TRANSITIONS
+     ========================= */
+  --trans-fast: 0.2s ease;
+  --trans-smooth: 0.3s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+/* =========================
+   GLOBAL RESETS
+   ========================= */
+body {
+  margin: 0;
+  background: var(--c-bg-app);
+  color: var(--c-text-primary);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  overflow: hidden;
+  -webkit-tap-highlight-color: transparent;
+}
+
+button {
+  cursor: pointer;
+  border: none;
+  background: none;
+  padding: 0;
+  color: inherit;
+  font-family: inherit;
+  touch-action: manipulation;
+}
+
+/* =========================
+   UTILITIES
+   ========================= */
+.text-ellipsis {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.flex-center {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* =========================
+   GENERIC COMPONENTS
+   ========================= */
+
+/* 1. Naked Icon Button (No background by default) */
+.btn-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--c-text-secondary);
+  border-radius: 50%;
+  padding: 8px;
+  transition: all var(--trans-fast);
+}
+
+.btn-icon:hover {
+  color: var(--c-text-primary);
+  background: var(--c-surface-hover);
+}
+
+.btn-icon:active {
+  transform: scale(0.95);
+}
+
+.btn-icon.active, 
+.btn-icon.liked {
+  color: var(--c-accent);
+}
+
+.btn-icon svg {
+  width: 24px;
+  height: 24px;
+}
+
+/* 2. Range Inputs (Sliders) */
+input[type="range"] {
+  width: 100%;
+  height: 4px;
+  border-radius: 2px;
+  background: #4d4d4d; /* Fallback */
+  background: var(--c-rail-bg-hover);
+  -webkit-appearance: none;
+  outline: none;
+  cursor: pointer;
+}
+
+input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--c-text-primary);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.5);
+  transition: transform 0.1s;
+  border: none;
+}
+
+input[type="range"]:hover::-webkit-slider-thumb {
+  transform: scale(1.2);
+}
+
+/* 3. Global Scrollbar */
+.scroll-y {
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: var(--c-border) transparent;
+}
+
+.scroll-y::-webkit-scrollbar {
+  width: 6px;
+}
+
+.scroll-y::-webkit-scrollbar-thumb {
+  background-color: var(--c-border);
+  border-radius: 3px;
+}

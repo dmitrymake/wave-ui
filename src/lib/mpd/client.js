@@ -1,0 +1,163 @@
+import { CONFIG } from "../../config";
+import { connectionStatus, showToast } from "../store";
+
+class MpdClient {
+  constructor() {
+    this.socket = null;
+    this.queue = [];
+    this.isProcessing = false;
+    this.reconnectTimer = null;
+    this.watchdogTimer = null;
+  }
+
+  get isConnected() {
+    return this.socket && this.socket.readyState === WebSocket.OPEN;
+  }
+
+  connect() {
+    if (
+      this.socket &&
+      (this.socket.readyState === WebSocket.CONNECTING ||
+        this.socket.readyState === WebSocket.OPEN)
+    ) {
+      return;
+    }
+
+    if (this.reconnectTimer) clearTimeout(this.reconnectTimer);
+    let host = CONFIG.MOODE_IP || window.location.hostname;
+    host = host
+      .replace(/^https?:\/\//, "")
+      .split(":")[0]
+      .split("/")[0];
+
+    const port = CONFIG.WS_PORT || "8080";
+
+    const wsUrl = `ws://${host}:${port}`;
+    console.log("[MPD] Attempting connection to:", wsUrl);
+
+    try {
+      this.socket = new WebSocket(wsUrl, ["binary"]);
+    } catch (e) {
+      console.error("[MPD] WebSocket URL is still invalid:", wsUrl, e);
+      this.reconnectTimer = setTimeout(() => this.connect(), 5000);
+      return;
+    }
+
+    this.socket.onopen = () => {
+      console.log("[MPD] Connected");
+      connectionStatus.set("Connected");
+      showToast("Connected to Moode", "success");
+      this._processQueue();
+    };
+
+    this.socket.onmessage = (event) => this._handleMessage(event);
+
+    this.socket.onclose = (e) => {
+      console.warn("[MPD] Socket closed", e.code, e.reason);
+      connectionStatus.set("Disconnected");
+      this._cleanup();
+      this.reconnectTimer = setTimeout(() => this.connect(), 3000);
+    };
+
+    this.socket.onerror = (err) => {
+      console.error("[MPD] Socket error", err);
+    };
+  }
+
+  send(cmd) {
+    return new Promise((resolve, reject) => {
+      this.queue.push({ cmd, resolve, reject });
+      this._processQueue();
+    });
+  }
+
+  _cleanup() {
+    this.isProcessing = false;
+    if (this.watchdogTimer) clearTimeout(this.watchdogTimer);
+
+    // Reject all pending commands IMMEDIATELY
+    // Это убивает и ту команду, которая сейчас "в полете", и те, что ждут очереди
+    while (this.queue.length > 0) {
+      const { reject, cmd } = this.queue.shift();
+      console.warn(`[MPD] Dropping cmd due to disconnect: ${cmd}`);
+      reject(new Error("Connection lost"));
+    }
+  }
+
+  async _processQueue() {
+    if (this.isProcessing || this.queue.length === 0 || !this.isConnected)
+      return;
+
+    this.isProcessing = true;
+    const { cmd } = this.queue[0];
+
+    // Watchdog: If no response in 5s, reset connection
+    if (this.watchdogTimer) clearTimeout(this.watchdogTimer);
+    this.watchdogTimer = setTimeout(() => {
+      console.error("[MPD] Watchdog timeout for cmd:", cmd);
+      if (this.socket) this.socket.close(); // This triggers onclose -> cleanup
+    }, 5000);
+
+    try {
+      const payload = cmd.endsWith("\n") ? cmd : cmd + "\n";
+      this.socket.send(new TextEncoder().encode(payload));
+    } catch (e) {
+      console.error("[MPD] Send error", e);
+      // Force cleanup immediately if send fails
+      this._cleanup();
+    }
+  }
+
+  async _handleMessage(event) {
+    let text = event.data;
+    if (text instanceof Blob) {
+      text = await text.text();
+    }
+
+    if (this.watchdogTimer) {
+      clearTimeout(this.watchdogTimer);
+      this.watchdogTimer = null;
+    }
+
+    const currentRequest = this.queue[0];
+    // Check success or ACK error
+    const isSuccess = text === "OK\n" || text.endsWith("\nOK\n");
+    const isError = text.startsWith("ACK");
+
+    if (isSuccess || isError) {
+      this.queue.shift(); // Remove active command
+      this.isProcessing = false;
+
+      if (currentRequest) {
+        if (isError) {
+          console.error(
+            `[MPD] CMD: ${currentRequest.cmd} -> ERROR: ${text.trim()}`,
+          );
+          currentRequest.reject(new Error(text.trim()));
+        } else {
+          const cleanResult = text.replace(/\nOK\n$/, "").replace(/^OK\n$/, "");
+          currentRequest.resolve(cleanResult);
+        }
+      }
+
+      // Next!
+      this._processQueue();
+    } else {
+      // Buffer logic for partial frames (simplified)
+      if (!this._buffer) this._buffer = "";
+      this._buffer += text;
+
+      if (
+        this._buffer.endsWith("\nOK\n") ||
+        this._buffer === "OK\n" ||
+        this._buffer.startsWith("ACK")
+      ) {
+        const fullMsg = new MessageEvent("message", { data: this._buffer });
+        this._buffer = "";
+        this._handleMessage(fullMsg);
+      }
+    }
+  }
+}
+
+export const mpdClient = new MpdClient();

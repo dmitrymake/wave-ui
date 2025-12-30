@@ -1,0 +1,589 @@
+/* =========================================
+   1. LAYOUT & CONTAINERS
+   ========================================= */
+.view-container,
+.content-padded,
+.music-grid,
+.row-wrapper {
+  box-sizing: border-box;
+}
+
+.view-container {
+  height: 100%;
+  width: 100%;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.view-container.scrollable {
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.content-padded {
+  padding: 16px;
+}
+
+/* =========================================
+   2. GRID & CARDS
+   ========================================= */
+.music-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  gap: 24px;
+}
+
+.music-card {
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  padding: 12px;
+  border-radius: var(--radius-lg);
+  transition: background 0.2s, transform 0.2s;
+}
+
+.music-card:hover {
+  background: var(--c-surface-hover);
+  transform: translateY(-5px);
+}
+
+.card-img-container {
+  width: 100%;
+  aspect-ratio: 1;
+  border-radius: var(--radius-md);
+  position: relative;
+  margin-bottom: 12px;
+  background: var(--c-bg-placeholder);
+  box-shadow: 0 8px 24px var(--c-shadow-card);
+  overflow: hidden;
+}
+
+.card-title {
+  font-weight: 700;
+  font-size: 15px;
+  color: var(--c-text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  margin-bottom: 4px;
+}
+
+.card-sub {
+  font-size: 13px;
+  color: var(--c-text-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.play-overlay {
+  position: absolute;
+  inset: 0;
+  background: var(--c-overlay-dim);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  transition: opacity 0.2s;
+}
+
+.music-card:hover .play-overlay {
+  opacity: 1;
+}
+
+/* Dashed card for "New Playlist" */
+.dashed-cover {
+  background: var(--c-border-dim) !important;
+  border: 2px dashed var(--c-border-dashed);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: border-color 0.2s, background-color 0.2s;
+}
+
+.music-card:hover .dashed-cover {
+  border-color: var(--c-border-dashed-hover);
+  background: var(--c-surface-active) !important;
+}
+
+/* Icons within cards */
+.new-playlist-icon,
+.playlist-icon-bg {
+  width: 40px;
+  height: 40px;
+  color: var(--c-icon-faint);
+}
+
+.playlist-icon-bg {
+  width: 60px;
+  height: 60px;
+  opacity: 0.3;
+  color: var(--c-text-inverse);
+}
+
+.new-playlist-icon svg,
+.playlist-icon-bg svg {
+  width: 100%;
+  height: 100%;
+  stroke-width: 1.5;
+  fill: none;
+  stroke: currentColor;
+}
+
+@media (max-width: 768px) {
+  .music-grid {
+    grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+    gap: 16px;
+  }
+}
+
+/* =========================================
+   3. HEADERS
+   ========================================= */
+
+/* --- A. STANDARD HEADER (Art + Info) --- */
+/* (Оставляем как есть, для обычных альбомов) */
+.view-header {
+  display: flex;
+  gap: 32px;
+  margin-bottom: 16px;
+  align-items: flex-end;
+}
+
+.header-art {
+  width: 232px;
+  height: 232px;
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  box-shadow: 0 10px 40px var(--c-shadow-header);
+  flex-shrink: 0;
+  background: var(--c-bg-placeholder);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.header-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.header-label {
+  text-transform: uppercase;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--c-accent);
+}
+
+.header-title {
+  font-size: 48px;
+  font-weight: 900;
+  margin: 0;
+  margin-bottom: 6px;
+  line-height: 1.1;
+  color: var(--c-text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-shrink: 0;
+}
+
+.track-count {
+  margin-top: 16px;
+  color: var(--c-text-secondary);
+  font-size: 14px;
+  font-weight: 500;
+}
+
+/* Мобильные стили для БОЛЬШОГО хедера (с картинкой) */
+@media (max-width: 768px) {
+  .view-header {
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    gap: 16px;
+  }
+  .header-art {
+    width: 160px;
+    height: 160px;
+  }
+  .view-header .header-title {
+    font-size: 24px;
+    white-space: normal;
+  }
+  .view-header .header-actions {
+    width: 100%;
+    justify-content: center;
+  }
+}
+
+.view-header-simple {
+  display: flex;
+  flex-direction: row; /* Всегда в ряд */
+  align-items: center;
+  justify-content: space-between; /* Текст слева, кнопки справа */
+  padding: 16px 20px;
+  min-height: 80px;
+  width: 100%; /* Гарантируем ширину */
+  box-sizing: border-box;
+}
+
+.view-header-simple .header-info {
+  display: flex;
+  flex-direction: column; /* Заголовок над подзаголовком */
+  align-items: flex-start; /* Прижать влево */
+  justify-content: center;
+  margin-right: 16px;
+  flex: 1; /* Занимает все свободное место */
+  min-width: 0; /* Разрешаем сжатие текста */
+}
+
+.view-header-simple .header-title {
+  font-size: 24px;
+  font-weight: 800;
+  color: var(--c-text-primary);
+  margin: 0;
+  line-height: 1.2;
+}
+
+.view-header-simple .header-subtitle {
+  color: var(--c-text-muted);
+  font-size: 14px;
+  font-weight: 500;
+  margin-top: 4px;
+  white-space: nowrap; /* Запрещаем перенос слов "14 tracks" */
+}
+
+.view-header-simple .header-actions {
+  display: flex;
+  gap: 12px;
+  flex-shrink: 0; /* Кнопки не сжимаются */
+}
+
+/* --- МОБИЛЬНЫЕ ИСПРАВЛЕНИЯ (Strict Fix) --- */
+@media (max-width: 600px) {
+  .view-header-simple {
+    /* Принудительно задаем параметры флекс-контейнера */
+    display: flex !important;
+    flex-direction: row !important; 
+    justify-content: space-between !important;
+    align-items: center !important;
+    
+    padding: 12px 16px !important;
+    min-height: 60px !important;
+  }
+
+  /* Текстовый блок */
+  .view-header-simple .header-info {
+    align-items: flex-start !important; /* Строго влево */
+    text-align: left !important;
+    margin-right: 10px !important;
+  }
+
+  .view-header-simple .header-title {
+    font-size: 18px !important; /* Компактный шрифт */
+  }
+  
+  .view-header-simple .header-subtitle {
+    font-size: 13px !important;
+    display: block !important;
+  }
+
+  /* Блок кнопок */
+  .view-header-simple .header-actions {
+    gap: 8px !important;
+    margin: 0 !important; /* Убираем любые лишние отступы */
+    width: auto !important; /* Запрещаем растягивание */
+  }
+  
+  /* Сами кнопки чуть меньше */
+  .view-header-simple .btn-action {
+    width: 36px !important;
+    height: 36px !important;
+  }
+}
+
+/* =========================================
+   4. SPECIAL BUTTONS
+   (Note: .btn-icon is in shared.css)
+   ========================================= */
+.btn-primary {
+  background: var(--c-accent);
+  color: var(--c-text-primary);
+  border: none;
+  padding: 12px 32px;
+  border-radius: 30px;
+  font-weight: 700;
+  font-size: 16px;
+  cursor: pointer;
+  transition: transform 0.1s;
+}
+
+.btn-primary:hover {
+  transform: scale(1.05);
+}
+
+.btn-primary:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.btn-secondary {
+  background: transparent;
+  color: var(--c-text-primary);
+  border: 1px solid var(--c-border-bright);
+  padding: 12px 24px;
+  border-radius: 30px;
+  font-weight: 700;
+  font-size: 16px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.btn-secondary:hover {
+  background: var(--c-surface-hover);
+  border-color: var(--c-text-primary);
+}
+
+.btn-secondary:disabled {
+  opacity: 0.6;
+  cursor: default;
+  border-color: transparent;
+  background: var(--c-surface-active);
+}
+
+.btn-action {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  margin: 0;
+  background: var(--c-surface-button);
+  border: 1px solid var(--c-surface-input);
+  color: var(--c-icon-idle);
+  cursor: pointer;
+  outline: none;
+  line-height: 0;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.btn-action:hover {
+  background: var(--c-surface-button-hover);
+  color: var(--c-icon-hover);
+  border-color: var(--c-border-bright);
+  transform: translateY(-1px);
+}
+
+.btn-action:active {
+  transform: scale(0.95);
+}
+
+.btn-action.active {
+  background: var(--c-accent);
+  border-color: var(--c-accent);
+  color: var(--c-text-primary);
+  box-shadow: 0 4px 12px var(--c-shadow-glow-accent);
+}
+
+.btn-action :global(svg) {
+  width: 20px !important;
+  height: 20px !important;
+  fill: none !important;
+  stroke: currentColor !important;
+  stroke-width: var(--icon-stroke-width) !important;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+/* =========================================
+   5. SEARCH INPUT
+   ========================================= */
+.search-input-container {
+  background: var(--c-surface-input);
+  border: 1px solid var(--c-border-dim);
+  border-radius: var(--radius-lg);
+  height: 48px;
+  min-height: 48px;
+  display: flex;
+  align-items: center;
+  padding: 0 16px;
+  margin-bottom: 24px;
+  transition: background var(--trans-fast), border-color var(--trans-fast);
+  box-sizing: border-box; /* Важно, чтобы паддинги не меняли высоту */
+}
+
+.search-input-container:focus-within {
+  background: var(--c-surface-input-focus);
+  border-color: var(--c-border-bright);
+}
+
+.search-input-container input {
+  background: none;
+  border: none;
+  color: var(--c-text-primary);
+  width: 100%;
+  height: 100%;
+  outline: none;
+  font-size: 16px;
+  font-family: inherit;
+  padding: 0;
+  margin: 0;
+}
+
+.search-input-container input::placeholder {
+  color: var(--c-text-secondary);
+}
+
+.search-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  margin-right: 12px;
+  flex-shrink: 0;
+  color: var(--c-icon-idle);
+}
+
+.search-icon svg {
+  width: 100%;
+  height: 100%;
+  stroke-width: var(--icon-stroke-width);
+}
+
+/* =========================================
+   6. DRAG AND DROP PHYSICS
+   ========================================= */
+.base-list-scroll-container {
+  width: 100%;
+  height: 100%;
+  overflow-y: auto;
+  overflow-x: hidden;
+  position: relative;
+  overscroll-behavior: none;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+.base-list-scroll-container img {
+  -webkit-user-drag: none;
+  user-drag: none;
+  pointer-events: none;
+}
+
+/* Phantom item being dragged */
+.floating-item {
+  position: fixed;
+  z-index: var(--z-drag-item);
+  pointer-events: none;
+  background: var(--c-surface-drag-phantom);
+  border-radius: 8px;
+  box-shadow: 0 20px 50px var(--c-shadow-phantom);
+  transform: scale(1.02);
+  opacity: 0.95;
+  transition: none;
+}
+
+.floating-item.dropping {
+  transition: top 0.2s cubic-bezier(0.2, 0, 0, 1),
+    left 0.2s cubic-bezier(0.2, 0, 0, 1) !important;
+}
+
+/* Row wrapper in list */
+.row-wrapper {
+  display: block;
+  position: relative;
+  transition: transform 0.2s cubic-bezier(0.2, 0, 0, 1);
+  will-change: transform;
+  z-index: 1;
+  touch-action: pan-y;
+}
+
+.row-wrapper.no-transition {
+  transition: none !important;
+  transform: none !important;
+}
+
+.row-wrapper.ghost-placeholder {
+  opacity: 0;
+  transition: none;
+}
+
+.row-wrapper.just-dropped {
+  transition: none !important;
+  animation: landDown 0.3s cubic-bezier(0.2, 0.8, 0.2, 1);
+  z-index: 2;
+  background: var(--c-surface-drag-land);
+  border-radius: 8px;
+}
+
+.list-body {
+  margin-bottom: 150px;
+}
+
+@keyframes landDown {
+  0% {
+    transform: scale(1.02);
+    box-shadow: 0 10px 30px var(--c-shadow-card);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1);
+    box-shadow: none;
+    opacity: 1;
+  }
+}
+
+/* =========================================
+   7. STATES & UTILITIES
+   ========================================= */
+.music-card.is-active .card-img-container {
+  box-shadow: 0 0 0 3px var(--c-accent);
+}
+
+.music-card.is-active .card-title {
+  color: var(--c-accent);
+}
+
+.music-card.is-active .play-overlay {
+  opacity: 1;
+}
+
+.icon-fallback {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 40px;
+  background: var(--c-bg-placeholder);
+  color: var(--c-icon-faint);
+}
+
+.empty-state-container {
+  grid-column: 1/-1;
+  height: 300px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  color: var(--c-text-secondary);
+  opacity: 0.5;
+}
+
+.empty-state-icon {
+  font-size: 48px;
+  margin-bottom: 10px;
+}
