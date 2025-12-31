@@ -89,13 +89,21 @@
         </div>
       </div>
     </main>
+
+    <div class="docked-player-container">
+      <FullPlayer isDocked={true} />
+    </div>
   </div>
 
-  <MiniPlayer />
+  <div class="mini-player-wrapper">
+    <MiniPlayer />
+  </div>
 </div>
 
 {#if $isFullPlayerOpen}
-  <FullPlayer />
+  <div class="full-player-modal">
+    <FullPlayer />
+  </div>
 {/if}
 
 <style>
@@ -141,6 +149,7 @@
     background: var(--c-bg-main);
     min-width: 0;
     height: 100%;
+    transition: flex 0.3s ease; /* Smooth resize when side menu toggles */
   }
 
   .top-bar {
@@ -209,12 +218,46 @@
     color: var(--c-text-primary);
   }
 
+  .docked-player-container {
+    display: none;
+    width: 280px;
+    flex-shrink: 0;
+    background: var(--c-surface);
+    border-left: 1px solid var(--c-border);
+    z-index: 5;
+  }
+
+  .full-player-modal {
+    position: fixed;
+    inset: 0;
+    z-index: var(--z-modal);
+  }
+
   @media (max-width: 768px) {
     .hamburger-btn {
       display: block;
     }
     .top-bar {
       padding: 0 16px;
+    }
+  }
+
+  /* --- LANDSCAPE MOBILE OPTIMIZATION --- */
+  @media (max-height: 600px) and (orientation: landscape) {
+    .top-bar {
+      display: none;
+    }
+
+    .mini-player-wrapper {
+      display: none;
+    }
+
+    .scroll-container {
+      padding-bottom: 0;
+    }
+
+    .docked-player-container {
+      display: block;
     }
   }
 </style>

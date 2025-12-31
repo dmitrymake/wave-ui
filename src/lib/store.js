@@ -44,6 +44,18 @@ export const activeMenuTab = writable("library");
 export const selectedStationName = writable(null);
 export const isSyncingLibrary = writable(false);
 
+// --- SIDEBAR PERSISTENCE START ---
+const storedSidebar = localStorage.getItem("sidebarCollapsed") === "true";
+export const isSidebarCollapsed = writable(storedSidebar);
+
+// Подписываемся на изменения, чтобы сохранять в localStorage
+isSidebarCollapsed.subscribe((val) => {
+  if (typeof localStorage !== "undefined") {
+    localStorage.setItem("sidebarCollapsed", String(val));
+  }
+});
+// --- SIDEBAR PERSISTENCE END ---
+
 // Library
 export const stations = writable([]);
 export const playlists = writable([]);

@@ -3,14 +3,17 @@
   import { fade } from "svelte/transition";
   import logo from "../assets/wave-logo.svg";
   import { ICONS } from "../lib/icons";
-  import { activeMenuTab, isSyncingLibrary } from "../lib/store";
+  import {
+    activeMenuTab,
+    isSyncingLibrary,
+    isSidebarCollapsed,
+  } from "../lib/store";
   import { ApiActions } from "../lib/api";
   import { CONFIG } from "../config";
 
   export let isOpen = false;
   const dispatch = createEventDispatcher();
 
-  // swipe logic
   let touchStartX = 0;
   let touchCurrentX = 0;
   let isSwiping = false;
@@ -35,6 +38,10 @@
     if ($isSyncingLibrary) return;
     await ApiActions.syncLibrary();
     window.location.hash = "/artists";
+  }
+
+  function toggleCollapse() {
+    isSidebarCollapsed.update((v) => !v);
   }
 
   function handleTouchStart(e) {
@@ -71,128 +78,258 @@
 <aside
   class="side-menu"
   class:mobile-open={isOpen}
+  class:collapsed={$isSidebarCollapsed}
   style:transform={isOpen ? `translateX(${translateX}px)` : ""}
-  style:transition={isSwiping ? "none" : "transform 0.3s ease"}
+  style:transition={isSwiping
+    ? "none"
+    : "width 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94), transform 0.3s ease"}
   on:touchstart={handleTouchStart}
   on:touchmove={handleTouchMove}
   on:touchend={handleTouchEnd}
 >
   <div class="header">
-    <img src={logo} alt="Logo" class="logo" />
+    <div class="header-inner">
+      <button
+        class="collapse-btn"
+        on:click={toggleCollapse}
+        title={$isSidebarCollapsed ? "Expand" : "Collapse"}
+      >
+        <div
+          class="chevron"
+          style="transform: rotate({$isSidebarCollapsed ? '180deg' : '0deg'})"
+        >
+          {@html ICONS.BACK}
+        </div>
+      </button>
+
+      <div class="logo-wrapper" class:hidden={$isSidebarCollapsed}>
+        <img src={logo} alt="Logo" class="logo" />
+      </div>
+    </div>
+
     <button class="btn-icon mobile-close" on:click={() => dispatch("close")}>
       {@html ICONS.CLOSE}
     </button>
   </div>
 
-  <div class="scroll-area scroll-y">
+  <div class="scroll-area custom-scrollbar">
     <nav>
       {#each MENU_ITEMS as item}
         <button
           class="nav-item"
           class:active={$activeMenuTab === item.id}
+          title={item.label}
           on:click={() => switchTab(item.id)}
         >
           <span class="icon">{@html item.icon}</span>
-          <span>{item.label}</span>
+          <span class="label-text" class:hidden={$isSidebarCollapsed}
+            >{item.label}</span
+          >
         </button>
       {/each}
 
       <button
         class="nav-item"
         class:active={$activeMenuTab === "search"}
+        title="Search"
         on:click={() => switchTab("search")}
       >
         <span class="icon">{@html ICONS.SEARCH}</span>
-        <span>Search</span>
+        <span class="label-text" class:hidden={$isSidebarCollapsed}>Search</span
+        >
       </button>
 
       <div class="sep"></div>
 
       <button
         class="nav-item sync"
+        title="Update Library"
         disabled={$isSyncingLibrary}
         on:click={handleSync}
       >
         <span class="icon" class:spin={$isSyncingLibrary}
           >{@html ICONS.SYNC}</span
         >
-        <span>{$isSyncingLibrary ? "Syncing..." : "Update Library"}</span>
+        <span class="label-text" class:hidden={$isSidebarCollapsed}
+          >{$isSyncingLibrary ? "Syncing..." : "Update Library"}</span
+        >
       </button>
+
+      <div class="settings-wrapper" class:hidden={$isSidebarCollapsed}>
+        <div class="settings">
+          <div class="row">
+            <input
+              type="text"
+              bind:value={ipAddress}
+              placeholder="192.168..."
+            />
+            <button
+              class="save"
+              on:click={() => {
+                CONFIG.setMoodeIp(ipAddress);
+                location.reload();
+              }}>OK</button
+            >
+          </div>
+        </div>
+      </div>
     </nav>
 
-    <div class="settings">
-      <div class="sep"></div>
-      <div class="label">MPD Server IP</div>
-      <div class="row">
-        <input type="text" bind:value={ipAddress} placeholder="192.168..." />
-        <button
-          class="save"
-          on:click={() => {
-            CONFIG.setMoodeIp(ipAddress);
-            location.reload();
-          }}>Save</button
-        >
+    <div class="footer">
+      <div class="footer-text" class:hidden={$isSidebarCollapsed}>
+        Moode WaveUI
       </div>
-      <div class="footer">Moode WaveUI</div>
     </div>
   </div>
 </aside>
 
 <style>
   .side-menu {
-    width: var(--sidebar-width);
-    height: 100dvh;
+    width: 250px;
+    height: 100%;
     background: var(--c-bg-sidebar);
     border-right: 1px solid var(--c-border);
     display: flex;
     flex-direction: column;
     z-index: var(--z-modal);
-    transition: transform 0.3s ease;
+    flex-shrink: 0;
+    overflow: hidden;
+    transition: width 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+  }
+
+  .side-menu.collapsed {
+    width: 80px;
   }
 
   .scroll-area {
     flex: 1;
     display: flex;
     flex-direction: column;
+    overflow-y: auto;
+    overflow-x: hidden;
+    min-height: 0;
   }
 
   .header {
-    height: 100px;
+    height: 80px;
+    display: flex;
+    align-items: center;
+    flex-shrink: 0;
+    padding: 0 10px;
+    position: relative;
+  }
+
+  .header-inner {
+    display: flex;
+    align-items: center;
+    width: 100%;
+    height: 100%;
+    position: relative;
+  }
+
+  .collapse-btn {
+    background: transparent;
+    border: none;
+    color: var(--c-text-muted);
+    width: 40px;
+    height: 40px;
+    cursor: pointer;
     display: flex;
     align-items: center;
     justify-content: center;
-    position: relative;
+    border-radius: 8px;
+    flex-shrink: 0;
+    transition:
+      color 0.2s,
+      background 0.2s;
+    /* Position absolutely to keep it fixed while menu shrinks */
+    position: absolute;
+    left: 8px;
+    z-index: 10;
   }
+  .collapsed .collapse-btn {
+    left: 10px;
+  }
+
+  .collapse-btn:hover {
+    color: var(--c-text-primary);
+    background: var(--c-surface-hover);
+  }
+
+  .chevron {
+    width: 24px;
+    height: 24px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: transform 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+  }
+  .chevron :global(svg) {
+    width: 100%;
+    height: 100%;
+  }
+
+  .logo-wrapper {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition:
+      opacity 0.2s ease,
+      transform 0.2s ease;
+    opacity: 1;
+    transform: translateX(0);
+  }
+  .logo-wrapper.hidden {
+    opacity: 0;
+    transform: translateX(-10px);
+    pointer-events: none;
+  }
+
   .logo {
-    height: 50px;
+    height: 32px;
     filter: drop-shadow(0 0 10px var(--c-shadow-glow-accent));
+    display: block;
   }
+
   .mobile-close {
     display: none;
     position: absolute;
     right: 15px;
     color: var(--c-text-primary);
+    z-index: 5;
   }
 
   nav {
-    padding: 10px;
+    padding: 10px 0;
     display: flex;
     flex-direction: column;
     gap: 4px;
+    flex: 1;
   }
 
   .nav-item {
     display: flex;
     align-items: center;
-    width: 100%;
-    padding: 12px 16px;
+    width: auto;
+    height: 48px;
     color: var(--c-text-muted);
-    font-size: 16px;
+    font-size: 15px;
     font-weight: 600;
-    border-radius: 8px;
     background: transparent;
     border: none;
     cursor: pointer;
+    white-space: nowrap;
+    overflow: hidden;
+
+    border-radius: 12px;
+    margin: 2px 12px;
+
+    padding: 0 16px;
+
+    transition:
+      background 0.2s,
+      color 0.2s;
   }
   .nav-item:hover {
     background: var(--c-surface-hover);
@@ -204,18 +341,33 @@
   }
 
   .icon {
-    margin-right: 14px;
+    margin-right: 16px;
     display: flex;
+    flex-shrink: 0;
+    justify-content: center;
+    align-items: center;
+    width: 24px;
+    height: 24px;
   }
   .icon :global(svg) {
-    width: 22px;
-    height: 22px;
+    width: 24px;
+    height: 24px;
+  }
+
+  .label-text {
+    opacity: 1;
+    transition: opacity 0.2s ease;
+  }
+  .label-text.hidden {
+    opacity: 0;
   }
 
   .sep {
     height: 1px;
     background: var(--c-border);
-    margin: 15px 10px;
+    margin: 10px 28px; /* Align separator with text start (12+16) */
+    flex-shrink: 0;
+    opacity: 0.5;
   }
   .spin {
     animation: rotate 2s linear infinite;
@@ -229,15 +381,27 @@
     }
   }
 
+  .settings-wrapper {
+    transition:
+      opacity 0.2s ease,
+      height 0.2s ease,
+      margin 0.2s ease;
+    opacity: 1;
+    height: auto;
+    overflow: hidden;
+  }
+  .settings-wrapper.hidden {
+    opacity: 0;
+    height: 0;
+    pointer-events: none;
+    margin: 0;
+  }
+
   .settings {
-    padding: 0 15px 20px;
+    padding: 10px 16px 0;
+    margin: 0 12px; /* Align with nav items */
   }
-  .label {
-    font-size: 11px;
-    text-transform: uppercase;
-    color: var(--c-text-secondary);
-    margin-bottom: 8px;
-  }
+
   .row {
     display: flex;
     gap: 8px;
@@ -249,35 +413,62 @@
     border: 1px solid var(--c-border);
     color: var(--c-text-primary);
     padding: 8px;
-    border-radius: 6px;
+    border-radius: 8px;
     outline: none;
-    width: 80px;
+    width: 100%;
+    min-width: 0;
+    font-size: 13px;
   }
   .save {
     background: var(--c-surface-button);
     border: 1px solid var(--c-border);
     color: var(--c-text-primary);
-    padding: 0 12px;
-    border-radius: 6px;
+    padding: 0 10px;
+    border-radius: 8px;
     cursor: pointer;
+    font-size: 12px;
+    font-weight: 700;
   }
   .save:hover {
     background: var(--c-surface-hover);
   }
 
   .footer {
+    padding: 20px 0;
+    text-align: center;
+    margin-top: auto;
+  }
+  .footer-text {
     font-size: 10px;
     color: var(--c-text-muted);
-    text-align: center;
-    margin-top: 15px;
+    opacity: 0.5;
+    transition: opacity 0.2s;
+    white-space: nowrap;
+  }
+  .footer-text.hidden {
+    opacity: 0;
   }
 
-  @media (max-width: 768px) {
+  .custom-scrollbar::-webkit-scrollbar {
+    width: 4px;
+  }
+  .custom-scrollbar::-webkit-scrollbar-thumb {
+    background: var(--c-border);
+    border-radius: 2px;
+  }
+  .custom-scrollbar::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  @media (max-width: 768px) and (orientation: portrait) {
     .side-menu {
       position: fixed;
       left: 0;
       top: 0;
+      height: 100dvh;
+      width: 280px !important;
       transform: translateX(-100%);
+      transition: transform 0.3s ease;
     }
     .side-menu.mobile-open {
       transform: translateX(0);
@@ -291,6 +482,51 @@
       background: var(--c-overlay-backdrop);
       z-index: 999;
       backdrop-filter: blur(4px);
+    }
+
+    /* Force FULL View elements visible */
+    .collapse-btn {
+      display: none;
+    }
+    .logo-wrapper.hidden {
+      opacity: 1 !important;
+      transform: none !important;
+    }
+    .label-text.hidden {
+      opacity: 1 !important;
+    }
+    .settings-wrapper.hidden {
+      opacity: 1 !important;
+      height: auto !important;
+      pointer-events: auto !important;
+    }
+    .footer-text.hidden {
+      opacity: 0.5 !important;
+    }
+  }
+
+  @media (max-height: 600px) and (orientation: landscape) {
+    .side-menu {
+      width: 200px;
+    }
+    .side-menu.collapsed {
+      width: 80px;
+    }
+    .nav-item {
+      padding: 0 12px;
+      /* Re-calc center for 80px collapsed width in landscape */
+      /* margin 12px -> 12 left. Center is 40. Icon half is 12. 
+         Pad = 40 - 12 - 12 = 16px. Same math holds! */
+      padding-left: 16px;
+    }
+    .settings {
+      padding: 4px 0 0; /* Adjusted for tighter space */
+    }
+    .header {
+      padding: 0 10px;
+    }
+    .collapse-btn {
+      left: 8px;
     }
   }
 </style>

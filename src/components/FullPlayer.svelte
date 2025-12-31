@@ -13,7 +13,8 @@
   } from "../lib/store.js";
   import ImageLoader from "./ImageLoader.svelte";
 
-  // --- SWIPE LOGIC ---
+  export let isDocked = false;
+
   let startY = 0;
   let currentY = 0;
   let isDraggingPlayer = false;
@@ -23,6 +24,7 @@
   }
 
   function handleTouchStart(e) {
+    if (isDocked) return;
     const target = e.target;
     if (target.closest(".bar-hit-area") || target.closest(".volume-hit-area"))
       return;
@@ -32,7 +34,7 @@
   }
 
   function handleTouchMove(e) {
-    if (!isDraggingPlayer) return;
+    if (!isDraggingPlayer || isDocked) return;
     const delta = e.touches[0].clientY - startY;
     if (delta > 0) {
       if (e.cancelable && delta > 10) e.preventDefault();
@@ -41,19 +43,18 @@
   }
 
   function handleTouchEnd() {
+    if (isDocked) return;
     isDraggingPlayer = false;
     if (currentY > 150) close();
     else currentY = 0;
   }
 
-  // --- IMAGE HANDLING ---
   $: artSrc = getTrackCoverUrl(
     $currentSong,
     $stations,
     $currentSong.stationName,
   );
 
-  // --- PROGRESS BAR ---
   let isDraggingBar = false;
   let dragProgress = 0;
   let progressBar;
@@ -99,7 +100,6 @@
     isDraggingBar = false;
   }
 
-  // --- VOLUME SLIDER ---
   let isDraggingVol = false;
   let volumeBar;
 
@@ -129,7 +129,6 @@
     window.removeEventListener("touchend", onVolEnd);
   }
 
-  // --- PLAY MODES ---
   $: currentMode = $status.repeat ? 2 : $status.random ? 1 : 0;
 
   function togglePlayMode() {
@@ -152,25 +151,27 @@
   $: isLiked = $currentSong.file && $favorites.has($currentSong.file);
 </script>
 
-=== ./components/FullPlayer.svelte ===
 <div
   class="full-player"
-  transition:fly={{ y: 800, duration: 300, opacity: 1 }}
-  style="transform: translateY({currentY}px); transition: {isDraggingPlayer
-    ? 'none'
-    : 'transform 0.3s cubic-bezier(0.2, 0.8, 0.2, 1)'}"
+  class:is-docked={isDocked}
+  transition:fly={{ y: isDocked ? 0 : 800, duration: 300, opacity: 1 }}
+  style={!isDocked
+    ? `transform: translateY(${currentY}px); transition: ${isDraggingPlayer ? "none" : "transform 0.3s cubic-bezier(0.2, 0.8, 0.2, 1)"}`
+    : ""}
 >
-  <div
-    class="drag-zone"
-    on:touchstart={handleTouchStart}
-    on:touchmove={handleTouchMove}
-    on:touchend={handleTouchEnd}
-    on:click={close}
-  >
-    <div class="drag-handle-icon">
-      {@html ICONS.CHEVRON_DOWN}
+  {#if !isDocked}
+    <div
+      class="drag-zone"
+      on:touchstart={handleTouchStart}
+      on:touchmove={handleTouchMove}
+      on:touchend={handleTouchEnd}
+      on:click={close}
+    >
+      <div class="drag-handle-icon">
+        {@html ICONS.CHEVRON_DOWN}
+      </div>
     </div>
-  </div>
+  {/if}
 
   <div class="bg-blur" style="background-image: url({artSrc})"></div>
   <div class="bg-overlay"></div>
@@ -204,6 +205,7 @@
       <div class="progress-section">
         <div
           class="bar-hit-area"
+          class:is-docked-bar={isDocked}
           bind:this={progressBar}
           on:mousedown={handleSeekStart}
           on:touchstart|passive={handleSeekStart}
@@ -304,6 +306,16 @@
     touch-action: none;
   }
 
+  .full-player.is-docked {
+    position: relative;
+    inset: auto;
+    z-index: 1;
+    width: 100%;
+    height: 100%;
+    background: var(--c-surface);
+    border-left: 1px solid var(--c-border);
+  }
+
   .drag-zone {
     height: 30vh;
     width: 100%;
@@ -346,7 +358,11 @@
     background: var(--c-overlay-dim);
   }
 
-  /* --- LAYOUT CENTERED --- */
+  .is-docked .bg-blur,
+  .is-docked .bg-overlay {
+    display: none;
+  }
+
   .player-body {
     flex: 1;
     display: flex;
@@ -360,7 +376,13 @@
     gap: 30px;
   }
 
-  /* --- ARTWORK --- */
+  .is-docked .player-body {
+    padding: 10px 16px 16px;
+    gap: 12px;
+    justify-content: flex-end; /* Push controls down, art fills top */
+    max-width: 100%;
+  }
+
   .art-container {
     display: flex;
     justify-content: center;
@@ -368,7 +390,17 @@
     width: 100%;
     flex-grow: 0;
     margin-bottom: 10px;
+    flex-shrink: 1;
+    min-height: 0;
   }
+  .is-docked .art-container {
+    flex: 1 1 auto; /* Grow to fill space */
+    margin-bottom: 0;
+    height: 100%; /* Force height calculation */
+    max-height: 50vh; /* Don't eat up too much space */
+    overflow: hidden;
+  }
+
   .artwork {
     width: 100%;
     max-width: 400px;
@@ -380,6 +412,17 @@
     will-change: transform;
     object-fit: contain;
   }
+  .is-docked .artwork {
+    /* Critical: use 100% height of the flexible container */
+    height: 100%;
+    width: auto;
+    max-width: 100%;
+    border-radius: 8px;
+    box-shadow: none;
+    /* Force square aspect ratio */
+    aspect-ratio: 1/1;
+  }
+
   .icon-fallback {
     width: 100%;
     height: 100%;
@@ -394,7 +437,6 @@
     opacity: 0.5;
   }
 
-  /* --- CONTROLS AREA --- */
   .controls-area {
     display: flex;
     flex-direction: column;
@@ -402,31 +444,53 @@
     flex-shrink: 0;
     width: 100%;
   }
+  .is-docked .controls-area {
+    gap: 8px;
+    flex: 0 0 auto;
+  }
 
   .meta {
     text-align: left;
     margin-bottom: 10px;
   }
+  .is-docked .meta {
+    text-align: center;
+    margin-bottom: 4px;
+  }
+
   .title {
     font-size: 24px;
     font-weight: 700;
     margin: 0 0 4px;
     color: var(--c-text-primary);
   }
+  .is-docked .title {
+    font-size: 16px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
   .artist-row {
     display: flex;
     align-items: center;
     gap: 10px;
     width: 100%;
   }
+  .is-docked .artist-row {
+    justify-content: center;
+  }
+
   .artist {
     font-size: 18px;
     color: var(--c-text-secondary);
     margin: 0;
     flex-shrink: 1;
   }
+  .is-docked .artist {
+    font-size: 13px;
+  }
 
-  /* --- UNIFIED SLIDERS --- */
   .bar-hit-area,
   .volume-hit-area {
     height: 40px;
@@ -436,6 +500,9 @@
     touch-action: none;
     position: relative;
     width: 100%;
+  }
+  .is-docked-bar {
+    height: 24px;
   }
 
   .volume-hit-area {
@@ -492,12 +559,20 @@
     font-weight: 600;
     font-variant-numeric: tabular-nums;
   }
+  .is-docked .time-row {
+    margin-top: 0px;
+    font-size: 10px;
+  }
 
-  /* --- BUTTONS --- */
   .buttons-row {
     display: flex;
     justify-content: space-between;
     align-items: center;
+    padding: 0 8px;
+  }
+  .is-docked .buttons-row {
+    justify-content: space-between;
+    gap: 0;
     padding: 0 8px;
   }
 
@@ -517,6 +592,13 @@
     width: 24px;
     height: 24px;
   }
+  .is-docked .side-btn {
+    padding: 6px;
+  }
+  .is-docked .side-btn :global(svg) {
+    width: 20px;
+    height: 20px;
+  }
 
   .play-btn-large {
     width: 64px;
@@ -530,6 +612,7 @@
     display: flex;
     align-items: center;
     justify-content: center;
+    flex-shrink: 0;
   }
   .play-btn-large:active {
     transform: scale(0.95);
@@ -538,6 +621,14 @@
     width: 28px;
     height: 28px;
     fill: currentColor;
+  }
+  .is-docked .play-btn-large {
+    width: 44px;
+    height: 44px;
+  }
+  .is-docked .play-btn-large :global(svg) {
+    width: 20px;
+    height: 20px;
   }
 
   .mode-btn {
@@ -554,7 +645,6 @@
     transform: translateX(-50%);
   }
 
-  /* --- VOLUME ROW --- */
   .volume-row {
     display: flex;
     align-items: center;
@@ -566,5 +656,12 @@
     width: 20px;
     height: 20px;
     fill: var(--c-text-secondary);
+  }
+  .is-docked .volume-row {
+    gap: 8px;
+  }
+  .is-docked .vol-icon :global(svg) {
+    width: 16px;
+    height: 16px;
   }
 </style>
