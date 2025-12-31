@@ -67,11 +67,9 @@ export function getScrollPosition(key) {
   return get(scrollPositions)[key] || 0;
 }
 
-// --- CONTEXT MENU & MODALS ---
 export const contextMenu = writable({
   isOpen: false,
   track: null,
-  // Доп. данные: имя плейлиста и позиция для удаления
   context: { type: "general", playlistName: null, index: null },
   x: 0,
   y: 0,
@@ -93,11 +91,6 @@ function vibrate() {
   }
 }
 
-/**
- * @param {Event} e
- * @param {Object} track
- * @param {Object} contextData - { type: 'playlist'|'queue'|'general', playlistName?, index? }
- */
 export function openContextMenu(e, track, contextData = {}) {
   if (!track) return;
   vibrate();
@@ -107,7 +100,6 @@ export function openContextMenu(e, track, contextData = {}) {
   let rect = null;
 
   let el = e.currentTarget;
-  // Fallback if triggered via custom event without currentTarget
   if (!el && e.target && e.target.closest) {
     el = e.target.closest("button") || e.target;
   }
@@ -116,7 +108,6 @@ export function openContextMenu(e, track, contextData = {}) {
     rect = el.getBoundingClientRect();
   }
 
-  // Handle coords
   const evt = e.detail?.originalEvent || e;
   if (evt.touches && evt.touches.length > 0) {
     clientX = evt.touches[0].clientX;
@@ -126,7 +117,6 @@ export function openContextMenu(e, track, contextData = {}) {
     clientY = evt.clientY;
   }
 
-  // Default context
   const ctx = {
     type: "general",
     playlistName: null,
@@ -218,16 +208,21 @@ export function getTrackCoverUrl(
   return `/coverart.php/${encodeURI(cleanPath)}`;
 }
 
-// THUMBNAIL (for lists)
 export function getTrackThumbUrl(
   track,
+  size = "sm",
   stationList = [],
   selectedRadioName = null,
 ) {
-  if (!track || !track.file) return "/images/default_icon.png";
-
-  if (isRadioTrack(track.file) || track.genre === "Radio") {
-    if (track.image) {
+  // Handle Radio
+  if (
+    !track ||
+    (track.file &&
+      (isRadioTrack(track.file) ||
+        track.genre === "Radio" ||
+        Array.isArray(track)))
+  ) {
+    if (track && track.image) {
       return getStationImageUrl(track);
     }
     return (
@@ -236,16 +231,22 @@ export function getTrackThumbUrl(
     );
   }
 
-  if (track.cachedThumbUrl) {
-    return track.cachedThumbUrl;
+  if (!track.file) return "/images/default_icon.png";
+
+  // New Logic: Use thumbHash if available
+  if (track.thumbHash) {
+    const suffix = size === "md" ? "" : "_sm";
+    return `/imagesw/thmcache/${track.thumbHash}${suffix}.jpg`;
   }
 
+  // Fallback for legacy DB or uncached items
   try {
     const lastSlashIndex = track.file.lastIndexOf("/");
     const dirPath =
       lastSlashIndex === -1 ? "." : track.file.substring(0, lastSlashIndex);
     const hash = md5(dirPath);
-    return `/imagesw/thmcache/${hash}_sm.jpg`;
+    const suffix = size === "md" ? "" : "_sm";
+    return `/imagesw/thmcache/${hash}${suffix}.jpg`;
   } catch (e) {
     let cleanPath = track.file.startsWith("/")
       ? track.file.slice(1)
@@ -268,8 +269,8 @@ function resolveRadioImage(track, stationList, selectedRadioName) {
       .toLowerCase()
       .replace(/[^a-z0-9]/g, "");
 
-  const targetTitle = normalize(track.title);
-  const targetStationName = normalize(track.stationName);
+  const targetTitle = normalize(track?.title);
+  const targetStationName = normalize(track?.stationName);
   const targetSelected = normalize(selectedRadioName);
 
   if (stationList && stationList.length > 0) {
@@ -286,7 +287,7 @@ function resolveRadioImage(track, stationList, selectedRadioName) {
     if (found) return getStationImageUrl(found);
   }
 
-  const fallbackName = track.stationName || selectedRadioName;
+  const fallbackName = track?.stationName || selectedRadioName;
   if (fallbackName) {
     return getStationImageUrl({ name: fallbackName, image: "local" });
   }

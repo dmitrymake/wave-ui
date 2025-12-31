@@ -20,11 +20,13 @@
   let isLoading = true;
   let searchTerm = "";
 
-  // Состояния кнопок
   let pressedPlayAll = false;
-  let pressedAddToQueue = false; // <--- Новое состояние
+  let pressedAddToQueue = false;
 
   let headerItem = null;
+  let albumTotalDuration = "";
+  let albumQuality = "";
+  let trackCount = 0;
 
   $: filteredItems = $itemsStore.filter((item) => {
     if (!searchTerm) return true;
@@ -40,7 +42,6 @@
   $: if (activeCategory) searchTerm = "";
   $: loadContent(activeCategory, currentView);
 
-  // Сброс состояний кнопок при смене вида
   $: if (currentView) {
     pressedPlayAll = false;
     pressedAddToQueue = false;
@@ -51,6 +52,9 @@
 
     isLoading = true;
     headerItem = viewState.data;
+    albumTotalDuration = "";
+    albumQuality = "";
+    trackCount = 0;
 
     try {
       let data = [];
@@ -81,6 +85,19 @@
 
       if (viewState.view === "tracks_by_album" && enriched.length > 0) {
         headerItem = enriched[0];
+        trackCount = enriched.length;
+
+        const totalSec = enriched.reduce((acc, t) => acc + (t.time || 0), 0);
+        if (totalSec > 0) {
+          const h = Math.floor(totalSec / 3600);
+          const m = Math.floor((totalSec % 3600) / 60);
+          if (h > 0) albumTotalDuration = `${h} hr ${m} min`;
+          else albumTotalDuration = `${m} min`;
+        }
+
+        if (enriched[0].qualityBadge) {
+          albumQuality = enriched[0].qualityBadge;
+        }
       }
     } catch (e) {
       console.error(e);
@@ -163,6 +180,18 @@
               </h2>
             {/if}
 
+            <div class="meta-badges">
+              {#if trackCount > 0}
+                <span class="meta-tag">{trackCount} tracks</span>
+              {/if}
+              {#if albumTotalDuration}
+                <span class="meta-tag">{albumTotalDuration}</span>
+              {/if}
+              {#if albumQuality}
+                <span class="meta-tag quality">{albumQuality}</span>
+              {/if}
+            </div>
+
             <div class="header-actions">
               <button
                 class="btn-primary"
@@ -230,7 +259,7 @@
             >
               <div class="card-img-container">
                 <ImageLoader
-                  src={getTrackThumbUrl(item)}
+                  src={getTrackThumbUrl(item, "md")}
                   alt={item.displayName}
                   radius="8px"
                 >
@@ -284,7 +313,7 @@
   .header-sub {
     font-size: 20px;
     color: rgba(255, 255, 255, 0.7);
-    margin: 0 0 24px 0;
+    margin: 0;
   }
 
   .search-icon {

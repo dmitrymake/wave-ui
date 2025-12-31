@@ -157,7 +157,7 @@
   .scroll-container {
     flex: 1;
     overflow-x: hidden;
-    padding-bottom: 100px; /* Space for miniplayer */
+    padding-bottom: 90px;
     position: relative;
   }
 

@@ -46,11 +46,13 @@
   $: artist = track.artist || "Unknown";
   $: duration = formatDuration(track.time);
 
+  $: quality = track.qualityBadge ? track.qualityBadge.split(" ")[0] : null; // оставляем только первое слово
+
   $: effectiveStationName = isCurrent ? $currentSong.stationName : null;
 
   $: imgUrl = imgError
     ? getTrackCoverUrl(track, $stations, effectiveStationName)
-    : getTrackThumbUrl(track, $stations, effectiveStationName);
+    : getTrackThumbUrl(track, "sm", $stations, effectiveStationName);
 
   function formatDuration(time) {
     if (isRadio) return "∞";
@@ -68,18 +70,14 @@
   }
 
   function getContextData() {
-    // Определяем контекст для меню (плейлист или очередь)
     const stack = $navigationStack;
     const currentView = stack[stack.length - 1];
     const tab = $activeMenuTab;
 
-    // 1. Внутри конкретного плейлиста
     if (currentView?.view === "details" && currentView.data?.name) {
       return { type: "playlist", playlistName: currentView.data.name, index };
     }
 
-    // 2. Внутри Очереди (Queue)
-    // Либо мы явно на view='queue', либо на главном экране (root) и активен таб 'queue'
     if (
       currentView?.view === "queue" ||
       (currentView?.view === "root" && tab === "queue")
@@ -87,7 +85,6 @@
       return { type: "queue", index };
     }
 
-    // 3. Общий случай (Библиотека, Поиск и т.д.)
     return { type: "general" };
   }
 
@@ -160,7 +157,12 @@
   </div>
 
   <div class="info">
-    <div class="title text-ellipsis" {title}>{title}</div>
+    <div class="title-row">
+      <div class="title text-ellipsis" {title}>{title}</div>
+      {#if quality && !isRadio}
+        <span class="quality-badge">{quality}</span>
+      {/if}
+    </div>
     <div
       class="artist text-ellipsis"
       class:link={!isRadio}
@@ -345,11 +347,20 @@
     flex-direction: column;
     justify-content: center;
   }
+
+  .title-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 2px;
+    min-width: 0;
+  }
+
   .title {
     font-size: 15px;
     font-weight: 500;
     color: var(--c-text-primary);
-    margin-bottom: 2px;
+    line-height: 1.2;
   }
   .active .title {
     color: var(--c-accent);

@@ -10,6 +10,8 @@ import {
   queue,
   isQueueLocked,
 } from "../store";
+import { db } from "../db"; // Import DB
+import { generateUid } from "../utils";
 
 const POLLER_INTERVAL = 1000;
 const TICKER_INTERVAL = 250;
@@ -21,8 +23,8 @@ let timeDriftSpeed = 1.0;
 
 let isInitialSync = true;
 let forceHardSync = false;
-let ignoreUpdatesUntil = 0; // Локальная блокировка для статуса (Play/Pause)
-let queueUnlockTimer = null; // Таймер для снятия блокировки очереди
+let ignoreUpdatesUntil = 0;
+let queueUnlockTimer = null;
 
 function escape(str) {
   if (!str) return "";
@@ -35,7 +37,6 @@ export function startStatusPoller() {
   forceHardSync = false;
   ignoreUpdatesUntil = 0;
 
-  // Сбрасываем блокировку при старте, чтобы не зависло навечно
   isQueueLocked.set(false);
 
   refreshStatus();
@@ -56,27 +57,21 @@ export function stopStatusPoller() {
 
 async function refreshStatus() {
   try {
-    // 1. Получаем данные
     const statusText = await mpdClient.send("status");
     const songText = await mpdClient.send("currentsong");
 
     const newStatus = MpdParser.parseStatus(statusText);
     const newSong = MpdParser.parseCurrentSong(songText);
 
-    // 2. Обновляем статус проигрывания (время, громкость и т.д.)
     updateStores(newStatus, newSong);
 
-    // 3. Логика синхронизации ОЧЕРЕДИ
     const oldVer = get(queueVersion);
-    const locked = get(isQueueLocked); // Читаем глобальный флаг
+    const locked = get(isQueueLocked);
 
-    // Если UI занят драг-н-дропом, мы ИГНОРИРУЕМ очередь с сервера.
-    // Мы доверяем локальной очереди, которую изменил пользователь.
     if (locked) {
       return;
     }
 
-    // Если блокировки нет, проверяем версии:
     if (
       (newStatus.playlistLength > 0 && newStatus.playlistVersion !== oldVer) ||
       (newStatus.playlistLength > 0 && get(queue).length === 0)
@@ -91,22 +86,48 @@ async function refreshStatus() {
 }
 
 async function syncQueue(newVersion) {
-  // Двойная защита: если пока мы шли сюда, включилась блокировка — отменяем
   if (get(isQueueLocked)) return;
 
   try {
     const text = await mpdClient.send("playlistinfo");
 
-    // Еще одна проверка перед парсингом/записью
     if (get(isQueueLocked)) return;
 
     const rawTracks = MpdParser.parseTracks(text);
-    const tracks = rawTracks.map((t) => ({
-      ...t,
-      // Используем Id из MPD как уникальный ключ.
-      // Если его нет (вдруг), используем путь к файлу + старый Id.
-      _uid: String(t.id || t.pos + t.file), // t.id идеален
-    }));
+
+    const filesToLookup = rawTracks
+      .map((t) => t.file)
+      .filter((f) => f && !f.startsWith("http"));
+
+    let cachedMap = new Map();
+    if (filesToLookup.length > 0) {
+      try {
+        cachedMap = await db.getFilesMap(filesToLookup);
+      } catch (dbErr) {
+        console.warn("Failed to hydrate queue from DB", dbErr);
+      }
+    }
+
+    const tracks = rawTracks.map((t) => {
+      const cached = cachedMap.get(t.file);
+      if (cached) {
+        return {
+          ...t,
+          // Обогащаем данными из DB
+          thumbHash: cached.thumbHash,
+          qualityBadge: cached.qualityBadge,
+          // Fallbacks если MPD вернул пустое
+          title: t.title || cached.title,
+          artist: t.artist || cached.artist,
+          album: t.album || cached.album,
+          _uid: String(t.id || t.pos + t.file),
+        };
+      }
+      return {
+        ...t,
+        _uid: String(t.id || t.pos + t.file),
+      };
+    });
 
     queue.set(tracks);
     queueVersion.set(newVersion);
@@ -119,7 +140,6 @@ function updateStores(serverStatus, serverSong) {
   const oldSong = get(currentSong);
   const allStations = get(stations);
 
-  // Логика Радио
   const isRadio = serverSong.file && serverSong.file.startsWith("http");
   if (isRadio) {
     const clean = (str) =>
@@ -177,7 +197,6 @@ function updateStores(serverStatus, serverSong) {
       return serverStatus;
     }
 
-    // 5. Drift Correction
     if (isPlaying && !isRadio) {
       const diff = serverStatus.elapsed - localStatus.elapsed;
       if (Math.abs(diff) > 2.0) {
@@ -289,7 +308,6 @@ export const PlayerActions = {
   },
 
   async playUri(uri, meta = {}) {
-    // Включаем лок, так как clear+add вызывает бурную реакцию событий
     isQueueLocked.set(true);
 
     const safeUri = escape(uri);
@@ -313,7 +331,6 @@ export const PlayerActions = {
       showToast("Failed to play", "error");
     }
 
-    // Снимаем лок через секунду
     setTimeout(() => {
       isQueueLocked.set(false);
       refreshStatus();
@@ -329,11 +346,9 @@ export const PlayerActions = {
       console.error("Add queue error", e);
       showToast("Failed to add", "error");
     }
-    // setTimeout(() => isQueueLocked.set(false), 500);
   },
 
   async playNext(uri) {
-    // Лочим, так как операция состоит из двух команд (add + move)
     isQueueLocked.set(true);
 
     const safeUri = escape(uri);
@@ -342,7 +357,6 @@ export const PlayerActions = {
       const currentPos = parseInt(MpdParser.parseKeyValue(songData).pos || -1);
 
       if (currentPos === -1) {
-        // Снимаем лок, т.к. playUri сама его поставит
         isQueueLocked.set(false);
         await this.playUri(uri);
       } else {
@@ -353,7 +367,6 @@ export const PlayerActions = {
           await mpdClient.send(`moveid ${newId} ${currentPos + 1}`);
           showToast("Will play next", "success");
         }
-        // Даем серверу время обработать
         setTimeout(() => isQueueLocked.set(false), 1000);
       }
     } catch (e) {
@@ -376,7 +389,6 @@ export const PlayerActions = {
       await mpdClient.send(`delete ${pos}`);
     } catch (e) {
       showToast("Failed to remove", "error");
-      // При ошибке снимаем лок сразу
       isQueueLocked.set(false);
       return;
     }
@@ -385,27 +397,22 @@ export const PlayerActions = {
     }, 1000);
   },
 
-  // ГЛАВНАЯ ФУНКЦИЯ ДЛЯ D&D
   async moveTrack(fromPos, toPos) {
     if (fromPos === toPos) return;
 
-    // Блокируем поллер, чтобы он не затер результат драга данными от сервера
     isQueueLocked.set(true);
     if (queueUnlockTimer) clearTimeout(queueUnlockTimer);
 
     try {
-      // Просто отправляем команду серверу
       await mpdClient.send(`move ${fromPos} ${toPos}`);
     } catch (e) {
       console.error("Move failed", e);
       showToast("Move failed", "error");
-      // В случае ошибки разблокируем и обновляем, чтобы вернуть как было
       isQueueLocked.set(false);
       refreshStatus();
       return;
     }
 
-    // Ждем, пока сервер применит изменения, прежде чем разрешать поллеру синхронизацию
     queueUnlockTimer = setTimeout(() => {
       isQueueLocked.set(false);
       refreshStatus();

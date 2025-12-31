@@ -6,7 +6,12 @@
   import ImageLoader from "../ImageLoader.svelte";
   import * as MPD from "../../lib/mpd";
   import { ICONS } from "../../lib/icons";
-  import { navigateTo, getTrackCoverUrl, searchQuery } from "../../lib/store";
+  import {
+    navigateTo,
+    getTrackCoverUrl,
+    getTrackThumbUrl,
+    searchQuery,
+  } from "../../lib/store";
   import BaseList from "./BaseList.svelte";
 
   // Local store for search results
@@ -71,6 +76,7 @@
               name: albumName,
               artist: track.artist,
               file: track.file,
+              thumbHash: track.thumbHash,
               _uid: `alb-${albumName}`,
             });
           }
@@ -143,7 +149,7 @@
               <div class="music-card" on:click={() => goToAlbum(album)}>
                 <div class="card-img-container">
                   <ImageLoader
-                    src={getTrackCoverUrl(album)}
+                    src={getTrackThumbUrl(album, "md")}
                     alt={album.name}
                     radius="var(--radius-md)"
                   >
@@ -237,11 +243,8 @@
     }
   }
 
-  /* =========================================
-     ГОРИЗОНТАЛЬНЫЙ СКРОЛЛЕР АЛЬБОМОВ
-     ========================================= */
   .albums-scroller {
-    display: flex; /* Выстраиваем в ряд */
+    display: flex;
     overflow-x: auto; /* Разрешаем скролл */
     gap: 16px; /* Расстояние между карточками */
     padding-bottom: 8px; /* Место для тени снизу, если нужно */
@@ -250,17 +253,14 @@
     scrollbar-width: none; /* Firefox */
     -ms-overflow-style: none; /* IE */
 
-    /* Физика скролла для мобилок */
     -webkit-overflow-scrolling: touch;
     scroll-snap-type: x mandatory; /* "Прилипание" карточек */
   }
 
-  /* Скрытие скроллбара для Chrome/Safari */
   .albums-scroller::-webkit-scrollbar {
     display: none;
   }
 
-  /* Специфичные стили для карточек внутри скроллера */
   .albums-scroller .music-card {
     flex: 0 0 auto; /* Карточки не сжимаются */
     width: 160px; /* Фиксированная ширина */
@@ -268,7 +268,6 @@
     margin: 0;
   }
 
-  /* Адаптация размера карточек для мобильных устройств */
   @media (max-width: 768px) {
     .albums-scroller .music-card {
       width: 140px;

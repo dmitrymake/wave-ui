@@ -152,6 +152,7 @@
   $: isLiked = $currentSong.file && $favorites.has($currentSong.file);
 </script>
 
+=== ./components/FullPlayer.svelte ===
 <div
   class="full-player"
   transition:fly={{ y: 800, duration: 300, opacity: 1 }}
@@ -195,7 +196,7 @@
             {$currentSong.stationName || $currentSong.artist || "Moode Audio"}
           </h2>
           {#if qualityLabel}
-            <span class="badge">{qualityLabel}</span>
+            <span class="quality-badge">{qualityLabel}</span>
           {/if}
         </div>
       </div>
@@ -355,9 +356,8 @@
     width: 100%;
     margin: 0 auto;
     box-sizing: border-box;
-    /* Центрируем контент по вертикали */
     justify-content: center;
-    gap: 30px; /* Отступ между обложкой и контролами */
+    gap: 30px;
   }
 
   /* --- ARTWORK --- */
@@ -366,18 +366,16 @@
     justify-content: center;
     align-items: center;
     width: 100%;
-    /* Больше не занимаем всё свободное место, а просто центрируем блок */
     flex-grow: 0;
-    margin-bottom: 10px; /* Небольшой отступ от низа картинки до текста */
+    margin-bottom: 10px;
   }
   .artwork {
     width: 100%;
-    /* Максимально используем ширину */
     max-width: 400px;
     aspect-ratio: 1;
     background: var(--c-bg-placeholder);
     border-radius: var(--radius-xl);
-    box-shadow: 0 20px 60px var(--c-shadow-popover);
+    box-shadow: var(--c-shadow-popover);
     overflow: hidden;
     will-change: transform;
     object-fit: contain;
@@ -400,7 +398,7 @@
   .controls-area {
     display: flex;
     flex-direction: column;
-    gap: 20px; /* Чуть свободнее */
+    gap: 20px;
     flex-shrink: 0;
     width: 100%;
   }
@@ -427,16 +425,6 @@
     margin: 0;
     flex-shrink: 1;
   }
-  .badge {
-    font-size: 10px;
-    font-weight: 800;
-    color: var(--c-text-primary);
-    background: var(--c-surface-active);
-    padding: 2px 6px;
-    border-radius: 4px;
-    text-transform: uppercase;
-    flex-shrink: 0;
-  }
 
   /* --- UNIFIED SLIDERS --- */
   .bar-hit-area,
@@ -447,7 +435,7 @@
     cursor: pointer;
     touch-action: none;
     position: relative;
-    width: 100%; /* Гарантируем полную ширину */
+    width: 100%;
   }
 
   .volume-hit-area {
@@ -536,7 +524,7 @@
     border-radius: 50%;
     background: var(--c-text-primary);
     color: var(--c-text-inverse);
-    box-shadow: 0 8px 24px var(--c-shadow-card);
+    box-shadow: var(--c-shadow-card);
     transition: transform 0.1s;
     border: none;
     display: flex;
@@ -572,7 +560,7 @@
     align-items: center;
     gap: 16px;
     opacity: 0.9;
-    padding: 0 4px; /* Чтобы выровнять с прогресс баром визуально */
+    padding: 0 4px;
   }
   .vol-icon :global(svg) {
     width: 20px;

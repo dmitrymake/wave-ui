@@ -27,7 +27,6 @@ async function startSync() {
   try {
     self.postMessage({ type: "PROGRESS", status: "connecting" });
 
-    // Используем относительный путь (Vite proxy / Nginx)
     const response = await fetch(apiUrl);
 
     if (!response.ok) {
@@ -80,11 +79,8 @@ async function startSync() {
       count: rawData.length,
     });
 
-    // Process and normalize data
     const tracks = rawData.map((item) => {
-      // --- ВЕРНУЛИ ГЕНЕРАЦИЮ MD5 ---
-      // Это нужно для получения быстрых миниатюр /imagesw/thmcache/...
-      let cachedThumbUrl = null;
+      let thumbHash = null;
       if (item.file) {
         try {
           const lastSlashIndex = item.file.lastIndexOf("/");
@@ -93,14 +89,11 @@ async function startSync() {
               ? "."
               : item.file.substring(0, lastSlashIndex);
 
-          const hash = md5(dirPath);
-          // Используем относительный путь
-          cachedThumbUrl = `/imagesw/thmcache/${hash}_sm.jpg`;
+          thumbHash = md5(dirPath);
         } catch (err) {
           console.warn("Failed to generate thumb hash for", item.file);
         }
       }
-      // -----------------------------
 
       const rawArtist = Array.isArray(item.artist)
         ? item.artist.join(", ")
@@ -111,6 +104,11 @@ async function startSync() {
 
       const rawAlbumArtist =
         item.album_artist || item.albumartist || item.AlbumArtist;
+
+      let qualityBadge = null;
+      if (item.encoded_at) {
+        qualityBadge = item.encoded_at.replace(/,/g, " ").trim();
+      }
 
       return {
         file: item.file,
@@ -128,8 +126,8 @@ async function startSync() {
         encoded_at: item.encoded_at,
         last_modified: item.last_modified,
 
-        // Сохраняем в базу
-        cachedThumbUrl: cachedThumbUrl,
+        thumbHash: thumbHash,
+        qualityBadge: qualityBadge,
       };
     });
 

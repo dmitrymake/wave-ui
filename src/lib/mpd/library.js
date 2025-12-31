@@ -11,7 +11,7 @@ import {
   showToast,
   favorites,
 } from "../store";
-
+import { db } from "../db";
 import SyncWorker from "../workers/sync.worker.js?worker";
 import { generateUid } from "../utils";
 
@@ -40,26 +40,17 @@ const cleanUrl = (url) => {
     .replace(/\/$/, "");
 };
 
-// === НОВАЯ ЛОГИКА ЦВЕТОВ ===
 function getGradient(name) {
-  // 1. Специальный цвет для Favorites (Moode Red Gradient)
   if (name === "Favorites") {
     return `linear-gradient(135deg, hsl(348, 95%, 58%), hsl(348, 90%, 40%))`;
   }
-
-  // 2. Хеширование имени для стабильного цвета
   let hash = 0;
   for (let i = 0; i < name.length; i++) {
     hash = name.charCodeAt(i) + ((hash << 5) - hash);
   }
-
-  // 3. Генерируем Hue (0-360)
   const hue = Math.abs(hash % 360);
-
-  // 4. Возвращаем градиент (насыщенность и светлота фиксированы для красоты)
   return `linear-gradient(135deg, hsl(${hue}, 60%, 40%), hsl(${(hue + 40) % 360}, 60%, 30%))`;
 }
-// ===========================
 
 export const LibraryActions = {
   async syncLibrary() {
@@ -99,7 +90,6 @@ export const LibraryActions = {
 
       const enhanced = rawPlaylists.map((pl) => ({
         ...pl,
-        // Используем новую функцию
         color: getGradient(pl.name),
       }));
 
@@ -119,13 +109,45 @@ export const LibraryActions = {
       const text = await mpdClient.send(`listplaylistinfo "${safeName}"`);
       const rawTracks = MpdParser.parseTracks(text);
 
-      const tracksWithIds = rawTracks.map((track) => ({
-        ...track,
-        _uid: generateUid(),
-      }));
+      // Собираем пути файлов, чтобы найти их в DB
+      const filesToLookup = rawTracks
+        .map((t) => t.file)
+        .filter((f) => f && !f.startsWith("http"));
 
-      activePlaylistTracks.set(tracksWithIds);
+      let cachedMap = new Map();
+      if (filesToLookup.length > 0) {
+        try {
+          cachedMap = await db.getFilesMap(filesToLookup);
+        } catch (dbErr) {
+          console.warn("Failed to hydrate playlist from DB", dbErr);
+        }
+      }
+
+      const enrichedTracks = rawTracks.map((track) => {
+        const cached = cachedMap.get(track.file);
+        if (cached) {
+          return {
+            ...track,
+            // Дополняем данными из базы
+            thumbHash: cached.thumbHash,
+            qualityBadge: cached.qualityBadge,
+            // Если в MPD нет title/artist, берем из базы (fallback)
+            title: track.title || cached.title,
+            artist: track.artist || cached.artist,
+            album: track.album || cached.album,
+            _uid: generateUid(),
+          };
+        }
+        return {
+          ...track,
+          _uid: generateUid(),
+        };
+      });
+      // --- HYDRATION END ---
+
+      activePlaylistTracks.set(enrichedTracks);
     } catch (e) {
+      console.error(e);
       showToast("Could not load playlist", "error");
     } finally {
       isLoadingTracks.set(false);

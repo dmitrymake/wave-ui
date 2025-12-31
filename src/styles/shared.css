@@ -216,3 +216,153 @@ input[type="range"]:hover::-webkit-slider-thumb {
   background-color: var(--c-border);
   border-radius: 3px;
 }
+
+/* =========================================
+   NEW ADDITIONS: UNIFIED BUTTONS & BADGES
+   (Using EXISTING Palette Variables)
+   ========================================= */
+
+/* --- Action Buttons (Edit, Save, etc) --- */
+.btn-action {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: transparent;
+  border: 1px solid var(--c-border); /* Using palette border */
+  color: var(--c-text-secondary);    /* Using palette text */
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all var(--trans-fast);
+}
+.btn-action:hover {
+  border-color: var(--c-text-primary);
+  color: var(--c-text-primary);
+  background: var(--c-surface-hover);
+}
+.btn-action.active {
+  background: var(--c-accent);
+  border-color: var(--c-accent);
+  color: var(--c-text-primary);
+}
+.btn-action :global(svg) {
+  width: 20px;
+  height: 20px;
+}
+
+/* --- Primary Button (Filled) --- */
+.btn-primary {
+  background: var(--c-accent);
+  color: #ffffff;
+  border: none;
+  padding: 12px 32px;
+  border-radius: 30px; /* Capsule shape */
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: transform var(--trans-fast), opacity var(--trans-fast);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+.btn-primary:active {
+  transform: scale(0.97);
+}
+.btn-primary:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.btn-secondary {
+  background: transparent;
+  border: 1px solid var(--c-border-bright);
+  color: var(--c-text-primary);
+  padding: 11px 24px;
+  border-radius: 30px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background var(--trans-fast);
+}
+.btn-secondary:hover {
+  border-color: var(--c-text-primary);
+}
+.btn-secondary:active {
+  background: var(--c-surface-active);
+}
+
+/* --- Header Actions Container --- */
+.header-actions {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+}
+
+.meta-badges {
+  display: flex;
+  gap: 8px;
+  margin: 12px 0 24px;
+}
+
+.meta-tag,
+.quality-badge {
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--c-text-secondary);
+  border: 1px solid transparent;
+  background: var(--c-surface-button); 
+  padding: 2px 6px;
+  height: 18px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-sm);
+  white-space: nowrap;
+  letter-spacing: 0.2px;
+  line-height: 1;
+}
+
+/* Specific style for Quality Badge (Outlined) */
+.quality-badge, 
+.meta-tag.quality {
+  background: transparent;
+  border: 1px solid var(--c-border);
+  color: var(--c-text-primary);
+  opacity: 0.9;
+}
+
+/* Spacing for badge inside track list */
+.quality-badge {
+  margin-left: 0px;
+}
+
+/* --- Responsive Utils --- */
+@media (max-width: 768px) {
+  .header-actions {
+    justify-content: flex-start;
+    flex-wrap: wrap;
+    gap: 8px;
+    width: 100%;
+  }
+  
+  .header-actions .btn-action:last-child {
+    margin-left: auto;
+  }
+
+  .btn-primary,
+  .btn-secondary {
+    padding: 8px 16px;
+    font-size: 12px;
+    height: 32px;
+  }
+
+  .btn-action {
+    width: 32px;
+    height: 32px;
+  }
+
+  .btn-action :global(svg) {
+    width: 16px;
+    height: 16px;
+  }
+}

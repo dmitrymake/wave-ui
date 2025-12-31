@@ -8,6 +8,22 @@
   import BaseList from "./BaseList.svelte";
 
   let isEditMode = false;
+  let queueDuration = "";
+
+  $: if ($queue.length >= 0) {
+    const totalSec = $queue.reduce(
+      (acc, t) => acc + (parseFloat(t.time) || 0),
+      0,
+    );
+    if (totalSec > 0) {
+      const h = Math.floor(totalSec / 3600);
+      const m = Math.floor((totalSec % 3600) / 60);
+      if (h > 0) queueDuration = `${h} hr ${m} min`;
+      else queueDuration = `${m} min`;
+    } else {
+      queueDuration = "";
+    }
+  }
 
   function toggleEditMode() {
     isEditMode = !isEditMode;
@@ -45,9 +61,13 @@
     <div slot="header" class="view-header-simple">
       <div class="header-info">
         <h1 class="header-title">Current Queue</h1>
-        <span class="header-subtitle">
-          {$queue.length} track{$queue.length === 1 ? "" : "s"}
-        </span>
+
+        <div class="meta-badges">
+          <span class="meta-tag">{$queue.length} tracks</span>
+          {#if queueDuration}
+            <span class="meta-tag">{queueDuration}</span>
+          {/if}
+        </div>
       </div>
 
       <div class="header-actions">
@@ -85,4 +105,33 @@
 
 <style>
   @import "./MusicViews.css";
+
+  .view-header-simple {
+    padding: 24px 32px;
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-end;
+  }
+
+  .header-info {
+    display: flex;
+    flex-direction: column;
+  }
+
+  .header-title {
+    font-size: 32px;
+    font-weight: 800;
+    margin: 0;
+    color: var(--c-text-primary);
+  }
+
+  @media (max-width: 768px) {
+    .view-header-simple {
+      padding: 16px;
+      align-items: center;
+    }
+    .header-title {
+      font-size: 24px;
+    }
+  }
 </style>

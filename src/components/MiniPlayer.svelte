@@ -117,13 +117,10 @@
 
   function handleContext(e) {
     e.stopPropagation();
-    // Передаем source: 'miniplayer', чтобы ContextMenu знало, что это мини-плеер
-    // и применило специальное позиционирование на мобильных
     openContextMenu(e, $currentSong, { type: "general", source: "miniplayer" });
   }
 
   function handleLongPress(e) {
-    // Для лонгпресса на самом доке тоже считаем как миниплеер
     openContextMenu(e.detail.originalEvent, $currentSong, {
       type: "general",
       source: "miniplayer",
@@ -131,6 +128,7 @@
   }
 </script>
 
+=== ./components/MiniPlayer.svelte ===
 {#if !$isFullPlayerOpen}
   <div
     class="dock"
@@ -197,7 +195,9 @@
             <div class="artist text-ellipsis" title={displayArtist}>
               {displayArtist}
             </div>
-            {#if qualityLabel}<span class="badge">{qualityLabel}</span>{/if}
+            {#if qualityLabel}
+              <span class="quality-badge">{qualityLabel}</span>
+            {/if}
           </div>
         </div>
       </div>
@@ -424,14 +424,6 @@
   .artist {
     font-size: 13px;
     color: var(--c-text-secondary);
-  }
-  .badge {
-    font-size: 9px;
-    font-weight: 700;
-    color: var(--c-text-muted);
-    background: var(--c-surface-active);
-    padding: 3px 4px;
-    border-radius: 3px;
   }
 
   .tiny-dots {

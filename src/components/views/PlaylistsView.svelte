@@ -19,6 +19,9 @@
   let pressedPlayAll = false;
   let pressedAddToQueue = false;
 
+  let playlistDuration = "";
+  let playlistQuality = ""; // mixed or specific
+
   $: currentView = $navigationStack[$navigationStack.length - 1];
   $: isDetailsView = currentView.view === "details";
 
@@ -33,6 +36,14 @@
       const styledTracks = tracks.map((t) => ({ ...t, _uid: Math.random() }));
       activePlaylistTracks.set(styledTracks);
     }
+    calculateMeta(tracks);
+  } else if (
+    isDetailsView &&
+    $activePlaylistTracks.length === 0 &&
+    !$isLoadingTracks
+  ) {
+    playlistDuration = "0 min";
+    playlistQuality = "";
   }
 
   $: if (isDetailsView && currentView.data) {
@@ -45,6 +56,36 @@
       MPD.loadPlaylists();
     }
   });
+
+  function calculateMeta(tracks) {
+    // Duration
+    const totalSec = tracks.reduce(
+      (acc, t) => acc + (parseFloat(t.time) || 0),
+      0,
+    );
+    if (totalSec > 0) {
+      const h = Math.floor(totalSec / 3600);
+      const m = Math.floor((totalSec % 3600) / 60);
+      if (h > 0) playlistDuration = `${h} hr ${m} min`;
+      else playlistDuration = `${m} min`;
+    } else {
+      playlistDuration = "";
+    }
+
+    // Quality check
+    const formats = new Set();
+    tracks.forEach((t) => {
+      if (t.qualityBadge) formats.add(t.qualityBadge.split(" ")[0]);
+    });
+
+    if (formats.size === 1) {
+      playlistQuality = tracks[0].qualityBadge;
+    } else if (formats.size > 1) {
+      playlistQuality = "Mixed";
+    } else {
+      playlistQuality = "";
+    }
+  }
 
   function openPlaylist(playlist) {
     navigateTo("details", playlist);
@@ -81,6 +122,7 @@
     tracks.splice(index, 1);
     activePlaylistTracks.set(tracks);
     MPD.removeFromPlaylist(playlistName, index);
+    calculateMeta(tracks);
   }
 
   function handleMoveTrack(fromIndex, toIndex) {
@@ -119,10 +161,20 @@
               {currentView.data.name}
             </h1>
 
-            <div class="track-count-sub">
-              {$isLoadingTracks
-                ? "Loading..."
-                : `${$activePlaylistTracks.length} tracks`}
+            <div class="meta-badges">
+              {#if $isLoadingTracks}
+                <span class="meta-tag">Loading...</span>
+              {:else}
+                <span class="meta-tag"
+                  >{$activePlaylistTracks.length} tracks</span
+                >
+                {#if playlistDuration}
+                  <span class="meta-tag">{playlistDuration}</span>
+                {/if}
+                {#if playlistQuality}
+                  <span class="meta-tag quality">{playlistQuality}</span>
+                {/if}
+              {/if}
             </div>
 
             <div class="header-actions">
@@ -271,87 +323,6 @@
     text-overflow: ellipsis;
   }
 
-  .track-count-sub {
-    font-size: 14px;
-    color: rgba(255, 255, 255, 0.7);
-    margin-bottom: 24px;
-    font-weight: 500;
-  }
-
-  .header-actions {
-    display: flex;
-    gap: 12px;
-    align-items: center;
-  }
-
-  .btn-primary {
-    background: var(--c-accent);
-    color: #fff;
-    border: none;
-    padding: 12px 32px;
-    border-radius: 30px;
-    font-size: 14px;
-    font-weight: 700;
-    cursor: pointer;
-    transition:
-      transform 0.1s,
-      opacity 0.2s;
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
-  }
-  .btn-primary:active {
-    transform: scale(0.97);
-  }
-  .btn-primary:disabled {
-    opacity: 0.7;
-    cursor: default;
-  }
-
-  .btn-secondary {
-    background: transparent;
-    border: 1px solid rgba(255, 255, 255, 0.3);
-    color: #fff;
-    padding: 11px 24px;
-    border-radius: 30px;
-    font-size: 14px;
-    font-weight: 600;
-    cursor: pointer;
-    transition: background 0.2s;
-  }
-  .btn-secondary:hover {
-    border-color: #fff;
-  }
-  .btn-secondary:active {
-    background: rgba(255, 255, 255, 0.1);
-  }
-
-  .btn-action {
-    width: 40px;
-    height: 40px;
-    border-radius: 50%;
-    background: transparent;
-    border: 1px solid rgba(255, 255, 255, 0.15);
-    color: var(--c-text-secondary);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    cursor: pointer;
-    transition: all 0.2s;
-  }
-  .btn-action:hover {
-    border-color: #fff;
-    color: #fff;
-  }
-  .btn-action.active {
-    background: var(--c-accent);
-    border-color: var(--c-accent);
-    color: #fff;
-  }
-  .btn-action :global(svg) {
-    width: 20px;
-    height: 20px;
-  }
-
   .card-img-container {
     display: grid !important;
     place-items: center;
@@ -412,39 +383,6 @@
       font-size: 20px;
       white-space: normal;
       margin-bottom: 4px;
-    }
-
-    .track-count-sub {
-      margin-bottom: 12px;
-      font-size: 13px;
-    }
-
-    .header-actions {
-      justify-content: flex-start;
-      flex-wrap: wrap;
-      gap: 8px;
-      width: 100%;
-    }
-
-    .header-actions .btn-action {
-      margin-left: auto;
-    }
-
-    .btn-primary,
-    .btn-secondary {
-      padding: 8px 16px;
-      font-size: 12px;
-      height: 32px;
-    }
-
-    .btn-action {
-      width: 32px;
-      height: 32px;
-    }
-
-    .btn-action :global(svg) {
-      width: 16px;
-      height: 16px;
     }
   }
 </style>
