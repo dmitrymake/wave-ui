@@ -173,8 +173,11 @@
     </div>
   {/if}
 
-  <div class="bg-blur" style="background-image: url({artSrc})"></div>
-  <div class="bg-overlay"></div>
+  <div class="bg-container">
+    <div class="bg-gradient-fallback"></div>
+    <img class="bg-img" src={artSrc} alt="" loading="eager" />
+    <div class="bg-overlay"></div>
+  </div>
 
   <div class="player-body">
     <div class="art-container">
@@ -296,6 +299,7 @@
 </div>
 
 <style>
+  /* --- MAIN CONTAINER --- */
   .full-player {
     position: fixed;
     inset: 0;
@@ -312,10 +316,92 @@
     z-index: 1;
     width: 100%;
     height: 100%;
-    background: var(--c-surface);
+    background: transparent;
     border-left: 1px solid var(--c-border);
+    overflow: hidden;
   }
 
+  /* --- BACKGROUND SYSTEM --- */
+  .bg-container {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    z-index: 1;
+    overflow: hidden;
+    pointer-events: none;
+  }
+
+  .bg-gradient-fallback {
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(135deg, #121212 0%, #000000 100%);
+    z-index: 1;
+  }
+
+  .bg-img {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    z-index: 2;
+    transform: scale(1.6);
+    filter: blur(50px) brightness(1.1) saturate(3) contrast(1.2);
+    opacity: 0.8;
+    transition: opacity 0.5s ease-in;
+  }
+
+  .bg-overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    z-index: 3;
+    background: linear-gradient(
+      to bottom,
+      rgba(0, 0, 0, 0.6) 0%,
+      rgba(0, 0, 0, 0.95) 100%
+    );
+  }
+
+  /* DOCKED MODE OVERRIDES */
+  .is-docked .bg-img {
+    filter: blur(35px) brightness(1.2) saturate(3.5);
+    opacity: 1;
+  }
+
+  .is-docked .bg-overlay {
+    background: rgba(0, 0, 0, 0.7);
+  }
+
+  /* --- CONTENT --- */
+  .player-body {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    padding: 0 24px 40px;
+    max-width: 500px;
+    width: 100%;
+    margin: 0 auto;
+    box-sizing: border-box;
+    justify-content: center;
+    gap: 30px;
+    position: relative;
+    z-index: 4;
+  }
+
+  .is-docked .player-body {
+    padding: 10px 16px 16px;
+    gap: 12px;
+    justify-content: flex-end;
+    max-width: 100%;
+  }
+
+  /* --- DRAG ZONE --- */
   .drag-zone {
     height: 30vh;
     width: 100%;
@@ -343,46 +429,7 @@
     stroke-width: 3;
   }
 
-  .bg-blur {
-    position: absolute;
-    inset: -40px;
-    z-index: -2;
-    background-size: cover;
-    background-position: center;
-    filter: blur(60px) brightness(0.5);
-  }
-  .bg-overlay {
-    position: absolute;
-    inset: 0;
-    z-index: -1;
-    background: var(--c-overlay-dim);
-  }
-
-  .is-docked .bg-blur,
-  .is-docked .bg-overlay {
-    display: none;
-  }
-
-  .player-body {
-    flex: 1;
-    display: flex;
-    flex-direction: column;
-    padding: 0 24px 40px;
-    max-width: 500px;
-    width: 100%;
-    margin: 0 auto;
-    box-sizing: border-box;
-    justify-content: center;
-    gap: 30px;
-  }
-
-  .is-docked .player-body {
-    padding: 10px 16px 16px;
-    gap: 12px;
-    justify-content: flex-end; /* Push controls down, art fills top */
-    max-width: 100%;
-  }
-
+  /* --- ARTWORK --- */
   .art-container {
     display: flex;
     justify-content: center;
@@ -394,10 +441,10 @@
     min-height: 0;
   }
   .is-docked .art-container {
-    flex: 1 1 auto; /* Grow to fill space */
+    flex: 1 1 auto;
     margin-bottom: 0;
-    height: 100%; /* Force height calculation */
-    max-height: 50vh; /* Don't eat up too much space */
+    height: 100%;
+    max-height: 50vh;
     overflow: hidden;
   }
 
@@ -410,17 +457,28 @@
     box-shadow: var(--c-shadow-popover);
     overflow: hidden;
     will-change: transform;
-    object-fit: contain;
+    display: flex;
+    align-items: center;
+    justify-content: center;
   }
+
   .is-docked .artwork {
-    /* Critical: use 100% height of the flexible container */
     height: 100%;
     width: auto;
     max-width: 100%;
     border-radius: 8px;
     box-shadow: none;
-    /* Force square aspect ratio */
     aspect-ratio: 1/1;
+  }
+
+  .artwork :global(img) {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+
+  .is-docked .artwork :global(img) {
+    object-fit: contain !important;
   }
 
   .icon-fallback {
@@ -437,6 +495,7 @@
     opacity: 0.5;
   }
 
+  /* --- CONTROLS --- */
   .controls-area {
     display: flex;
     flex-direction: column;
@@ -491,6 +550,7 @@
     font-size: 13px;
   }
 
+  /* --- BARS & BUTTONS --- */
   .bar-hit-area,
   .volume-hit-area {
     height: 40px;
@@ -555,7 +615,8 @@
     justify-content: space-between;
     margin-top: -12px;
     font-size: 12px;
-    color: var(--c-text-muted);
+    /* FIX: Цвет времени теперь белый */
+    color: rgba(255, 255, 255, 0.9);
     font-weight: 600;
     font-variant-numeric: tabular-nums;
   }
@@ -643,6 +704,13 @@
     border-radius: 50%;
     left: 50%;
     transform: translateX(-50%);
+  }
+
+  /* FIX: Коррекция точки в горизонтальном виде */
+  .is-docked .dot {
+    bottom: 2px;
+    width: 3px;
+    height: 3px;
   }
 
   .volume-row {

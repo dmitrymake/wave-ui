@@ -353,12 +353,10 @@ input[type="range"]:hover::-webkit-slider-thumb {
   .btn-secondary {
     padding: 8px 16px;
     font-size: 12px;
-    height: 32px;
   }
 
   .btn-action {
     width: 32px;
-    height: 32px;
   }
 
   .btn-action :global(svg) {
