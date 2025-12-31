@@ -23,8 +23,36 @@
   // 'main' | 'playlists'
   let view = "main";
 
+  // Флаг для отслеживания истории браузера
+  let historyPushed = false;
+
+  // Сброс вида при открытии
   $: if ($contextMenu.isOpen) {
     view = "main";
+  }
+
+  // --- ЛОГИКА ИСТОРИИ (BACK BUTTON / SWIPE) ---
+  $: if ($contextMenu.isOpen) {
+    // При открытии меню добавляем запись в историю
+    if (!historyPushed && typeof history !== "undefined") {
+      history.pushState({ contextMenuOpen: true }, "");
+      historyPushed = true;
+    }
+  } else {
+    // При закрытии (программном) убираем запись, если она была нами добавлена
+    if (historyPushed && typeof history !== "undefined") {
+      history.back();
+      historyPushed = false;
+    }
+  }
+
+  function handlePopState(event) {
+    // Если нажали "Назад" (или свайпнули) и меню открыто
+    if ($contextMenu.isOpen) {
+      // Ставим false, чтобы реактивный блок выше не вызывал history.back() повторно
+      historyPushed = false;
+      closeContextMenu();
+    }
   }
 
   function handleBackdropClick() {
@@ -132,9 +160,8 @@
     const mh = menuHeight || 320;
 
     // 1. MOBILE MINI-PLAYER SPECIAL CASE
-    // Открываем строго по центру, "приклеиваясь" низом к верху кнопки
     if (innerWidth <= 768 && isMiniPlayerSource && rect) {
-      const bottomPos = innerHeight - rect.top; // Расстояние от низа экрана до верха кнопки
+      const bottomPos = innerHeight - rect.top;
       return `
         position: fixed; 
         bottom: ${bottomPos}px; 
@@ -157,27 +184,23 @@
       const isRightHalf = centerX > innerWidth / 2;
       const isBottomHalf = centerY > innerHeight / 2;
 
-      // Горизонталь: "В сторону центра"
+      // Горизонталь
       if (isRightHalf) {
-        // Кнопка справа -> Меню выравниваем по правому краю кнопки (расширяется влево)
         left = rect.right - mw;
         transformOrigin = isBottomHalf ? "bottom right" : "top right";
       } else {
-        // Кнопка слева -> Меню выравниваем по левому краю кнопки (расширяется вправо)
         left = rect.left;
         transformOrigin = isBottomHalf ? "bottom left" : "top left";
       }
 
-      // Вертикаль: Впритык к кнопке (0px gap)
+      // Вертикаль
       if (isBottomHalf) {
-        // Кнопка внизу -> Меню над кнопкой
         top = rect.top - mh;
       } else {
-        // Кнопка вверху -> Меню под кнопкой
         top = rect.bottom;
       }
     } else {
-      // Fallback (если нет rect)
+      // Fallback
       left = clickX;
       top = clickY;
       if (left + mw > innerWidth) left = innerWidth - mw - 10;
@@ -195,7 +218,7 @@
   })();
 </script>
 
-<svelte:window bind:innerWidth bind:innerHeight />
+<svelte:window bind:innerWidth bind:innerHeight on:popstate={handlePopState} />
 
 {#if $contextMenu.isOpen}
   <div

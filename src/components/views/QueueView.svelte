@@ -115,6 +115,7 @@
   .header-info {
     display: flex;
     flex-direction: column;
+    font-size: 24;
   }
 
   @media (max-width: 768px) {

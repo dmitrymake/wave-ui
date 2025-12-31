@@ -202,7 +202,6 @@
   font-weight: 500;
 }
 
-/* Мобильные стили для БОЛЬШОГО хедера (с картинкой) */
 @media (max-width: 768px) {
   .view-header {
     flex-direction: column;
@@ -219,19 +218,18 @@
     white-space: normal;
   }
   .view-header .header-actions {
-    width: 100%;
     justify-content: center;
   }
 }
 
 .view-header-simple {
   display: flex;
-  flex-direction: row; /* Всегда в ряд */
+  flex-direction: row; 
   align-items: center;
-  justify-content: space-between; /* Текст слева, кнопки справа */
+  justify-content: space-between;
   padding: 16px 20px;
   min-height: 80px;
-  width: 100%; /* Гарантируем ширину */
+  width: 100%;
   box-sizing: border-box;
 }
 
@@ -258,16 +256,15 @@
   font-size: 14px;
   font-weight: 500;
   margin-top: 4px;
-  white-space: nowrap; /* Запрещаем перенос слов "14 tracks" */
+  white-space: nowrap;
 }
 
 .view-header-simple .header-actions {
   display: flex;
   gap: 12px;
-  flex-shrink: 0; /* Кнопки не сжимаются */
+  flex-shrink: 0;
 }
 
-/* --- МОБИЛЬНЫЕ ИСПРАВЛЕНИЯ (Strict Fix) --- */
 @media (max-width: 600px) {
   .view-header-simple {
     /* Принудительно задаем параметры флекс-контейнера */
