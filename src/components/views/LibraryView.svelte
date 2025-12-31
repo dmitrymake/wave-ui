@@ -421,8 +421,15 @@
                   {#if item.artist}
                     <div class="card-sub text-ellipsis">{item.artist}</div>
                   {/if}
+
                   {#if item.year && item.year !== "0"}
                     <div class="card-year">{item.year}</div>
+                  {/if}
+
+                  {#if item.qualityBadge}
+                    <div class="card-year quality">
+                      {item.qualityBadge.split(" ")[0]}
+                    </div>
                   {/if}
                 </div>
               </div>
@@ -553,6 +560,12 @@
     border-radius: 3px;
     flex-shrink: 0;
     line-height: 1;
+  }
+
+  .card-year.quality {
+    color: var(--c-text-secondary);
+    border: 1px solid var(--c-border);
+    background: transparent;
   }
 
   .search-input-container {

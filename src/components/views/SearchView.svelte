@@ -72,12 +72,18 @@
             track.artist && track.artist.toLowerCase().includes(term);
 
           if (matchAlbum || matchArtist) {
+            // Логика обрезки года до 4 символов
+            let yStr = String(track.year || "");
+            if (yStr.length > 4) yStr = yStr.substring(0, 4);
+
             albumMap.set(albumName, {
               name: albumName,
               artist: track.artist,
               file: track.file,
               thumbHash: track.thumbHash,
               _uid: `alb-${albumName}`,
+              year: yStr,
+              qualityBadge: track.qualityBadge,
             });
           }
         }
@@ -98,9 +104,9 @@
 
   // Функция для прокрутки горизонтального списка колесиком мыши
   function handleHorizontalScroll(e) {
-    // Если скроллим колесиком (deltaY), превращаем это в горизонтальный скролл
     if (e.deltaY !== 0) {
-      // currentTarget указывает на div.albums-scroller
+      // Блокируем вертикальный скролл страницы, если нужно (опционально)
+      // e.preventDefault();
       e.currentTarget.scrollLeft += e.deltaY;
     }
   }
@@ -142,7 +148,7 @@
           <div class="header-label section-spacing">Albums</div>
 
           <div
-            class="albums-scroller section-mb"
+            class="music-grid horizontal section-mb"
             on:wheel={handleHorizontalScroll}
           >
             {#each foundAlbums as album (album._uid)}
@@ -162,7 +168,20 @@
                 </div>
 
                 <div class="card-title" title={album.name}>{album.name}</div>
-                <div class="card-sub">{album.artist}</div>
+
+                <div class="card-sub-row">
+                  <div class="card-sub text-ellipsis">{album.artist}</div>
+
+                  {#if album.year && album.year !== "0" && album.year !== 0}
+                    <div class="card-year">{album.year}</div>
+                  {/if}
+
+                  {#if album.qualityBadge}
+                    <div class="card-year quality">
+                      {album.qualityBadge.split(" ")[0]}
+                    </div>
+                  {/if}
+                </div>
               </div>
             {/each}
           </div>
@@ -243,34 +262,68 @@
     }
   }
 
-  .albums-scroller {
+  .music-grid.horizontal {
     display: flex;
-    overflow-x: auto; /* Разрешаем скролл */
-    gap: 16px; /* Расстояние между карточками */
-    padding-bottom: 8px; /* Место для тени снизу, если нужно */
+    flex-wrap: nowrap;
+    overflow-x: auto;
 
-    /* Скрытие скроллбара */
-    scrollbar-width: none; /* Firefox */
-    -ms-overflow-style: none; /* IE */
+    scrollbar-width: none;
+    -ms-overflow-style: none;
 
+    scroll-snap-type: x mandatory;
     -webkit-overflow-scrolling: touch;
-    scroll-snap-type: x mandatory; /* "Прилипание" карточек */
   }
 
-  .albums-scroller::-webkit-scrollbar {
+  .music-grid.horizontal::-webkit-scrollbar {
     display: none;
   }
 
-  .albums-scroller .music-card {
-    flex: 0 0 auto; /* Карточки не сжимаются */
-    width: 160px; /* Фиксированная ширина */
-    scroll-snap-align: start; /* Точка прилипания */
+  .music-grid.horizontal .music-card {
+    flex: 0 0 auto;
+    width: 180px;
+    scroll-snap-align: start;
     margin: 0;
   }
 
   @media (max-width: 768px) {
-    .albums-scroller .music-card {
-      width: 140px;
+    .music-grid.horizontal .music-card {
     }
+  }
+
+  /* --- Стили для бейджей (год, качество) --- */
+
+  .card-sub-row {
+    display: flex;
+    align-items: center;
+    justify-content: flex-start;
+    gap: 6px;
+    font-size: 13px;
+    color: var(--c-text-secondary);
+    margin-top: 2px;
+    min-width: 0;
+  }
+
+  .card-sub {
+    flex-shrink: 1;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .card-year {
+    font-size: 10px;
+    font-weight: 700;
+    color: var(--c-text-muted);
+    background: rgba(255, 255, 255, 0.1);
+    padding: 2px 5px;
+    border-radius: 3px;
+    flex-shrink: 0;
+    line-height: 1;
+  }
+
+  .card-year.quality {
+    color: var(--c-text-secondary);
+    border: 1px solid var(--c-border);
+    background: transparent;
   }
 </style>
