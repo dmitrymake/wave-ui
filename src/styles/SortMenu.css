@@ -1,0 +1,99 @@
+/* Кнопка открытия меню (Trigger) */
+.sort-wrapper {
+  position: relative;
+  margin-left: 8px;
+  height: 100%;
+  display: flex;
+  align-items: center;
+}
+
+.sort-trigger {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: transparent;
+  border: none;
+  color: var(--c-text-secondary);
+  padding: 0 8px;
+  font-size: 13px;
+  font-weight: 600;
+  height: 100%;
+  cursor: pointer;
+  transition: color 0.2s;
+}
+
+.sort-trigger:hover {
+  color: var(--c-text-primary);
+}
+
+.sort-trigger-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0.7;
+  flex-shrink: 0; /* Чтобы иконку не плющило */
+}
+.sort-trigger-icon svg {
+  width: 16px;
+  height: 16px;
+}
+
+/* Подложка для закрытия по клику вне */
+.sort-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 9000;
+  background: transparent;
+  cursor: default;
+}
+
+/* Само меню */
+.sort-menu {
+  position: absolute;
+  top: 100%;
+  right: 0;
+  margin-top: 8px;
+  min-width: 160px;
+  
+  background: #1e1e1e; /* Цвет фона как в ContextMenu */
+  border: 1px solid var(--c-border);
+  border-radius: 12px;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.7);
+  
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  padding: 6px 0;
+  z-index: 9001;
+}
+
+/* Пункт меню */
+.sort-item {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  width: 100%;
+  padding: 12px 14px;
+  
+  background: transparent;
+  border: none;
+  
+  /* По умолчанию серый */
+  color: var(--c-text-secondary);
+  font-size: 14px;
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.1s, color 0.1s;
+}
+
+.sort-item:hover {
+  background: var(--c-surface-hover);
+  color: var(--c-text-primary); /* При ховере тоже белый */
+}
+
+/* Активный пункт - Идеально белый */
+.sort-item.selected {
+  color: var(--c-text-primary);
+  font-weight: 500; /* Чуть жирнее, чтобы выделить */
+  background: rgba(255, 255, 255, 0.05); /* Едва заметный фон активного элемента */
+}

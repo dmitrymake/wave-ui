@@ -58,10 +58,6 @@ export const db = {
     });
   },
 
-  /**
-   * Эффективно получает метаданные для списка файлов.
-   * Используется для "гидратации" плейлистов.
-   */
   async getFilesMap(files) {
     if (!files || files.length === 0) return new Map();
     const database = await this.open();
@@ -138,6 +134,7 @@ export const db = {
             file: t.file,
             thumbHash: t.thumbHash,
             qualityBadge: t.qualityBadge,
+            year: t.year || 0,
           });
           cursor.continue();
         } else {
@@ -186,6 +183,7 @@ export const db = {
                 file: t.file,
                 thumbHash: t.thumbHash,
                 qualityBadge: t.qualityBadge,
+                year: t.year || 0,
               });
             }
           });

@@ -37,6 +37,8 @@ import filePencil from "./svg/file-pencil.svg?raw";
 import plus from "./svg/plus.svg?raw";
 import circleCheck from "./svg/circle-check.svg?raw";
 import dots from "./svg/dots.svg?raw";
+import sortDescending from "./svg/sort-descending.svg?raw";
+import sortAscending from "./svg/sort-ascending.svg?raw";
 
 export const ICONS = {
   ARTISTS: music,
@@ -77,9 +79,11 @@ export const ICONS = {
   ADD: plus,
   ACCEPT: circleCheck,
 
-  // Новые для контекстного меню
   DOTS: dots,
   ADD_TO_PLAYLIST: plus,
   ALBUM_LINK: disc,
   ARTIST_LINK: music,
+
+  SORT_DESC: sortDescending,
+  SORT_ASC: sortAscending,
 };
