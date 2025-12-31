@@ -183,7 +183,6 @@
   margin-bottom: 6px;
   line-height: 1.1;
   color: var(--c-text-primary);
-  white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }

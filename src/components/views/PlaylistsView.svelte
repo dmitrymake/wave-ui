@@ -344,8 +344,7 @@
     color: #fff;
   }
 
-  /* Для мобильных телефонов */
-  @media (max-width: 768px) {
+  @media (max-width: 1000px) {
     .view-header {
       /* Перестраиваем в колонку: Картинка сверху, всё остальное снизу */
       flex-direction: column;

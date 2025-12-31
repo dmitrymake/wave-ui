@@ -508,10 +508,8 @@
     margin-bottom: 4px;
   }
 
-  /* Specific Album/Artist Sub-header */
   .artist-row-header {
     display: flex;
-    width: 100%;
     align-items: center;
     gap: 10px;
     margin: 0 0 6px 0;
@@ -522,7 +520,6 @@
     color: rgba(255, 255, 255, 0.7);
     margin: 0;
     overflow: hidden;
-    text-overflow: ellipsis;
   }
 
   .year-badge-header {
@@ -550,7 +547,7 @@
     background: transparent;
   }
 
-  @media (max-width: 844px) {
+  @media (max-width: 1000px) {
     .view-header {
       flex-direction: column;
       align-items: center;
