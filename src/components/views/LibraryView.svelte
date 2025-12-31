@@ -248,48 +248,55 @@
       <div slot="header" class="content-padded">
         <div class="view-header">
           <div class="header-art">
-            <ImageLoader
-              src={getTrackCoverUrl(headerItem)}
-              alt="Art"
-              radius="12px"
-            >
-              <div slot="fallback" class="icon-fallback">
-                {@html ICONS.ALBUMS}
-              </div>
-            </ImageLoader>
+            <div style="width: 100%; height: 100%;">
+              <ImageLoader
+                src={getTrackCoverUrl(headerItem)}
+                alt="Art"
+                radius="8px"
+              >
+                <div slot="fallback" class="icon-fallback">
+                  {@html ICONS.ALBUMS}
+                </div>
+              </ImageLoader>
+            </div>
           </div>
 
           <div class="header-info">
-            <div class="header-label">
-              {currentView.view === "albums_by_artist" ? "Artist" : "Album"}
-            </div>
-            <h1 class="header-title">
-              {currentView.data.name ||
-                currentView.data.displayName ||
-                "Unknown"}
-            </h1>
+            <div class="header-text-group">
+              <div class="header-label">
+                {currentView.view === "albums_by_artist" ? "Artist" : "Album"}
+              </div>
+              <h1
+                class="header-title"
+                title={currentView.data.name || currentView.data.displayName}
+              >
+                {currentView.data.name ||
+                  currentView.data.displayName ||
+                  "Unknown"}
+              </h1>
 
-            {#if headerItem && headerItem.artist}
-              <div class="artist-row-header">
-                <h2 class="header-sub">
-                  {headerItem.artist}
-                </h2>
-                {#if albumYear && albumYear !== "0"}
-                  <span class="year-badge-header">{albumYear}</span>
+              {#if headerItem && headerItem.artist}
+                <div class="artist-row-header">
+                  <h2 class="header-sub">
+                    {headerItem.artist}
+                  </h2>
+                  {#if albumYear && albumYear !== "0"}
+                    <span class="year-badge-header">{albumYear}</span>
+                  {/if}
+                </div>
+              {/if}
+
+              <div class="meta-badges">
+                {#if trackCount > 0}
+                  <span class="meta-tag">{trackCount} tracks</span>
+                {/if}
+                {#if albumTotalDuration}
+                  <span class="meta-tag">{albumTotalDuration}</span>
+                {/if}
+                {#if albumQuality}
+                  <span class="meta-tag quality">{albumQuality}</span>
                 {/if}
               </div>
-            {/if}
-
-            <div class="meta-badges">
-              {#if trackCount > 0}
-                <span class="meta-tag">{trackCount} tracks</span>
-              {/if}
-              {#if albumTotalDuration}
-                <span class="meta-tag">{albumTotalDuration}</span>
-              {/if}
-              {#if albumQuality}
-                <span class="meta-tag quality">{albumQuality}</span>
-              {/if}
             </div>
 
             <div class="header-actions">
@@ -447,22 +454,74 @@
   @import "./MusicViews.css";
   @import "../../styles/SortMenu.css";
 
-  .icon-fallback {
+  .view-header {
+    display: flex;
+    gap: 24px;
+    width: 100%;
+    align-items: stretch;
+  }
+
+  .header-art {
+    aspect-ratio: 1;
+    align-self: flex-start;
+
+    border-radius: 8px;
     display: flex;
     align-items: center;
     justify-content: center;
+    flex-shrink: 0;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+    background: var(--c-bg-card);
+    position: relative;
+  }
+
+  .header-info {
+    display: flex;
+    flex-direction: column;
+    /* Расталкиваем верхнюю часть (текст) и нижнюю (кнопки) */
+    justify-content: space-between;
+    flex: 1;
+    min-width: 0;
+  }
+
+  .header-text-group {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .header-actions {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+  }
+
+  .header-actions button {
+    white-space: nowrap;
+  }
+
+  .header-label {
+    font-size: 12px;
+    font-weight: 700;
+    text-transform: uppercase;
+    color: var(--c-accent);
+    margin-bottom: 4px;
+  }
+
+  .header-title {
+    font-size: 48px;
+    font-weight: 800;
+    color: var(--c-text-primary);
+    line-height: 1.1;
+    margin-bottom: 8px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
     width: 100%;
-    height: 100%;
-    color: var(--c-icon-faint);
-    background: var(--c-bg-placeholder);
   }
 
-  .icon-fallback :global(svg) {
-    width: 40px;
-    height: 40px;
-    opacity: 0.5;
-  }
-
+  /* Specific Album/Artist Sub-header */
   .artist-row-header {
     display: flex;
     align-items: center;
@@ -474,21 +533,9 @@
     font-size: 20px;
     color: rgba(255, 255, 255, 0.7);
     margin: 0;
-  }
-
-  .header-label {
-    font-size: 12px;
-    font-weight: 700;
-    text-transform: uppercase;
-    color: var(--c-accent);
-    margin-bottom: 4px;
-  }
-
-  .group-header {
-    grid-column: 1 / -1;
-    width: 100%;
-    display: flex;
-    align-items: center;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
 
   .year-badge-header {
@@ -504,7 +551,8 @@
   .meta-badges {
     display: flex;
     gap: 8px;
-    margin: 0 0 24px;
+    margin: 0;
+    flex-wrap: wrap;
   }
 
   .meta-tag {
@@ -520,6 +568,64 @@
     color: var(--c-text-primary);
     border: 1px solid var(--c-border);
     background: transparent;
+  }
+
+  /* --- ADAPTIVE --- */
+  @media (max-width: 1000px) {
+    .header-title {
+      font-size: 32px;
+    }
+  }
+
+  @media (max-width: 768px) {
+    .view-header {
+      flex-direction: column;
+      align-items: center;
+      height: auto;
+    }
+    .header-art {
+      align-self: center; /* На мобилке центрируем */
+    }
+    .header-info {
+      width: 100%;
+      align-items: center;
+      justify-content: flex-start;
+      gap: 24px;
+    }
+    .header-text-group {
+      align-items: center;
+      text-align: center;
+    }
+    .header-title {
+      font-size: 24px;
+      white-space: normal;
+    }
+    .header-actions {
+      justify-content: center;
+      width: 100%;
+    }
+  }
+
+  .icon-fallback {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    height: 100%;
+    color: var(--c-icon-faint);
+    background: var(--c-bg-placeholder);
+  }
+  .icon-fallback :global(svg) {
+    width: 40px;
+    height: 40px;
+    opacity: 0.5;
+  }
+
+  .group-header {
+    grid-column: 1 / -1;
+    width: 100%;
+    display: flex;
+    align-items: center;
   }
 
   .search-icon {

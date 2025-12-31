@@ -15,12 +15,10 @@
   import BaseList from "./BaseList.svelte";
 
   let isEditMode = false;
-
   let pressedPlayAll = false;
   let pressedAddToQueue = false;
-
   let playlistDuration = "";
-  let playlistQuality = ""; // mixed or specific
+  let playlistQuality = "";
 
   $: currentView = $navigationStack[$navigationStack.length - 1];
   $: isDetailsView = currentView.view === "details";
@@ -58,7 +56,6 @@
   });
 
   function calculateMeta(tracks) {
-    // Duration
     const totalSec = tracks.reduce(
       (acc, t) => acc + (parseFloat(t.time) || 0),
       0,
@@ -66,41 +63,33 @@
     if (totalSec > 0) {
       const h = Math.floor(totalSec / 3600);
       const m = Math.floor((totalSec % 3600) / 60);
-      if (h > 0) playlistDuration = `${h} hr ${m} min`;
-      else playlistDuration = `${m} min`;
+      playlistDuration = h > 0 ? `${h} hr ${m} min` : `${m} min`;
     } else {
       playlistDuration = "";
     }
 
-    // Quality check
     const formats = new Set();
     tracks.forEach((t) => {
       if (t.qualityBadge) formats.add(t.qualityBadge.split(" ")[0]);
     });
-
-    if (formats.size === 1) {
-      playlistQuality = tracks[0].qualityBadge;
-    } else if (formats.size > 1) {
-      playlistQuality = "Mixed";
-    } else {
-      playlistQuality = "";
-    }
+    playlistQuality =
+      formats.size === 1
+        ? tracks[0].qualityBadge
+        : formats.size > 1
+          ? "Mixed"
+          : "";
   }
 
   function openPlaylist(playlist) {
     navigateTo("details", playlist);
   }
-
   function handleHeaderPlayAll() {
     pressedPlayAll = true;
     MPD.playPlaylistContext(currentView.data.name, 0);
   }
-
   function playTrack(index) {
-    if (isEditMode) return;
-    MPD.playPlaylistContext(currentView.data.name, index);
+    if (!isEditMode) MPD.playPlaylistContext(currentView.data.name, index);
   }
-
   function addToQueue() {
     if ($activePlaylistTracks.length > 0) {
       const safeName = currentView.data.name.replace(/"/g, '\\"');
@@ -111,11 +100,9 @@
       }, 2000);
     }
   }
-
   function toggleEditMode() {
     isEditMode = !isEditMode;
   }
-
   function handleRemoveTrack(index) {
     const playlistName = currentView.data.name;
     const tracks = $activePlaylistTracks;
@@ -124,12 +111,9 @@
     MPD.removeFromPlaylist(playlistName, index);
     calculateMeta(tracks);
   }
-
   function handleMoveTrack(fromIndex, toIndex) {
-    const playlistName = currentView.data.name;
-    MPD.movePlaylistTrack(playlistName, fromIndex, toIndex);
+    MPD.movePlaylistTrack(currentView.data.name, fromIndex, toIndex);
   }
-
   $: isFavPlaylist = currentView?.data?.name === "Favorites";
 </script>
 
@@ -156,25 +140,27 @@
           </div>
 
           <div class="header-info">
-            <div class="header-label">Playlist</div>
-            <h1 class="header-title" title={currentView.data.name}>
-              {currentView.data.name}
-            </h1>
+            <div class="header-text-group">
+              <div class="header-label">Playlist</div>
+              <h1 class="header-title" title={currentView.data.name}>
+                {currentView.data.name}
+              </h1>
 
-            <div class="meta-badges">
-              {#if $isLoadingTracks}
-                <span class="meta-tag">Loading...</span>
-              {:else}
-                <span class="meta-tag"
-                  >{$activePlaylistTracks.length} tracks</span
-                >
-                {#if playlistDuration}
-                  <span class="meta-tag">{playlistDuration}</span>
+              <div class="meta-badges">
+                {#if $isLoadingTracks}
+                  <span class="meta-tag">Loading...</span>
+                {:else}
+                  <span class="meta-tag"
+                    >{$activePlaylistTracks.length} tracks</span
+                  >
+                  {#if playlistDuration}<span class="meta-tag"
+                      >{playlistDuration}</span
+                    >{/if}
+                  {#if playlistQuality}<span class="meta-tag quality"
+                      >{playlistQuality}</span
+                    >{/if}
                 {/if}
-                {#if playlistQuality}
-                  <span class="meta-tag quality">{playlistQuality}</span>
-                {/if}
-              {/if}
+              </div>
             </div>
 
             <div class="header-actions">
@@ -185,7 +171,6 @@
               >
                 {pressedPlayAll ? "Playing..." : "Play All"}
               </button>
-
               <button
                 class="btn-secondary"
                 on:click={addToQueue}
@@ -193,11 +178,10 @@
               >
                 {pressedAddToQueue ? "Added" : "To Queue"}
               </button>
-
               <button
                 class="btn-action"
                 class:active={isEditMode}
-                title={isEditMode ? "Finish Editing" : "Edit Playlist"}
+                title="Edit"
                 on:click={toggleEditMode}
               >
                 {@html isEditMode ? ICONS.ACCEPT : ICONS.EDIT}
@@ -237,16 +221,12 @@
       <div class="music-grid">
         <div class="music-card">
           <div class="card-img-container dashed-cover">
-            <div class="icon-wrap">
-              {@html ICONS.ADD}
-            </div>
+            <div class="icon-wrap">{@html ICONS.ADD}</div>
           </div>
           <div class="card-title">New Playlist</div>
         </div>
-
         {#each $playlists as playlist}
           {@const isFav = playlist.name === "Favorites"}
-
           <div class="music-card" on:click={() => openPlaylist(playlist)}>
             <div
               class="card-img-container"
@@ -255,12 +235,10 @@
               <div class="icon-wrap">
                 {@html isFav ? ICONS.HEART_FILLED : ICONS.PLAYLISTS}
               </div>
-
               <div class="play-overlay">
                 <span class="overlay-icon">{@html ICONS.PLAY}</span>
               </div>
             </div>
-
             <div class="card-title">{playlist.name}</div>
             <div class="card-sub">
               {playlist.lastModified
@@ -279,15 +257,16 @@
 
   .view-header {
     display: flex;
-    align-items: flex-end;
     gap: 24px;
-    padding-bottom: 24px;
     width: 100%;
+    /* КЛЮЧЕВОЙ МОМЕНТ: Растягиваем высоту инфо-блока по высоте картинки */
+    align-items: stretch;
   }
 
   .header-art {
-    width: 192px;
-    height: 192px;
+    /* Фиксируем размер картинки, чтобы она не сплющивалась */
+    /* aspect-ratio заменяет height: 220px */
+    aspect-ratio: 1;
     border-radius: 8px;
     display: flex;
     align-items: center;
@@ -299,10 +278,29 @@
   .header-info {
     display: flex;
     flex-direction: column;
-    justify-content: flex-end;
+    /* КЛЮЧЕВОЙ МОМЕНТ: Расталкиваем верхнюю и нижнюю часть */
+    justify-content: space-between;
     flex: 1;
     min-width: 0;
-    height: 192px;
+  }
+
+  /* Группируем заголовок и бейджи, чтобы они всегда были вместе сверху */
+  .header-text-group {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .header-actions {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap; /* Разрешаем перенос, если не влезают */
+  }
+
+  /* Запрещаем ломать слова внутри кнопок */
+  .header-actions button {
+    white-space: nowrap;
   }
 
   .header-label {
@@ -318,28 +316,12 @@
     font-weight: 800;
     color: var(--c-text-primary);
     line-height: 1.1;
+    margin-bottom: 8px;
+    /* Обрезка длинного текста */
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
-  }
-
-  .card-img-container {
-    display: grid !important;
-    place-items: center;
-    position: relative;
-  }
-
-  .icon-wrap {
-    width: 30%;
-    height: 30%;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    color: rgba(255, 255, 255, 0.9);
-  }
-  .icon-wrap :global(svg) {
     width: 100%;
-    height: 100%;
   }
 
   .header-icon-wrap {
@@ -352,37 +334,68 @@
     height: 100%;
   }
 
+  /* --- Стили для списка плейлистов (Grid) --- */
+  .card-img-container {
+    display: grid !important;
+    place-items: center;
+    position: relative;
+  }
+  .icon-wrap {
+    width: 30%;
+    height: 30%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: rgba(255, 255, 255, 0.9);
+  }
+  .icon-wrap :global(svg) {
+    width: 100%;
+    height: 100%;
+  }
   .overlay-icon {
     width: 48px;
     color: #fff;
   }
 
+  /* --- АДАПТИВНОСТЬ --- */
+
+  /* Для планшетов: уменьшаем шрифт и картинку */
+  @media (max-width: 1000px) {
+    .header-art {
+    }
+    .header-title {
+      font-size: 32px;
+    }
+  }
+
+  /* Для мобильных телефонов */
   @media (max-width: 768px) {
     .view-header {
-      flex-direction: row;
-      align-items: center;
-      gap: 16px;
-      padding-bottom: 16px;
-    }
-
-    .header-art {
-      width: 110px;
-      height: 110px;
+      /* Перестраиваем в колонку: Картинка сверху, всё остальное снизу */
+      flex-direction: column;
+      align-items: center; /* Центрируем всё */
+      height: auto; /* Сбрасываем привязку к высоте */
     }
 
     .header-info {
-      height: auto;
-      min-height: 110px;
-      justify-content: center;
-      align-items: flex-start;
-      padding-bottom: 0;
-      flex: 1;
+      width: 100%;
+      align-items: center; /* Центрируем текст на мобиле */
+      justify-content: flex-start;
+    }
+
+    .header-text-group {
+      align-items: center; /* Центрируем лейблы и тайтл */
+      text-align: center;
     }
 
     .header-title {
-      font-size: 20px;
-      white-space: normal;
-      margin-bottom: 4px;
+      font-size: 24px;
+      white-space: normal; /* Разрешаем перенос длинного заголовка на мобильном */
+    }
+
+    .header-actions {
+      justify-content: center; /* Кнопки по центру */
+      width: 100%;
     }
   }
 </style>
