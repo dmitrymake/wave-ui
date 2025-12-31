@@ -265,6 +265,13 @@
   flex-shrink: 0;
 }
 
+@media (max-width: 900px) {
+ .header-title {
+    font-size: 24px;
+  }
+
+}
+
 @media (max-width: 600px) {
   .view-header-simple {
     /* Принудительно задаем параметры флекс-контейнера */
@@ -402,6 +409,13 @@
   stroke-width: var(--icon-stroke-width) !important;
   stroke-linecap: round;
   stroke-linejoin: round;
+}
+
+
+@media (max-width: 1000px) {
+  .btn-primary,.btn-secondary {
+    font-size: 13px;
+  }
 }
 
 /* =========================================

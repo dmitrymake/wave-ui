@@ -311,19 +311,6 @@
     margin-bottom: 4px;
   }
 
-  .header-title {
-    font-size: 48px;
-    font-weight: 800;
-    color: var(--c-text-primary);
-    line-height: 1.1;
-    margin-bottom: 8px;
-    /* Обрезка длинного текста */
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    width: 100%;
-  }
-
   .header-icon-wrap {
     width: 64px;
     height: 64px;
@@ -357,17 +344,6 @@
     color: #fff;
   }
 
-  /* --- АДАПТИВНОСТЬ --- */
-
-  /* Для планшетов: уменьшаем шрифт и картинку */
-  @media (max-width: 1000px) {
-    .header-art {
-    }
-    .header-title {
-      font-size: 32px;
-    }
-  }
-
   /* Для мобильных телефонов */
   @media (max-width: 768px) {
     .view-header {
@@ -388,14 +364,10 @@
       text-align: center;
     }
 
-    .header-title {
-      font-size: 24px;
-      white-space: normal; /* Разрешаем перенос длинного заголовка на мобильном */
-    }
-
     .header-actions {
       justify-content: center; /* Кнопки по центру */
       width: 100%;
+      margin-top: 12px;
     }
   }
 </style>
