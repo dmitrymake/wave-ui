@@ -149,6 +149,8 @@
     ? `${$status.bitrate} kbps`
     : $status.format || "";
   $: isLiked = $currentSong.file && $favorites.has($currentSong.file);
+
+  $: artworkRadius = isDocked ? "8px" : "var(--radius-xl)";
 </script>
 
 <div
@@ -182,7 +184,7 @@
   <div class="player-body">
     <div class="art-container">
       <div class="artwork" style="transform: scale({1 - currentY / 3000})">
-        <ImageLoader src={artSrc} alt="Cover" radius="var(--radius-xl)">
+        <ImageLoader src={artSrc} alt="Cover" radius={artworkRadius}>
           <div slot="fallback" class="icon-fallback">
             {@html isRadio ? ICONS.RADIO : ICONS.ALBUMS}
           </div>
@@ -477,10 +479,6 @@
     object-fit: cover;
   }
 
-  .is-docked .artwork :global(img) {
-    object-fit: contain !important;
-  }
-
   .icon-fallback {
     width: 100%;
     height: 100%;
@@ -615,7 +613,6 @@
     justify-content: space-between;
     margin-top: -12px;
     font-size: 12px;
-    /* FIX: Цвет времени теперь белый */
     color: rgba(255, 255, 255, 0.9);
     font-weight: 600;
     font-variant-numeric: tabular-nums;
@@ -705,8 +702,6 @@
     left: 50%;
     transform: translateX(-50%);
   }
-
-  /* FIX: Коррекция точки в горизонтальном виде */
   .is-docked .dot {
     bottom: 2px;
     width: 3px;
