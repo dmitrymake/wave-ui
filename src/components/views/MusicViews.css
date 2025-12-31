@@ -152,8 +152,8 @@
 }
 
 .header-art {
-  width: 232px;
-  height: 232px;
+  width: 190px;
+  height: 190px;
   border-radius: var(--radius-lg);
   overflow: hidden;
   box-shadow: 0 10px 40px var(--c-shadow-header);

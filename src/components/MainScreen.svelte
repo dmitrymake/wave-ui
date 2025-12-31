@@ -166,7 +166,7 @@
   .scroll-container {
     flex: 1;
     overflow-x: hidden;
-    padding-bottom: 90px;
+    /* padding-bottom: 90px; */
     position: relative;
   }
 

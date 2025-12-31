@@ -524,9 +524,10 @@
   /* Specific Album/Artist Sub-header */
   .artist-row-header {
     display: flex;
+    width: 100%;
     align-items: center;
     gap: 10px;
-    margin: 0 0 12px 0;
+    margin: 0 0 6px 0;
   }
 
   .header-sub {
@@ -546,13 +547,6 @@
     padding: 3px 7px;
     border-radius: 4px;
     line-height: 1;
-  }
-
-  .meta-badges {
-    display: flex;
-    gap: 8px;
-    margin: 0;
-    flex-wrap: wrap;
   }
 
   .meta-tag {

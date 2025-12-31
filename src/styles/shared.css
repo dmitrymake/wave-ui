@@ -301,7 +301,7 @@ input[type="range"]:hover::-webkit-slider-thumb {
 .meta-badges {
   display: flex;
   gap: 8px;
-  margin: 12px 0 24px;
+  margin: 0px 0 6px;
 }
 
 .meta-tag,
