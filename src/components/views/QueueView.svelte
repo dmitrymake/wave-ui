@@ -58,7 +58,7 @@
     emptyText="Queue is empty"
     onMoveItem={handleMoveTrack}
   >
-    <div slot="header" class="view-header-simple">
+    <div slot="header" class="view-header">
       <div class="header-info">
         <h1 class="header-title">Current Queue</h1>
 
@@ -106,32 +106,21 @@
 <style>
   @import "./MusicViews.css";
 
-  .view-header-simple {
+  .view-header {
     padding: 24px 32px;
     display: flex;
     justify-content: space-between;
     align-items: flex-end;
   }
-
   .header-info {
     display: flex;
     flex-direction: column;
   }
 
-  .header-title {
-    font-size: 32px;
-    font-weight: 800;
-    margin: 0;
-    color: var(--c-text-primary);
-  }
-
   @media (max-width: 768px) {
-    .view-header-simple {
+    .view-header {
       padding: 16px;
       align-items: center;
-    }
-    .header-title {
-      font-size: 24px;
     }
   }
 </style>

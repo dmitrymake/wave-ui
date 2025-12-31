@@ -280,7 +280,7 @@
 
   .music-grid.horizontal .music-card {
     flex: 0 0 auto;
-    width: 180px;
+    width: 210px;
     scroll-snap-align: start;
     margin: 0;
   }
