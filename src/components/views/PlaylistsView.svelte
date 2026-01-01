@@ -15,10 +15,14 @@
   import BaseList from "./BaseList.svelte";
 
   let isEditMode = false;
+
+  // UI State
   let pressedPlayAll = false;
   let pressedAddToQueue = false;
-  let playlistDuration = "";
-  let playlistQuality = "";
+
+  // Header Data
+  let headerTotalDuration = "";
+  let headerQuality = "";
 
   $: currentView = $navigationStack[$navigationStack.length - 1];
   $: isDetailsView = currentView.view === "details";
@@ -40,8 +44,8 @@
     $activePlaylistTracks.length === 0 &&
     !$isLoadingTracks
   ) {
-    playlistDuration = "0 min";
-    playlistQuality = "";
+    headerTotalDuration = "0 min";
+    headerQuality = "";
   }
 
   $: if (isDetailsView && currentView.data) {
@@ -63,16 +67,16 @@
     if (totalSec > 0) {
       const h = Math.floor(totalSec / 3600);
       const m = Math.floor((totalSec % 3600) / 60);
-      playlistDuration = h > 0 ? `${h} hr ${m} min` : `${m} min`;
+      headerTotalDuration = h > 0 ? `${h} hr ${m} min` : `${m} min`;
     } else {
-      playlistDuration = "";
+      headerTotalDuration = "";
     }
 
     const formats = new Set();
     tracks.forEach((t) => {
       if (t.qualityBadge) formats.add(t.qualityBadge.split(" ")[0]);
     });
-    playlistQuality =
+    headerQuality =
       formats.size === 1
         ? tracks[0].qualityBadge
         : formats.size > 1
@@ -83,14 +87,17 @@
   function openPlaylist(playlist) {
     navigateTo("details", playlist);
   }
-  function handleHeaderPlayAll() {
+
+  function handlePlayAll() {
     pressedPlayAll = true;
     MPD.playPlaylistContext(currentView.data.name, 0);
   }
+
   function playTrack(index) {
     if (!isEditMode) MPD.playPlaylistContext(currentView.data.name, index);
   }
-  function addToQueue() {
+
+  function handleAddToQueue() {
     if ($activePlaylistTracks.length > 0) {
       const safeName = currentView.data.name.replace(/"/g, '\\"');
       MPD.runMpdRequest(`load "${safeName}"`);
@@ -100,9 +107,11 @@
       }, 2000);
     }
   }
+
   function toggleEditMode() {
     isEditMode = !isEditMode;
   }
+
   function handleRemoveTrack(index) {
     const playlistName = currentView.data.name;
     const tracks = $activePlaylistTracks;
@@ -111,9 +120,11 @@
     MPD.removeFromPlaylist(playlistName, index);
     calculateMeta(tracks);
   }
+
   function handleMoveTrack(fromIndex, toIndex) {
     MPD.movePlaylistTrack(currentView.data.name, fromIndex, toIndex);
   }
+
   $: isFavPlaylist = currentView?.data?.name === "Favorites";
 </script>
 
@@ -153,11 +164,11 @@
                   <span class="meta-tag"
                     >{$activePlaylistTracks.length} tracks</span
                   >
-                  {#if playlistDuration}<span class="meta-tag"
-                      >{playlistDuration}</span
+                  {#if headerTotalDuration}<span class="meta-tag"
+                      >{headerTotalDuration}</span
                     >{/if}
-                  {#if playlistQuality}<span class="meta-tag quality"
-                      >{playlistQuality}</span
+                  {#if headerQuality}<span class="meta-tag quality"
+                      >{headerQuality}</span
                     >{/if}
                 {/if}
               </div>
@@ -166,14 +177,14 @@
             <div class="header-actions">
               <button
                 class="btn-primary"
-                on:click={handleHeaderPlayAll}
+                on:click={handlePlayAll}
                 disabled={pressedPlayAll}
               >
                 {pressedPlayAll ? "Playing..." : "Play All"}
               </button>
               <button
                 class="btn-secondary"
-                on:click={addToQueue}
+                on:click={handleAddToQueue}
                 disabled={pressedAddToQueue}
               >
                 {pressedAddToQueue ? "Added" : "To Queue"}
@@ -204,7 +215,7 @@
     </BaseList>
   {:else if $isLoadingPlaylists}
     <div class="content-padded">
-      <div class="music-grid">
+      <div class="music-grid playlists-grid-override">
         {#each Array(8) as _}
           <div class="music-card">
             <Skeleton
@@ -218,7 +229,7 @@
     </div>
   {:else}
     <div class="content-padded">
-      <div class="music-grid">
+      <div class="music-grid playlists-grid-override">
         <div class="music-card">
           <div class="card-img-container dashed-cover">
             <div class="icon-wrap">{@html ICONS.ADD}</div>
@@ -240,10 +251,12 @@
               </div>
             </div>
             <div class="card-title">{playlist.name}</div>
-            <div class="card-sub">
-              {playlist.lastModified
-                ? new Date(playlist.lastModified).toLocaleDateString()
-                : "Playlist"}
+            <div class="card-sub-row">
+              <div class="card-sub">
+                {playlist.lastModified
+                  ? new Date(playlist.lastModified).toLocaleDateString()
+                  : "Playlist"}
+              </div>
             </div>
           </div>
         {/each}
@@ -255,62 +268,6 @@
 <style>
   @import "./MusicViews.css";
 
-  .view-header {
-    display: flex;
-    gap: 24px;
-    width: 100%;
-    /* КЛЮЧЕВОЙ МОМЕНТ: Растягиваем высоту инфо-блока по высоте картинки */
-    align-items: stretch;
-  }
-
-  .header-art {
-    /* Фиксируем размер картинки, чтобы она не сплющивалась */
-    /* aspect-ratio заменяет height: 220px */
-    aspect-ratio: 1;
-    border-radius: 8px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    flex-shrink: 0;
-    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
-  }
-
-  .header-info {
-    display: flex;
-    flex-direction: column;
-    /* КЛЮЧЕВОЙ МОМЕНТ: Расталкиваем верхнюю и нижнюю часть */
-    justify-content: space-between;
-    flex: 1;
-    min-width: 0;
-  }
-
-  /* Группируем заголовок и бейджи, чтобы они всегда были вместе сверху */
-  .header-text-group {
-    display: flex;
-    flex-direction: column;
-    align-items: flex-start;
-  }
-
-  .header-actions {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    flex-wrap: wrap; /* Разрешаем перенос, если не влезают */
-  }
-
-  /* Запрещаем ломать слова внутри кнопок */
-  .header-actions button {
-    white-space: nowrap;
-  }
-
-  .header-label {
-    font-size: 12px;
-    font-weight: 700;
-    text-transform: uppercase;
-    color: var(--c-accent);
-    margin-bottom: 4px;
-  }
-
   .header-icon-wrap {
     width: 64px;
     height: 64px;
@@ -321,12 +278,11 @@
     height: 100%;
   }
 
-  /* --- Стили для списка плейлистов (Grid) --- */
-  .card-img-container {
-    display: grid !important;
-    place-items: center;
-    position: relative;
+  .dashed-cover {
+    border: 2px dashed var(--c-border);
+    background: transparent !important;
   }
+
   .icon-wrap {
     width: 30%;
     height: 30%;
@@ -339,34 +295,17 @@
     width: 100%;
     height: 100%;
   }
-  .overlay-icon {
-    width: 48px;
-    color: #fff;
+
+  .playlists-grid-override {
+    grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)) !important;
+    gap: 24px !important;
   }
 
-  @media (max-width: 1000px) {
-    .view-header {
-      /* Перестраиваем в колонку: Картинка сверху, всё остальное снизу */
-      flex-direction: column;
-      align-items: center; /* Центрируем всё */
-      height: auto; /* Сбрасываем привязку к высоте */
-    }
-
-    .header-info {
-      width: 100%;
-      align-items: center; /* Центрируем текст на мобиле */
-      justify-content: flex-start;
-    }
-
-    .header-text-group {
-      align-items: center; /* Центрируем лейблы и тайтл */
-      text-align: center;
-    }
-
-    .header-actions {
-      justify-content: center; /* Кнопки по центру */
-      width: 100%;
-      margin-top: 12px;
+  @media (max-width: 768px) {
+    .playlists-grid-override {
+      /* На мобильных все равно уменьшаем, чтобы влезало по две */
+      grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)) !important;
+      gap: 16px !important;
     }
   }
 </style>

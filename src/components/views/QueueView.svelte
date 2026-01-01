@@ -8,7 +8,7 @@
   import BaseList from "./BaseList.svelte";
 
   let isEditMode = false;
-  let queueDuration = "";
+  let headerTotalDuration = "";
 
   $: if ($queue.length >= 0) {
     const totalSec = $queue.reduce(
@@ -18,10 +18,10 @@
     if (totalSec > 0) {
       const h = Math.floor(totalSec / 3600);
       const m = Math.floor((totalSec % 3600) / 60);
-      if (h > 0) queueDuration = `${h} hr ${m} min`;
-      else queueDuration = `${m} min`;
+      if (h > 0) headerTotalDuration = `${h} hr ${m} min`;
+      else headerTotalDuration = `${m} min`;
     } else {
-      queueDuration = "";
+      headerTotalDuration = "";
     }
   }
 
@@ -58,35 +58,46 @@
     emptyText="Queue is empty"
     onMoveItem={handleMoveTrack}
   >
-    <div slot="header" class="view-header">
-      <div class="header-info">
-        <h1 class="header-title">Current Queue</h1>
-
-        <div class="meta-badges">
-          <span class="meta-tag">{$queue.length} tracks</span>
-          {#if queueDuration}
-            <span class="meta-tag">{queueDuration}</span>
-          {/if}
+    <div slot="header" class="content-padded">
+      <div class="view-header">
+        <div class="header-art" style="background: var(--c-surface-active);">
+          <div class="header-icon-wrap">
+            {@html ICONS.MENU}
+          </div>
         </div>
-      </div>
 
-      <div class="header-actions">
-        <button
-          class="btn-action"
-          on:click={handleSaveQueue}
-          title="Save Queue"
-        >
-          {@html ICONS.SAVE}
-        </button>
+        <div class="header-info">
+          <div class="header-text-group">
+            <div class="header-label">Now Playing</div>
+            <h1 class="header-title">Current Queue</h1>
 
-        <button
-          class="btn-action"
-          class:active={isEditMode}
-          on:click={toggleEditMode}
-          title={isEditMode ? "Finish Editing" : "Edit Queue"}
-        >
-          {@html isEditMode ? ICONS.ACCEPT : ICONS.EDIT}
-        </button>
+            <div class="meta-badges">
+              <span class="meta-tag">{$queue.length} tracks</span>
+              {#if headerTotalDuration}
+                <span class="meta-tag">{headerTotalDuration}</span>
+              {/if}
+            </div>
+          </div>
+
+          <div class="header-actions">
+            <button
+              class="btn-action"
+              on:click={handleSaveQueue}
+              title="Save Queue"
+            >
+              {@html ICONS.SAVE}
+            </button>
+
+            <button
+              class="btn-action"
+              class:active={isEditMode}
+              on:click={toggleEditMode}
+              title={isEditMode ? "Finish Editing" : "Edit Queue"}
+            >
+              {@html isEditMode ? ICONS.ACCEPT : ICONS.EDIT}
+            </button>
+          </div>
+        </div>
       </div>
     </div>
 
@@ -106,22 +117,14 @@
 <style>
   @import "./MusicViews.css";
 
-  .view-header {
-    padding: 24px 32px;
-    display: flex;
-    justify-content: space-between;
-    align-items: flex-end;
+  .header-icon-wrap {
+    width: 64px;
+    height: 64px;
+    color: var(--c-text-secondary);
   }
-  .header-info {
-    display: flex;
-    flex-direction: column;
-    font-size: 24;
-  }
-
-  @media (max-width: 768px) {
-    .view-header {
-      padding: 16px;
-      align-items: center;
-    }
+  .header-icon-wrap :global(svg) {
+    width: 100%;
+    height: 100%;
+    stroke-width: 1.5;
   }
 </style>

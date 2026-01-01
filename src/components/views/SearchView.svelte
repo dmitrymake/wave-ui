@@ -6,12 +6,7 @@
   import ImageLoader from "../ImageLoader.svelte";
   import * as MPD from "../../lib/mpd";
   import { ICONS } from "../../lib/icons";
-  import {
-    navigateTo,
-    getTrackCoverUrl,
-    getTrackThumbUrl,
-    searchQuery,
-  } from "../../lib/store";
+  import { navigateTo, getTrackThumbUrl, searchQuery } from "../../lib/store";
   import BaseList from "./BaseList.svelte";
 
   // Local store for search results
@@ -105,7 +100,6 @@
   }
 
   function goToAlbum(album) {
-    // Передаем также имя артиста для корректной фильтрации
     navigateTo("tracks_by_album", { name: album.name, artist: album.artist });
   }
 
@@ -118,27 +112,25 @@
 
 <div class="view-container">
   <div class="content-padded no-bottom-pad">
-    <div class="search-header-row">
-      <div class="search-input-container expanded">
-        <span class="search-icon">{@html ICONS.SEARCH}</span>
-        <input
-          type="text"
-          placeholder="Artists, songs, or albums"
-          value={$searchQuery}
-          on:input={handleInput}
-          autoFocus
-        />
+    <div class="search-input-container">
+      <span class="search-icon">{@html ICONS.SEARCH}</span>
+      <input
+        type="text"
+        placeholder="Artists, songs, or albums"
+        value={$searchQuery}
+        on:input={handleInput}
+        autoFocus
+      />
 
-        {#if $searchQuery.length > 0}
-          <button class="clear-icon-btn" on:click={clearInput}>
-            {@html ICONS.CLOSE}
-          </button>
-        {/if}
+      {#if $searchQuery.length > 0}
+        <button class="clear-icon-btn" on:click={clearInput}>
+          {@html ICONS.CLOSE}
+        </button>
+      {/if}
 
-        {#if isSearching}
-          <div class="spinner"></div>
-        {/if}
-      </div>
+      {#if isSearching}
+        <div class="spinner"></div>
+      {/if}
     </div>
   </div>
 
@@ -170,13 +162,13 @@
                   <ImageLoader
                     src={getTrackThumbUrl(album, "md")}
                     alt={album.name}
-                    radius="var(--radius-md)"
+                    radius="8px"
                   >
                     <div slot="fallback" class="icon-fallback">💿</div>
                   </ImageLoader>
 
                   <div class="play-overlay">
-                    <span class="play-icon-wrap">{@html ICONS.PLAY}</span>
+                    <span class="overlay-icon">{@html ICONS.PLAY}</span>
                   </div>
                 </div>
 
@@ -186,11 +178,11 @@
                   <div class="card-sub text-ellipsis">{album.artist}</div>
 
                   {#if album.year && album.year !== "0" && album.year !== 0}
-                    <div class="meta-tag">{album.year}</div>
+                    <div class="card-badge">{album.year}</div>
                   {/if}
 
                   {#if album.qualityBadge}
-                    <div class="meta-tag quality">
+                    <div class="card-badge quality">
                       {album.qualityBadge.split(" ")[0]}
                     </div>
                   {/if}
@@ -220,22 +212,6 @@
 <style>
   @import "./MusicViews.css";
 
-  .no-bottom-pad {
-    padding-bottom: 0;
-  }
-
-  .search-header-row {
-    display: flex;
-    width: 100%;
-    margin-bottom: 24px;
-  }
-
-  .search-input-container.expanded {
-    flex: 1;
-    width: 100%;
-    margin-bottom: 0;
-  }
-
   .clear-icon-btn {
     background: transparent;
     border: none;
@@ -260,11 +236,6 @@
 
   .section-mb {
     margin-bottom: 24px;
-  }
-
-  .play-icon-wrap {
-    width: 40px;
-    color: var(--c-text-primary);
   }
 
   .empty-text {
@@ -303,44 +274,5 @@
     to {
       transform: rotate(360deg);
     }
-  }
-
-  .music-grid.horizontal {
-    display: flex;
-    flex-wrap: nowrap;
-    overflow-x: auto;
-    scrollbar-width: none;
-    -ms-overflow-style: none;
-    scroll-snap-type: x mandatory;
-    -webkit-overflow-scrolling: touch;
-  }
-
-  .music-grid.horizontal::-webkit-scrollbar {
-    display: none;
-  }
-
-  .music-grid.horizontal .music-card {
-    flex: 0 0 auto;
-    width: 210px;
-    scroll-snap-align: start;
-    margin: 0;
-  }
-
-  .card-sub-row {
-    display: flex;
-    align-items: center;
-    justify-content: flex-start;
-    gap: 6px;
-    font-size: 13px;
-    color: var(--c-text-secondary);
-    margin-top: 2px;
-    min-width: 0;
-  }
-
-  .card-sub {
-    flex-shrink: 1;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
   }
 </style>

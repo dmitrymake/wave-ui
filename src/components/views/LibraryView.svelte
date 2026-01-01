@@ -1,4 +1,5 @@
 <script>
+  import { fade, scale } from "svelte/transition";
   import { writable } from "svelte/store";
   import { db } from "../../lib/db";
   import {
@@ -31,14 +32,16 @@
     { id: "year_desc", label: "Newest" },
   ];
 
+  // UI State (Unified)
   let pressedPlayAll = false;
   let pressedAddToQueue = false;
 
+  // Header Data
   let headerItem = null;
-  let albumTotalDuration = "";
-  let albumQuality = "";
+  let headerTotalDuration = ""; // Renamed from albumTotalDuration for unification
+  let headerQuality = ""; // Renamed from albumQuality
+  let headerSubtitle = ""; // Renamed from albumYear to be more generic
   let trackCount = 0;
-  let albumYear = "";
 
   // === ЗАЩИТА ОТ ГОНКИ ЗАПРОСОВ ===
   let lastRequestId = 0;
@@ -139,17 +142,15 @@
   async function loadContent(category, viewState) {
     if (!viewState) return;
 
-    // 1. Создаем уникальный ID для этого запуска
     const requestId = ++lastRequestId;
 
-    // 2. Сразу показываем загрузку и чистим старое, чтобы не было "мелькания"
     isLoading = true;
-    itemsStore.set([]); // Очистка перед новым запросом
+    itemsStore.set([]);
 
     headerItem = viewState.data;
-    albumTotalDuration = "";
-    albumQuality = "";
-    albumYear = "";
+    headerTotalDuration = "";
+    headerQuality = "";
+    headerSubtitle = "";
     trackCount = 0;
 
     console.log(`[LibraryView #${requestId}] Start loading:`, viewState);
@@ -167,14 +168,9 @@
       } else if (viewState.view === "tracks_by_album") {
         const albumName = viewState.data.name || viewState.data;
         const artistName = viewState.data.artist;
-
-        // Получаем треки с фильтрацией
         data = await db.getAlbumTracks(albumName, artistName);
       }
 
-      // === ПРОВЕРКА НА АКТУАЛЬНОСТЬ ===
-      // Если пока мы ждали базу, пользователь кликнул куда-то еще,
-      // requestId изменится (станет больше), и мы выходим.
       if (requestId !== lastRequestId) {
         console.warn(`[LibraryView #${requestId}] Request cancelled (stale).`);
         return;
@@ -204,17 +200,17 @@
       if (viewState.view === "tracks_by_album" && enriched.length > 0) {
         headerItem = enriched[0];
         trackCount = enriched.length;
-        albumYear = enriched[0].year;
+        headerSubtitle = enriched[0].year;
 
         const totalSec = enriched.reduce((acc, t) => acc + (t.time || 0), 0);
         if (totalSec > 0) {
           const h = Math.floor(totalSec / 3600);
           const m = Math.floor((totalSec % 3600) / 60);
-          albumTotalDuration = h > 0 ? `${h} hr ${m} min` : `${m} min`;
+          headerTotalDuration = h > 0 ? `${h} hr ${m} min` : `${m} min`;
         }
 
         if (enriched[0].qualityBadge) {
-          albumQuality = enriched[0].qualityBadge;
+          headerQuality = enriched[0].qualityBadge;
         }
       }
     } catch (e) {
@@ -304,12 +300,12 @@
               </h1>
 
               {#if headerItem && headerItem.artist}
-                <div class="artist-row-header">
-                  <h2 class="header-sub">
+                <div class="header-subtitle-row">
+                  <h2 class="header-sub-text">
                     {headerItem.artist}
                   </h2>
-                  {#if albumYear && albumYear !== "0"}
-                    <span class="meta-tag">{albumYear}</span>
+                  {#if headerSubtitle && headerSubtitle !== "0"}
+                    <span class="meta-tag">{headerSubtitle}</span>
                   {/if}
                 </div>
               {/if}
@@ -318,11 +314,11 @@
                 {#if trackCount > 0}
                   <span class="meta-tag">{trackCount} tracks</span>
                 {/if}
-                {#if albumTotalDuration}
-                  <span class="meta-tag">{albumTotalDuration}</span>
+                {#if headerTotalDuration}
+                  <span class="meta-tag">{headerTotalDuration}</span>
                 {/if}
-                {#if albumQuality}
-                  <span class="meta-tag quality">{albumQuality}</span>
+                {#if headerQuality}
+                  <span class="meta-tag quality">{headerQuality}</span>
                 {/if}
               </div>
             </div>
@@ -445,9 +441,7 @@
                   </ImageLoader>
 
                   <div class="play-overlay">
-                    <span style="width:48px; color:#fff"
-                      >{@html ICONS.PLAY}</span
-                    >
+                    <span class="overlay-icon">{@html ICONS.PLAY}</span>
                   </div>
                 </div>
 
@@ -458,11 +452,11 @@
                   {/if}
 
                   {#if item.year && item.year !== "0"}
-                    <div class="card-year">{item.year}</div>
+                    <div class="card-badge">{item.year}</div>
                   {/if}
 
                   {#if item.qualityBadge}
-                    <div class="card-year quality">
+                    <div class="card-badge quality">
                       {item.qualityBadge.split(" ")[0]}
                     </div>
                   {/if}
@@ -482,98 +476,19 @@
   @import "./MusicViews.css";
   @import "../../styles/SortMenu.css";
 
-  .view-header {
-    display: flex;
-    width: 100%;
-    align-items: stretch;
-  }
-
-  .header-art {
-    aspect-ratio: 1;
-    align-self: flex-start;
-
-    border-radius: 8px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    flex-shrink: 0;
-    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
-    background: var(--c-bg-card);
-    position: relative;
-  }
-
-  .header-info {
-    display: flex;
-    flex-direction: column;
-    /* Расталкиваем верхнюю часть (текст) и нижнюю (кнопки) */
-    justify-content: space-between;
-    flex: 1;
-    min-width: 0;
-  }
-
-  .header-text-group {
-    display: flex;
-    flex-direction: column;
-    align-items: flex-start;
-  }
-
-  .header-actions {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    flex-wrap: wrap;
-  }
-
-  .header-actions button {
-    white-space: nowrap;
-  }
-
-  .header-label {
-    font-size: 12px;
-    font-weight: 700;
-    text-transform: uppercase;
-    color: var(--c-accent);
-    margin-bottom: 4px;
-  }
-
-  .artist-row-header {
+  .header-subtitle-row {
     display: flex;
     align-items: center;
     gap: 10px;
     margin: 0 0 6px 0;
   }
 
-  .header-sub {
+  .header-sub-text {
     font-size: 20px;
     color: rgba(255, 255, 255, 0.7);
     margin: 0;
     overflow: hidden;
     text-overflow: ellipsis;
-  }
-
-  @media (max-width: 1000px) {
-    .view-header {
-      flex-direction: column;
-      align-items: center;
-      height: auto;
-    }
-    .header-art {
-      align-self: center; /* На мобилке центрируем */
-    }
-    .header-info {
-      width: 100%;
-      align-items: center;
-      justify-content: flex-start;
-      gap: 24px;
-    }
-    .header-text-group {
-      align-items: center;
-      text-align: center;
-    }
-
-    .header-actions {
-      justify-content: center;
-    }
   }
 
   .icon-fallback {
@@ -598,70 +513,10 @@
     align-items: center;
   }
 
-  .search-icon {
-    opacity: 0.5;
-    margin-right: 12px;
-    display: flex;
-    width: 20px;
-  }
-
   .empty-text {
     grid-column: 1/-1;
     text-align: center;
     padding: 40px;
     opacity: 0.5;
-  }
-
-  .card-sub-row {
-    display: flex;
-    align-items: center;
-    justify-content: flex-start;
-    gap: 6px;
-    font-size: 13px;
-    color: var(--c-text-secondary);
-    margin-top: 2px;
-    min-width: 0;
-  }
-
-  .card-sub {
-    flex-shrink: 1;
-  }
-
-  .card-year {
-    font-size: 10px;
-    font-weight: 700;
-    color: var(--c-text-muted);
-    background: rgba(255, 255, 255, 0.1);
-    padding: 2px 5px;
-    border-radius: 3px;
-    flex-shrink: 0;
-    line-height: 1;
-  }
-
-  .card-year.quality {
-    color: var(--c-text-secondary);
-    border: 1px solid var(--c-border);
-    background: transparent;
-  }
-
-  .search-input-container {
-    display: flex;
-    align-items: center;
-    background: var(--c-surface-input);
-    border-radius: 8px;
-    padding: 0 12px 0 16px;
-    height: 48px;
-    margin-bottom: 24px;
-    border: 1px solid var(--c-border);
-  }
-
-  .search-input-container input {
-    flex: 1;
-    background: transparent;
-    border: none;
-    color: var(--c-text-primary);
-    font-size: 16px;
-    outline: none;
-    min-width: 0;
   }
 </style>
