@@ -160,7 +160,7 @@
     <div class="title-row">
       <div class="title text-ellipsis" {title}>{title}</div>
       {#if quality && !isRadio}
-        <span class="quality-badge">{quality}</span>
+        <span class="meta-tag quality">{quality}</span>
       {/if}
     </div>
     <div

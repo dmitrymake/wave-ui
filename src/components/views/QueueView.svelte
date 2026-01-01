@@ -117,6 +117,11 @@
 <style>
   @import "./MusicViews.css";
 
+  .header-actions {
+    /* т.к. нет больших кнопок */
+    width: revert;
+  }
+
   .header-icon-wrap {
     width: 64px;
     height: 64px;

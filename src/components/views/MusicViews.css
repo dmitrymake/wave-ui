@@ -126,8 +126,8 @@
 /* Badges inside cards (Year, Quality, etc.) */
 .card-badge {
   font-size: 10px;
-  font-weight: 700;
-  color: var(--c-text-muted);
+  font-weight: 600;
+  color: var(--c-text-primary);
   background: rgba(255, 255, 255, 0.1);
   padding: 2px 5px;
   border-radius: 3px;
@@ -136,7 +136,7 @@
 }
 
 .card-badge.quality {
-  color: var(--c-text-secondary);
+  color: var(--c-text-primary);
   border: 1px solid var(--c-border);
   background: transparent;
 }
@@ -275,30 +275,6 @@
   font-weight: 500;
 }
 
-/* Meta Badges (Tracks count, Duration, Quality) in Header */
-.meta-badges {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex-wrap: wrap;
-  margin-top: 4px;
-}
-
-.meta-tag {
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--c-text-secondary);
-  background: var(--c-surface-button);
-  padding: 4px 8px;
-  border-radius: 4px;
-}
-
-.meta-tag.quality {
-  background: transparent;
-  border: 1px solid var(--c-border);
-  color: var(--c-text-muted);
-}
-
 .header-actions {
   display: flex;
   align-items: center;
@@ -331,7 +307,7 @@
     align-items: center;
   }
   
-  .header-subtitle-row, .meta-badges {
+  .header-subtitle-row, {
     justify-content: center;
   }
 

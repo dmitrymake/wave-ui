@@ -202,7 +202,7 @@
             {$currentSong.stationName || $currentSong.artist || "Moode Audio"}
           </h2>
           {#if qualityLabel}
-            <span class="quality-badge">{qualityLabel}</span>
+            <span class="meta-tag quality">{qualityLabel}</span>
           {/if}
         </div>
       </div>

@@ -304,14 +304,13 @@ input[type="range"]:hover::-webkit-slider-thumb {
   margin: 0px 0 6px;
 }
 
-.meta-tag,
-.quality-badge {
-  font-size: 10px;
+.meta-tag {
+  font-size: 11px;
   font-weight: 600;
-  color: var(--c-text-secondary);
+  color: var(--c-text-primary);
   border: 1px solid transparent;
   background: var(--c-surface-button); 
-  padding: 2px 6px;
+  padding: 3px 6px;
   height: 18px;
   display: inline-flex;
   align-items: center;
@@ -321,16 +320,11 @@ input[type="range"]:hover::-webkit-slider-thumb {
   line-height: 1;
 }
 
-.quality-badge, 
 .meta-tag.quality {
   background: transparent;
   border: 1px solid var(--c-border);
   color: var(--c-text-primary);
   opacity: 0.9;
-}
-
-.quality-badge {
-  margin-left: 0px;
 }
 
 /* --- Responsive Utils --- */

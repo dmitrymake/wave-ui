@@ -7,7 +7,7 @@
     navigationStack,
     navigateBack,
     handleBrowserBack,
-    isFullPlayerOpen,
+    isFullPlayerOpen, // Мы используем это состояние для расчета отступа
     toastMessage,
   } from "../lib/store";
 
@@ -73,7 +73,12 @@
         {/if}
       </header>
 
-      <div class="scroll-container">
+      <div
+        class="scroll-container"
+        style="padding-bottom: {$isFullPlayerOpen
+          ? '0px'
+          : 'var(--mini-player-height)'};"
+      >
         <div class="view-wrapper">
           {#if $activeMenuTab === "radio"}
             <RadioView />
@@ -114,6 +119,8 @@
     height: 100dvh;
     background: var(--c-bg-app);
     overflow: hidden;
+
+    --mini-player-height: 90px;
   }
 
   .app-layout {
@@ -149,7 +156,7 @@
     background: var(--c-bg-main);
     min-width: 0;
     height: 100%;
-    transition: flex 0.3s ease; /* Smooth resize when side menu toggles */
+    transition: flex 0.3s ease;
   }
 
   .top-bar {
@@ -166,8 +173,9 @@
   .scroll-container {
     flex: 1;
     overflow-x: hidden;
-    /* padding-bottom: 90px; */
     position: relative;
+    /* Плавный переход отступа при открытии/закрытии плеера */
+    transition: padding-bottom 0.3s ease;
   }
 
   .view-wrapper {
@@ -242,7 +250,6 @@
     }
   }
 
-  /* --- LANDSCAPE MOBILE OPTIMIZATION --- */
   @media (max-height: 600px) and (orientation: landscape) {
     .top-bar {
       display: none;
@@ -253,7 +260,7 @@
     }
 
     .scroll-container {
-      padding-bottom: 0;
+      padding-bottom: 0 !important;
     }
 
     .docked-player-container {

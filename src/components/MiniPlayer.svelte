@@ -196,7 +196,7 @@
               {displayArtist}
             </div>
             {#if qualityLabel}
-              <span class="quality-badge">{qualityLabel}</span>
+              <span class="meta-tag quality">{qualityLabel}</span>
             {/if}
           </div>
         </div>
@@ -265,7 +265,7 @@
     bottom: 0;
     left: 0;
     right: 0;
-    height: var(--mini-player-height);
+    height: var(--mini-player-height, 90px);
     background: var(--c-bg-glass);
     border-top: 1px solid var(--c-border-dim);
     z-index: var(--z-dock);

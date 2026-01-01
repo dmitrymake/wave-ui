@@ -178,11 +178,11 @@
                   <div class="card-sub text-ellipsis">{album.artist}</div>
 
                   {#if album.year && album.year !== "0" && album.year !== 0}
-                    <div class="card-badge">{album.year}</div>
+                    <div class="meta-tag">{album.year}</div>
                   {/if}
 
                   {#if album.qualityBadge}
-                    <div class="card-badge quality">
+                    <div class="meta-tag quality">
                       {album.qualityBadge.split(" ")[0]}
                     </div>
                   {/if}
