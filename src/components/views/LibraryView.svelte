@@ -309,7 +309,7 @@
                     {headerItem.artist}
                   </h2>
                   {#if albumYear && albumYear !== "0"}
-                    <span class="year-badge-header">{albumYear}</span>
+                    <span class="meta-tag">{albumYear}</span>
                   {/if}
                 </div>
               {/if}
@@ -549,31 +549,6 @@
     margin: 0;
     overflow: hidden;
     text-overflow: ellipsis;
-  }
-
-  .year-badge-header {
-    font-size: 13px;
-    font-weight: 700;
-    color: var(--c-text-muted);
-    background: rgba(255, 255, 255, 0.1);
-    padding: 3px 7px;
-    border-radius: 4px;
-    line-height: 1;
-  }
-
-  .meta-tag {
-    font-size: 12px;
-    font-weight: 600;
-    color: var(--c-text-secondary);
-    background: rgba(255, 255, 255, 0.1);
-    padding: 4px 8px;
-    border-radius: 4px;
-  }
-
-  .meta-tag.quality {
-    color: var(--c-text-primary);
-    border: 1px solid var(--c-border);
-    background: transparent;
   }
 
   @media (max-width: 1000px) {

@@ -186,11 +186,11 @@
                   <div class="card-sub text-ellipsis">{album.artist}</div>
 
                   {#if album.year && album.year !== "0" && album.year !== 0}
-                    <div class="card-year">{album.year}</div>
+                    <div class="meta-tag">{album.year}</div>
                   {/if}
 
                   {#if album.qualityBadge}
-                    <div class="card-year quality">
+                    <div class="meta-tag quality">
                       {album.qualityBadge.split(" ")[0]}
                     </div>
                   {/if}
@@ -342,22 +342,5 @@
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
-  }
-
-  .card-year {
-    font-size: 10px;
-    font-weight: 700;
-    color: var(--c-text-muted);
-    background: rgba(255, 255, 255, 0.1);
-    padding: 2px 5px;
-    border-radius: 3px;
-    flex-shrink: 0;
-    line-height: 1;
-  }
-
-  .card-year.quality {
-    color: var(--c-text-secondary);
-    border: 1px solid var(--c-border);
-    background: transparent;
   }
 </style>

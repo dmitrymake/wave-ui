@@ -307,7 +307,7 @@ input[type="range"]:hover::-webkit-slider-thumb {
 .meta-tag,
 .quality-badge {
   font-size: 10px;
-  font-weight: 700;
+  font-weight: 600;
   color: var(--c-text-secondary);
   border: 1px solid transparent;
   background: var(--c-surface-button); 
@@ -315,14 +315,12 @@ input[type="range"]:hover::-webkit-slider-thumb {
   height: 18px;
   display: inline-flex;
   align-items: center;
-  justify-content: center;
   border-radius: var(--radius-sm);
   white-space: nowrap;
   letter-spacing: 0.2px;
   line-height: 1;
 }
 
-/* Specific style for Quality Badge (Outlined) */
 .quality-badge, 
 .meta-tag.quality {
   background: transparent;
@@ -331,7 +329,6 @@ input[type="range"]:hover::-webkit-slider-thumb {
   opacity: 0.9;
 }
 
-/* Spacing for badge inside track list */
 .quality-badge {
   margin-left: 0px;
 }

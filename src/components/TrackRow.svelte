@@ -243,9 +243,8 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    width: 40px;
-    height: 40px;
-    margin-left: -8px;
+    width: 24px;
+    height: 24px;
   }
   .drag-handle:active {
     cursor: grabbing;
@@ -386,7 +385,7 @@
   }
 
   .small {
-    padding: 6px;
+    padding: 5px;
   }
   .small :global(svg) {
     width: 18px;
@@ -403,7 +402,7 @@
     font-size: 13px;
     color: var(--c-text-muted);
     font-variant-numeric: tabular-nums;
-    width: 35px;
+    width: 28px;
     text-align: right;
   }
 

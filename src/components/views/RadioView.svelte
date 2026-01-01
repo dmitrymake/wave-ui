@@ -75,7 +75,9 @@
             </ImageLoader>
 
             {#if isActive && qualityLabel}
-              <div class="quality-tag" in:fade>{qualityLabel}</div>
+              <div class="quality-badge overlay-pos" in:fade>
+                {qualityLabel}
+              </div>
             {/if}
 
             <div class="play-overlay">
@@ -91,11 +93,11 @@
             </div>
           </div>
 
-          <div class="card-title">
+          <div class="card-title text-ellipsis">
             {station.name}
           </div>
           {#if station.genre}
-            <div class="card-sub">{station.genre}</div>
+            <div class="card-sub text-ellipsis">{station.genre}</div>
           {/if}
         </div>
       {/each}
@@ -113,33 +115,29 @@
 <style>
   @import "./MusicViews.css";
 
-  /* Локальные стили только для специфичных радио-элементов */
-
   .skeleton-img {
     aspect-ratio: 1;
     border-radius: var(--radius-md);
     margin-bottom: 12px;
     overflow: hidden;
+    background: var(--c-surface-drag-phantom);
   }
 
-  .play-icon-wrap {
-    width: 48px;
-    color: var(--c-text-primary);
-  }
-
-  /* Бейджи качества и статуса */
-  .quality-tag {
+  .quality-badge.overlay-pos {
     position: absolute;
     top: 6px;
     right: 6px;
     z-index: 5;
     background: var(--c-bg-glass);
+    backdrop-filter: blur(4px);
+    border-color: var(--c-border-dim);
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+  }
+
+  .play-icon-wrap {
+    width: 48px;
     color: var(--c-text-primary);
-    font-size: 9px;
-    font-weight: 800;
-    padding: 2px 5px;
-    border-radius: var(--radius-sm);
-    border: 1px solid var(--c-border);
+    filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.5));
   }
 
   .status-badge {
@@ -148,12 +146,30 @@
     padding: 4px 8px;
     border-radius: var(--radius-sm);
     color: var(--c-text-primary);
+    letter-spacing: 0.5px;
   }
+
   .status-badge.playing {
     background: var(--c-accent);
+    box-shadow: 0 0 10px var(--c-shadow-glow-accent);
   }
+
   .status-badge.paused {
     background: var(--c-bg-toast);
     border: 1px solid var(--c-border);
+    color: var(--c-text-secondary);
+  }
+
+  .card-title {
+    color: var(--c-text-primary);
+    font-weight: 600;
+    font-size: 14px;
+    margin-top: 8px;
+  }
+
+  .card-sub {
+    color: var(--c-text-secondary);
+    font-size: 12px;
+    margin-top: 2px;
   }
 </style>
