@@ -185,7 +185,6 @@ export const db = {
     });
   },
 
-  // === КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ ===
   async getAlbumTracks(albumName, artistFilter = null) {
     const database = await this.open();
     // Нормализуем входные данные
@@ -221,9 +220,7 @@ export const db = {
 
             const match = tArtist === safeArtist || tAlbumArtist === safeArtist;
 
-            // Логируем, если трек отброшен (поможет понять, почему удалился или остался)
             if (!match) {
-              // console.warn(`[DB] Filtering out: "${t.title}" by "${tArtist}" (wanted "${safeArtist}")`);
             }
             return match;
           });
