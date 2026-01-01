@@ -10,7 +10,7 @@ import {
   queue,
   isQueueLocked,
 } from "../store";
-import { db } from "../db"; // Import DB
+import { db } from "../db";
 import { generateUid } from "../utils";
 
 const POLLER_INTERVAL = 1000;
@@ -26,9 +26,12 @@ let forceHardSync = false;
 let ignoreUpdatesUntil = 0;
 let queueUnlockTimer = null;
 
-function escape(str) {
+function escapePath(str) {
   if (!str) return "";
-  return String(str).replace(/\\/g, "\\\\").replace(/"/g, '\\"');
+  return String(str)
+    .normalize("NFC")
+    .replace(/\\/g, "\\\\")
+    .replace(/"/g, '\\"');
 }
 
 export function startStatusPoller() {
@@ -36,7 +39,6 @@ export function startStatusPoller() {
   isInitialSync = true;
   forceHardSync = false;
   ignoreUpdatesUntil = 0;
-
   isQueueLocked.set(false);
 
   refreshStatus();
@@ -68,9 +70,7 @@ async function refreshStatus() {
     const oldVer = get(queueVersion);
     const locked = get(isQueueLocked);
 
-    if (locked) {
-      return;
-    }
+    if (locked) return;
 
     if (
       (newStatus.playlistLength > 0 && newStatus.playlistVersion !== oldVer) ||
@@ -79,9 +79,7 @@ async function refreshStatus() {
       syncQueue(newStatus.playlistVersion);
     }
   } catch (e) {
-    if (e.message !== "Connection lost") {
-      console.warn("[Player] Sync skip:", e.message);
-    }
+    // Silent fail on connection drops
   }
 }
 
@@ -90,7 +88,6 @@ async function syncQueue(newVersion) {
 
   try {
     const text = await mpdClient.send("playlistinfo");
-
     if (get(isQueueLocked)) return;
 
     const rawTracks = MpdParser.parseTracks(text);
@@ -109,14 +106,14 @@ async function syncQueue(newVersion) {
     }
 
     const tracks = rawTracks.map((t) => {
-      const cached = cachedMap.get(t.file);
+      const lookupKey = (t.file || "").normalize("NFC");
+      const cached = cachedMap.get(lookupKey);
+
       if (cached) {
         return {
           ...t,
-          // Обогащаем данными из DB
           thumbHash: cached.thumbHash,
           qualityBadge: cached.qualityBadge,
-          // Fallbacks если MPD вернул пустое
           title: t.title || cached.title,
           artist: t.artist || cached.artist,
           album: t.album || cached.album,
@@ -250,6 +247,44 @@ function stopTicker() {
   lastTickTime = 0;
 }
 
+async function sendTracksInChunks(tracks, playAfter = false) {
+  if (!tracks || tracks.length === 0) return;
+
+  isQueueLocked.set(true);
+  forceHardSync = true;
+
+  const CHUNK_SIZE = 5;
+
+  try {
+    for (let i = 0; i < tracks.length; i += CHUNK_SIZE) {
+      const chunk = tracks.slice(i, i + CHUNK_SIZE);
+      const commands = ["command_list_begin"];
+
+      chunk.forEach((t) => {
+        commands.push(`add "${escapePath(t.file)}"`);
+      });
+      commands.push("command_list_end");
+
+      await mpdClient.send(commands.join("\n"));
+    }
+
+    if (playAfter) {
+      await mpdClient.send("play 0");
+      showToast(`Playing ${tracks.length} tracks`, "success");
+    } else {
+      showToast(`Added ${tracks.length} tracks`, "success");
+    }
+  } catch (e) {
+    console.error("[Player] Bulk Action Failed:", e);
+    showToast("Error adding tracks", "error");
+  } finally {
+    setTimeout(() => {
+      isQueueLocked.set(false);
+      refreshStatus();
+    }, 1500);
+  }
+}
+
 export const PlayerActions = {
   async togglePlay() {
     const s = get(status);
@@ -309,8 +344,7 @@ export const PlayerActions = {
 
   async playUri(uri, meta = {}) {
     isQueueLocked.set(true);
-
-    const safeUri = escape(uri);
+    const safeUri = escapePath(uri);
     forceHardSync = true;
 
     status.update((s) => ({ ...s, state: "play", elapsed: 0 }));
@@ -338,9 +372,8 @@ export const PlayerActions = {
   },
 
   async addToQueue(uri) {
-    const safeUri = escape(uri);
     try {
-      await mpdClient.send(`add "${safeUri}"`);
+      await mpdClient.send(`add "${escapePath(uri)}"`);
       showToast("Added to queue", "success");
     } catch (e) {
       console.error("Add queue error", e);
@@ -350,8 +383,7 @@ export const PlayerActions = {
 
   async playNext(uri) {
     isQueueLocked.set(true);
-
-    const safeUri = escape(uri);
+    const safeUri = escapePath(uri);
     try {
       const songData = await mpdClient.send("currentsong");
       const currentPos = parseInt(MpdParser.parseKeyValue(songData).pos || -1);
@@ -418,51 +450,21 @@ export const PlayerActions = {
       refreshStatus();
     }, 2000);
   },
+
   async playAllTracks(tracks) {
     if (!tracks || tracks.length === 0) return;
-
-    isQueueLocked.set(true);
-    forceHardSync = true;
-
     try {
       await mpdClient.send("stop");
       await mpdClient.send("clear");
-      for (const track of tracks) {
-        const safeUri = escape(track.file);
-        await mpdClient.send(`add "${safeUri}"`);
-      }
-      await mpdClient.send("play 0");
-      showToast(`Playing ${tracks.length} tracks`, "success");
+      await sendTracksInChunks(tracks, true);
     } catch (e) {
-      console.error("Play All error", e);
-      showToast("Failed to play all tracks", "error");
+      console.error(e);
     }
-
-    setTimeout(() => {
-      isQueueLocked.set(false);
-      refreshStatus();
-    }, 1500);
   },
 
   async addAllToQueue(tracks) {
     if (!tracks || tracks.length === 0) return;
-    isQueueLocked.set(true);
-
-    try {
-      for (const track of tracks) {
-        const safeUri = escape(track.file);
-        await mpdClient.send(`add "${safeUri}"`);
-      }
-      showToast(`Added ${tracks.length} tracks to queue`, "success");
-    } catch (e) {
-      console.error("Add All error", e);
-      showToast("Failed to add tracks", "error");
-    }
-
-    setTimeout(() => {
-      isQueueLocked.set(false);
-      refreshStatus();
-    }, 1000);
+    await sendTracksInChunks(tracks, false);
   },
 
   async saveQueue(name) {

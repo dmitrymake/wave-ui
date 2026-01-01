@@ -8,6 +8,7 @@ class MpdClient {
     this.isProcessing = false;
     this.reconnectTimer = null;
     this.watchdogTimer = null;
+    this._buffer = "";
   }
 
   get isConnected() {
@@ -24,21 +25,21 @@ class MpdClient {
     }
 
     if (this.reconnectTimer) clearTimeout(this.reconnectTimer);
+
     let host = CONFIG.MOODE_IP || window.location.hostname;
     host = host
       .replace(/^https?:\/\//, "")
       .split(":")[0]
       .split("/")[0];
-
     const port = CONFIG.WS_PORT || "8080";
-
     const wsUrl = `ws://${host}:${port}`;
-    console.log("[MPD] Attempting connection to:", wsUrl);
+
+    console.log("[MPD] Connecting to:", wsUrl);
 
     try {
       this.socket = new WebSocket(wsUrl, ["binary"]);
     } catch (e) {
-      console.error("[MPD] WebSocket URL is still invalid:", wsUrl, e);
+      console.error("[MPD] Connection Error:", e);
       this.reconnectTimer = setTimeout(() => this.connect(), 5000);
       return;
     }
@@ -73,13 +74,11 @@ class MpdClient {
 
   _cleanup() {
     this.isProcessing = false;
+    this._buffer = "";
     if (this.watchdogTimer) clearTimeout(this.watchdogTimer);
 
-    // Reject all pending commands IMMEDIATELY
-    // Это убивает и ту команду, которая сейчас "в полете", и те, что ждут очереди
     while (this.queue.length > 0) {
-      const { reject, cmd } = this.queue.shift();
-      console.warn(`[MPD] Dropping cmd due to disconnect: ${cmd}`);
+      const { reject } = this.queue.shift();
       reject(new Error("Connection lost"));
     }
   }
@@ -91,19 +90,18 @@ class MpdClient {
     this.isProcessing = true;
     const { cmd } = this.queue[0];
 
-    // Watchdog: If no response in 5s, reset connection
+    // Таймаут 20с для больших запросов (например, playlistinfo)
     if (this.watchdogTimer) clearTimeout(this.watchdogTimer);
     this.watchdogTimer = setTimeout(() => {
-      console.error("[MPD] Watchdog timeout for cmd:", cmd);
-      if (this.socket) this.socket.close(); // This triggers onclose -> cleanup
-    }, 5000);
+      console.error("[MPD] Watchdog timeout");
+      if (this.socket) this.socket.close();
+    }, 20000);
 
     try {
       const payload = cmd.endsWith("\n") ? cmd : cmd + "\n";
       this.socket.send(new TextEncoder().encode(payload));
     } catch (e) {
       console.error("[MPD] Send error", e);
-      // Force cleanup immediately if send fails
       this._cleanup();
     }
   }
@@ -119,43 +117,41 @@ class MpdClient {
       this.watchdogTimer = null;
     }
 
-    const currentRequest = this.queue[0];
-    // Check success or ACK error
-    const isSuccess = text === "OK\n" || text.endsWith("\nOK\n");
-    const isError = text.startsWith("ACK");
+    // Всегда добавляем в буфер
+    this._buffer += text;
+
+    const isSuccess =
+      this._buffer.endsWith("\nOK\n") || this._buffer === "OK\n";
+    const isError = this._buffer.startsWith("ACK");
 
     if (isSuccess || isError) {
-      this.queue.shift(); // Remove active command
+      const fullResponse = this._buffer;
+      this._buffer = ""; // Очистка буфера
+
+      const currentRequest = this.queue.shift();
       this.isProcessing = false;
 
       if (currentRequest) {
         if (isError) {
-          console.error(
-            `[MPD] CMD: ${currentRequest.cmd} -> ERROR: ${text.trim()}`,
-          );
-          currentRequest.reject(new Error(text.trim()));
+          console.error(`[MPD] Error: ${fullResponse.trim()}`);
+          currentRequest.reject(new Error(fullResponse.trim()));
         } else {
-          const cleanResult = text.replace(/\nOK\n$/, "").replace(/^OK\n$/, "");
+          const cleanResult = fullResponse
+            .replace(/\nOK\n$/, "")
+            .replace(/^OK\n$/, "");
           currentRequest.resolve(cleanResult);
         }
       }
 
-      // Next!
       this._processQueue();
     } else {
-      // Buffer logic for partial frames (simplified)
-      if (!this._buffer) this._buffer = "";
-      this._buffer += text;
+      // Если ответ не завершен, перезапускаем таймер, чтобы не разорвать соединение
+      if (!this.queue.length) return;
 
-      if (
-        this._buffer.endsWith("\nOK\n") ||
-        this._buffer === "OK\n" ||
-        this._buffer.startsWith("ACK")
-      ) {
-        const fullMsg = new MessageEvent("message", { data: this._buffer });
-        this._buffer = "";
-        this._handleMessage(fullMsg);
-      }
+      this.watchdogTimer = setTimeout(() => {
+        console.error("[MPD] Watchdog timeout receiving large data");
+        if (this.socket) this.socket.close();
+      }, 20000);
     }
   }
 }

@@ -68,14 +68,22 @@ export const db = {
       const resultMap = new Map();
 
       let loaded = 0;
-      files.forEach((file) => {
-        const req = store.get(file);
+
+      files.forEach((rawFile) => {
+        // Приводим ключ к нормализованной форме для поиска
+        const searchKey = rawFile.normalize("NFC");
+        const req = store.get(searchKey);
+
         req.onsuccess = (e) => {
           const res = e.target.result;
-          if (res) resultMap.set(file, res);
+          if (res) {
+            // Возвращаем результат по оригинальному ключу, который запрашивали
+            resultMap.set(rawFile, res);
+          }
           loaded++;
           if (loaded === files.length) resolve(resultMap);
         };
+
         req.onerror = () => {
           loaded++;
           if (loaded === files.length) resolve(resultMap);

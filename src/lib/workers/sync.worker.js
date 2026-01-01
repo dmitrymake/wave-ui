@@ -80,18 +80,21 @@ async function startSync() {
     });
 
     const tracks = rawData.map((item) => {
+      // Нормализуем путь сразу при получении от сервера
+      const normalizedFile = (item.file || "").normalize("NFC");
+
       let thumbHash = null;
-      if (item.file) {
+      if (normalizedFile) {
         try {
-          const lastSlashIndex = item.file.lastIndexOf("/");
+          const lastSlashIndex = normalizedFile.lastIndexOf("/");
           const dirPath =
             lastSlashIndex === -1
               ? "."
-              : item.file.substring(0, lastSlashIndex);
+              : normalizedFile.substring(0, lastSlashIndex);
 
           thumbHash = md5(dirPath);
         } catch (err) {
-          console.warn("Failed to generate thumb hash for", item.file);
+          // ignore error
         }
       }
 
@@ -111,8 +114,8 @@ async function startSync() {
       }
 
       return {
-        file: item.file,
-        title: decodeEntities(item.title || item.file.split("/").pop()),
+        file: normalizedFile,
+        title: decodeEntities(item.title || normalizedFile.split("/").pop()),
         artist: decodeEntities(rawArtist || "Unknown Artist"),
         album: decodeEntities(item.album || "Unknown Album"),
         genre: decodeEntities(rawGenre || "Unknown"),
