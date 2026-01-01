@@ -10,12 +10,12 @@ export const db = {
         const transaction = e.target.transaction;
         let store;
 
-        if (!database.objectStoreNames.contains(DATABASE.STORE_NAME)) {
+        if (database.objectStoreNames.contains(DATABASE.STORE_NAME)) {
+          store = transaction.objectStore(DATABASE.STORE_NAME);
+        } else {
           store = database.createObjectStore(DATABASE.STORE_NAME, {
             keyPath: "file",
           });
-        } else {
-          store = transaction.objectStore(DATABASE.STORE_NAME);
         }
 
         if (!store.indexNames.contains("artist")) {
@@ -61,29 +61,19 @@ export const db = {
   async getFilesMap(files) {
     if (!files || files.length === 0) return new Map();
     const database = await this.open();
-
     return new Promise((resolve) => {
       const tx = database.transaction(DATABASE.STORE_NAME, "readonly");
       const store = tx.objectStore(DATABASE.STORE_NAME);
       const resultMap = new Map();
-
       let loaded = 0;
-
       files.forEach((rawFile) => {
-        // Приводим ключ к нормализованной форме для поиска
-        const searchKey = rawFile.normalize("NFC");
+        const searchKey = rawFile.normalize("NFC").trim();
         const req = store.get(searchKey);
-
         req.onsuccess = (e) => {
-          const res = e.target.result;
-          if (res) {
-            // Возвращаем результат по оригинальному ключу, который запрашивали
-            resultMap.set(rawFile, res);
-          }
+          if (e.target.result) resultMap.set(rawFile, e.target.result);
           loaded++;
           if (loaded === files.length) resolve(resultMap);
         };
-
         req.onerror = () => {
           loaded++;
           if (loaded === files.length) resolve(resultMap);
@@ -99,7 +89,6 @@ export const db = {
       const store = tx.objectStore(DATABASE.STORE_NAME);
       const uniqueMap = new Map();
       const request = store.openCursor();
-
       request.onsuccess = (event) => {
         const cursor = event.target.result;
         if (cursor) {
@@ -131,7 +120,6 @@ export const db = {
       const index = tx.objectStore(DATABASE.STORE_NAME).index("album");
       const albums = [];
       const request = index.openCursor(null, "nextunique");
-
       request.onsuccess = (event) => {
         const cursor = event.target.result;
         if (cursor) {
@@ -156,27 +144,23 @@ export const db = {
   async getArtistAlbums(artistName) {
     if (!artistName) return [];
     const database = await this.open();
+    const safeArtist = artistName.normalize("NFC").trim();
     return new Promise((resolve, reject) => {
       const tx = database.transaction(DATABASE.STORE_NAME, "readonly");
       const store = tx.objectStore(DATABASE.STORE_NAME);
-
       const p1 = new Promise((res) => {
         if (store.indexNames.contains("album_artist")) {
           store
             .index("album_artist")
-            .getAll(IDBKeyRange.only(artistName)).onsuccess = (e) =>
+            .getAll(IDBKeyRange.only(safeArtist)).onsuccess = (e) =>
             res(e.target.result);
-        } else {
-          res([]);
-        }
+        } else res([]);
       });
-
       const p2 = new Promise((res) => {
-        store.index("artist").getAll(IDBKeyRange.only(artistName)).onsuccess = (
+        store.index("artist").getAll(IDBKeyRange.only(safeArtist)).onsuccess = (
           e,
         ) => res(e.target.result);
       });
-
       Promise.all([p1, p2])
         .then(([r1, r2]) => {
           const allTracks = [...r1, ...r2];
@@ -201,16 +185,56 @@ export const db = {
     });
   },
 
-  async getAlbumTracks(albumName) {
+  // === КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ ===
+  async getAlbumTracks(albumName, artistFilter = null) {
     const database = await this.open();
+    // Нормализуем входные данные
+    const safeAlbum = albumName.normalize("NFC").trim();
+    const safeArtist = artistFilter
+      ? artistFilter.normalize("NFC").trim()
+      : null;
+
+    console.log(
+      `[DB] getAlbumTracks called. Album: "${safeAlbum}", FilterArtist: "${safeArtist}"`,
+    );
+
     return new Promise((resolve, reject) => {
       const tx = database.transaction(DATABASE.STORE_NAME, "readonly");
       const index = tx.objectStore(DATABASE.STORE_NAME).index("album");
-      const range = IDBKeyRange.only(albumName);
+
+      // 1. Получаем ВСЕ треки с таким названием альбома (например, "Film Music")
+      const range = IDBKeyRange.only(safeAlbum);
       const request = index.getAll(range);
 
       request.onsuccess = () => {
-        const tracks = request.result;
+        let tracks = request.result;
+        console.log(
+          `[DB] Found ${tracks.length} raw tracks for album "${safeAlbum}"`,
+        );
+
+        // 2. Если указан фильтр по артисту, оставляем только его треки
+        if (safeArtist) {
+          const beforeCount = tracks.length;
+          tracks = tracks.filter((t) => {
+            const tArtist = (t.artist || "").normalize("NFC").trim();
+            const tAlbumArtist = (t.album_artist || "").normalize("NFC").trim();
+
+            const match = tArtist === safeArtist || tAlbumArtist === safeArtist;
+
+            // Логируем, если трек отброшен (поможет понять, почему удалился или остался)
+            if (!match) {
+              // console.warn(`[DB] Filtering out: "${t.title}" by "${tArtist}" (wanted "${safeArtist}")`);
+            }
+            return match;
+          });
+          console.log(
+            `[DB] After artist filter: ${tracks.length} tracks (Removed ${beforeCount - tracks.length})`,
+          );
+        } else {
+          console.log("[DB] No artist filter provided. Returning all tracks.");
+        }
+
+        // 3. Сортировка
         tracks.sort((a, b) => {
           const discA = parseInt(a.disc || 1);
           const discB = parseInt(b.disc || 1);
@@ -247,10 +271,11 @@ export const db = {
 
   async getGenreTracks(genre) {
     const database = await this.open();
+    const safeGenre = genre.normalize("NFC").trim();
     return new Promise((resolve, reject) => {
       const tx = database.transaction(DATABASE.STORE_NAME, "readonly");
       const index = tx.objectStore(DATABASE.STORE_NAME).index("genre");
-      const request = index.getAll(IDBKeyRange.only(genre));
+      const request = index.getAll(IDBKeyRange.only(safeGenre));
       request.onsuccess = () => resolve(request.result);
       request.onerror = () => reject(request.error);
     });
@@ -258,7 +283,7 @@ export const db = {
 
   async search(query) {
     if (!query) return [];
-    const q = query.toLowerCase();
+    const q = query.toLowerCase().normalize("NFC").trim();
     const database = await this.open();
     return new Promise((resolve, reject) => {
       const tx = database.transaction(DATABASE.STORE_NAME, "readonly");

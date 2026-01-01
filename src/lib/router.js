@@ -13,38 +13,39 @@ export const Router = {
   },
 
   handleHashChange() {
-    // "#/album/Name" -> "album/Name"
     let raw = window.location.hash.slice(1);
     while (raw.startsWith("/")) {
       raw = raw.slice(1);
     }
 
     if (!raw) {
-      // Пустой URL -> идем в Artists по умолчанию
       if (get(navigationStack).length > 1 || get(activeMenuTab) === "search") {
         this.setRootTab("artists");
-        // Обновляем URL, чтобы он не был пустым
         window.location.hash = "/artists";
       }
       return;
     }
 
-    let route, paramRaw;
-    const firstSlashIndex = raw.indexOf("/");
-    if (firstSlashIndex === -1) {
-      route = raw;
-      paramRaw = null;
-    } else {
-      route = raw.slice(0, firstSlashIndex);
-      paramRaw = raw.slice(firstSlashIndex + 1);
+    const parts = raw.split("/").map(decodeURIComponent);
+    const route = parts[0];
+
+    let data = consumeRouteData();
+
+    if (!data) {
+      if (parts.length > 1) {
+        if (route === "album" && parts.length >= 3) {
+          // ФОРМАТ: #/album/Artist Name/Album Name
+          data = { artist: parts[1], name: parts[2] };
+        } else if (route === "artist" && parts.length >= 2) {
+          data = { name: parts[1] };
+        } else {
+          // Старый формат (fallback)
+          data = { name: parts[1], displayName: parts[1] };
+        }
+      }
     }
 
-    const param = paramRaw ? decodeURIComponent(paramRaw) : null;
-    const richData = consumeRouteData();
-    const data =
-      richData || (param ? { name: param, displayName: param } : null);
-
-    console.log(`[Router] Match: ${route}, Param: ${param}`);
+    console.log(`[Router] Navigating: ${route}`, data);
 
     switch (route) {
       case "queue":
@@ -60,13 +61,9 @@ export const Router = {
         activeMenuTab.set("favorites");
         navigationStack.set([
           { view: "root" },
-          {
-            view: "details",
-            data: { name: "Favorites", displayName: "Favorites" },
-          },
+          { view: "details", data: { name: "Favorites" } },
         ]);
         break;
-      // ======================================
 
       case "artists":
         this.setRootTab("artists");
@@ -76,13 +73,12 @@ export const Router = {
         break;
       case "search":
         activeMenuTab.set("search");
-        if (param) searchQuery.set(param);
+        if (parts[1]) searchQuery.set(parts[1]);
         navigationStack.set([{ view: "root" }]);
         break;
 
       case "album":
         activeMenuTab.set("albums");
-
         navigationStack.set([
           { view: "root" },
           { view: "tracks_by_album", data: data },
@@ -106,21 +102,16 @@ export const Router = {
         break;
 
       default:
-        console.warn(`[Router] Unknown route: ${route}`);
-        // Fallback
         this.setRootTab("artists");
         break;
     }
   },
 
-  // Хелпер для переключения табов
   setRootTab(tab) {
     activeMenuTab.set(tab);
-    // Всегда сбрасываем стек в корень при переключении таба
     navigationStack.set([{ view: "root" }]);
   },
 
-  // Формирование URL из действий в приложении
   updateUrl(view, data) {
     let newPath = "";
 
@@ -130,28 +121,31 @@ export const Router = {
         const q = get(searchQuery);
         newPath = q ? `search/${encodeURIComponent(q)}` : "search";
       } else {
-        newPath = tab; // artists, albums, radio, queue...
+        newPath = tab;
       }
     } else if (view === "details") {
       const name = data.name || data;
-      // Если мы открываем Favorites, ставим красивый URL, иначе стандартный playlist/Name
-      if (name === "Favorites") {
-        newPath = "favorites";
-      } else {
-        newPath = `playlist/${encodeURIComponent(name)}`;
-      }
+      newPath =
+        name === "Favorites"
+          ? "favorites"
+          : `playlist/${encodeURIComponent(name)}`;
     } else if (view === "albums_by_artist") {
       const name = data.name || data;
       newPath = `artist/${encodeURIComponent(name)}`;
     } else if (view === "tracks_by_album") {
       const name = data.name || data;
-      newPath = `album/${encodeURIComponent(name)}`;
+      const artist = data.artist;
+
+      if (artist) {
+        newPath = `album/${encodeURIComponent(artist)}/${encodeURIComponent(name)}`;
+      } else {
+        newPath = `album/${encodeURIComponent(name)}`;
+      }
     } else if (view === "queue") {
       newPath = "queue";
     }
 
     if (newPath) {
-      // Меняем хэш. Это триггерит handleHashChange.
       const nextHash = `#/${newPath}`;
       if (
         decodeURIComponent(window.location.hash) !==

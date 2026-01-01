@@ -3,16 +3,13 @@ import { CONFIG } from "../config";
 export const DATABASE = {
   NAME: "MoodePlayerDB",
   STORE_NAME: "music",
-  VERSION: 2,
+  VERSION: 3,
 };
 
 export const API_ENDPOINTS = {
   SYNC: `/wave-api.php`,
-
   STATIONS: (isDev) => `/wave-api.php?action=stations`,
-
   COVER_ART: (file) => `/coverart.php?u=${encodeURIComponent(file)}`,
-
   RADIO_LOGOS: (filename) => `/imagesw/radio-logos/thumbs/${filename}`,
 };
 

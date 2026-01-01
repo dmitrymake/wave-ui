@@ -1,6 +1,5 @@
 <script>
   import { writable } from "svelte/store";
-  import { fade, scale } from "svelte/transition";
   import { db } from "../../lib/db";
   import {
     navigationStack,
@@ -41,7 +40,9 @@
   let trackCount = 0;
   let albumYear = "";
 
-  // Icon computation
+  // === ЗАЩИТА ОТ ГОНКИ ЗАПРОСОВ ===
+  let lastRequestId = 0;
+
   $: currentSortIcon =
     sortOption === "year_desc" ? ICONS.SORT_ASC : ICONS.SORT_DESC;
 
@@ -65,6 +66,7 @@
     else sortOption = "name";
   }
 
+  // Реактивная загрузка контента
   $: loadContent(activeCategory, currentView);
 
   $: if (currentView) {
@@ -137,15 +139,24 @@
   async function loadContent(category, viewState) {
     if (!viewState) return;
 
+    // 1. Создаем уникальный ID для этого запуска
+    const requestId = ++lastRequestId;
+
+    // 2. Сразу показываем загрузку и чистим старое, чтобы не было "мелькания"
     isLoading = true;
+    itemsStore.set([]); // Очистка перед новым запросом
+
     headerItem = viewState.data;
     albumTotalDuration = "";
     albumQuality = "";
     albumYear = "";
     trackCount = 0;
 
+    console.log(`[LibraryView #${requestId}] Start loading:`, viewState);
+
     try {
       let data = [];
+
       if (viewState.view === "root") {
         data =
           category === "artists" ? await db.getArtists() : await db.getAlbums();
@@ -155,7 +166,18 @@
         sortOption = "year";
       } else if (viewState.view === "tracks_by_album") {
         const albumName = viewState.data.name || viewState.data;
-        data = await db.getAlbumTracks(albumName);
+        const artistName = viewState.data.artist;
+
+        // Получаем треки с фильтрацией
+        data = await db.getAlbumTracks(albumName, artistName);
+      }
+
+      // === ПРОВЕРКА НА АКТУАЛЬНОСТЬ ===
+      // Если пока мы ждали базу, пользователь кликнул куда-то еще,
+      // requestId изменится (станет больше), и мы выходим.
+      if (requestId !== lastRequestId) {
+        console.warn(`[LibraryView #${requestId}] Request cancelled (stale).`);
+        return;
       }
 
       const enriched = data.map((item, idx) => {
@@ -174,6 +196,9 @@
         };
       });
 
+      console.log(
+        `[LibraryView #${requestId}] Setting ${enriched.length} items.`,
+      );
       itemsStore.set(enriched);
 
       if (viewState.view === "tracks_by_album" && enriched.length > 0) {
@@ -185,8 +210,7 @@
         if (totalSec > 0) {
           const h = Math.floor(totalSec / 3600);
           const m = Math.floor((totalSec % 3600) / 60);
-          if (h > 0) albumTotalDuration = `${h} hr ${m} min`;
-          else albumTotalDuration = `${m} min`;
+          albumTotalDuration = h > 0 ? `${h} hr ${m} min` : `${m} min`;
         }
 
         if (enriched[0].qualityBadge) {
@@ -194,10 +218,14 @@
         }
       }
     } catch (e) {
-      console.error(e);
-      itemsStore.set([]);
+      if (requestId === lastRequestId) {
+        console.error(e);
+        itemsStore.set([]);
+      }
     } finally {
-      isLoading = false;
+      if (requestId === lastRequestId) {
+        isLoading = false;
+      }
     }
   }
 
@@ -520,6 +548,7 @@
     color: rgba(255, 255, 255, 0.7);
     margin: 0;
     overflow: hidden;
+    text-overflow: ellipsis;
   }
 
   .year-badge-header {
