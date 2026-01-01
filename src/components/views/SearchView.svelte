@@ -37,6 +37,13 @@
     }, 300);
   }
 
+  function clearInput() {
+    searchQuery.set("");
+    tracksStore.set([]);
+    foundAlbums = [];
+    hasSearched = false;
+  }
+
   async function performSearch(q) {
     const term = q.trim().toLowerCase();
 
@@ -72,7 +79,6 @@
             track.artist && track.artist.toLowerCase().includes(term);
 
           if (matchAlbum || matchArtist) {
-            // Логика обрезки года до 4 символов
             let yStr = String(track.year || "");
             if (yStr.length > 4) yStr = yStr.substring(0, 4);
 
@@ -99,14 +105,12 @@
   }
 
   function goToAlbum(album) {
-    navigateTo("tracks_by_album", album);
+    // Передаем также имя артиста для корректной фильтрации
+    navigateTo("tracks_by_album", { name: album.name, artist: album.artist });
   }
 
-  // Функция для прокрутки горизонтального списка колесиком мыши
   function handleHorizontalScroll(e) {
     if (e.deltaY !== 0) {
-      // Блокируем вертикальный скролл страницы, если нужно (опционально)
-      // e.preventDefault();
       e.currentTarget.scrollLeft += e.deltaY;
     }
   }
@@ -114,18 +118,27 @@
 
 <div class="view-container">
   <div class="content-padded no-bottom-pad">
-    <div class="search-input-container">
-      <span class="search-icon">{@html ICONS.SEARCH}</span>
-      <input
-        type="text"
-        placeholder="Artists, songs, or albums"
-        value={$searchQuery}
-        on:input={handleInput}
-        autoFocus
-      />
-      {#if isSearching}
-        <div class="spinner"></div>
-      {/if}
+    <div class="search-header-row">
+      <div class="search-input-container expanded">
+        <span class="search-icon">{@html ICONS.SEARCH}</span>
+        <input
+          type="text"
+          placeholder="Artists, songs, or albums"
+          value={$searchQuery}
+          on:input={handleInput}
+          autoFocus
+        />
+
+        {#if $searchQuery.length > 0}
+          <button class="clear-icon-btn" on:click={clearInput}>
+            {@html ICONS.CLOSE}
+          </button>
+        {/if}
+
+        {#if isSearching}
+          <div class="spinner"></div>
+        {/if}
+      </div>
     </div>
   </div>
 
@@ -211,6 +224,36 @@
     padding-bottom: 0;
   }
 
+  .search-header-row {
+    display: flex;
+    width: 100%;
+    margin-bottom: 24px;
+  }
+
+  .search-input-container.expanded {
+    flex: 1;
+    width: 100%;
+    margin-bottom: 0;
+  }
+
+  .clear-icon-btn {
+    background: transparent;
+    border: none;
+    color: var(--c-text-muted);
+    width: 24px;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    padding: 0;
+    margin-right: 4px;
+  }
+  .clear-icon-btn :global(svg) {
+    width: 16px;
+    height: 16px;
+  }
+
   .section-spacing {
     margin-top: 10px;
   }
@@ -266,10 +309,8 @@
     display: flex;
     flex-wrap: nowrap;
     overflow-x: auto;
-
     scrollbar-width: none;
     -ms-overflow-style: none;
-
     scroll-snap-type: x mandatory;
     -webkit-overflow-scrolling: touch;
   }
@@ -284,13 +325,6 @@
     scroll-snap-align: start;
     margin: 0;
   }
-
-  @media (max-width: 768px) {
-    .music-grid.horizontal .music-card {
-    }
-  }
-
-  /* --- Стили для бейджей (год, качество) --- */
 
   .card-sub-row {
     display: flex;
