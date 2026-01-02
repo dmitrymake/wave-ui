@@ -98,7 +98,7 @@
 }
 
 .card-title {
-  font-weight: 700;
+  font-weight: 600;
   font-size: 15px;
   color: var(--c-text-primary);
   white-space: nowrap;
@@ -242,7 +242,7 @@
 
 .header-label {
   font-size: 12px;
-  font-weight: 700;
+  font-weight: 600;
   text-transform: uppercase;
   color: var(--c-accent);
   margin-bottom: 6px;
@@ -330,7 +330,7 @@
   border: none;
   padding: 12px 32px;
   border-radius: 30px;
-  font-weight: 700;
+  font-weight: 600;
   font-size: 15px;
   cursor: pointer;
   transition: transform 0.1s;
@@ -353,7 +353,7 @@
   border: 1px solid var(--c-border-bright);
   padding: 12px 24px;
   border-radius: 30px;
-  font-weight: 700;
+  font-weight: 600;
   font-size: 15px;
   cursor: pointer;
   transition: all 0.2s;
@@ -402,8 +402,8 @@
 }
 
 .btn-action :global(svg) {
-  width: 22px;
-  height: 22px;
+  width: 20px;
+  height: 20px;
 }
 
 /* =========================================
@@ -486,8 +486,4 @@
 
 .row-wrapper.ghost-placeholder {
   opacity: 0;
-}
-
-.list-body {
-  margin-bottom: 150px;
 }

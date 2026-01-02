@@ -25,6 +25,8 @@ export const status = writable({
   repeat: false,
   bitrate: 0,
   format: "",
+  song: 0,
+  songid: 0,
 });
 
 export const currentSong = writable({
@@ -33,6 +35,8 @@ export const currentSong = writable({
   album: "",
   file: "",
   stationName: null,
+  id: null, // MPD Queue ID
+  pos: null,
 });
 
 // UI
@@ -48,7 +52,6 @@ export const isSyncingLibrary = writable(false);
 const storedSidebar = localStorage.getItem("sidebarCollapsed") === "true";
 export const isSidebarCollapsed = writable(storedSidebar);
 
-// Подписываемся на изменения, чтобы сохранять в localStorage
 isSidebarCollapsed.subscribe((val) => {
   if (typeof localStorage !== "undefined") {
     localStorage.setItem("sidebarCollapsed", String(val));
@@ -245,13 +248,11 @@ export function getTrackThumbUrl(
 
   if (!track.file) return "/images/default_icon.png";
 
-  // New Logic: Use thumbHash if available
   if (track.thumbHash) {
     const suffix = size === "md" ? "" : "_sm";
     return `/imagesw/thmcache/${track.thumbHash}${suffix}.jpg`;
   }
 
-  // Fallback for legacy DB or uncached items
   try {
     const lastSlashIndex = track.file.lastIndexOf("/");
     const dirPath =

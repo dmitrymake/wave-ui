@@ -8,7 +8,6 @@
     currentSong,
     status,
     activeMenuTab,
-    navigateTo,
     favorites,
     stations,
     getTrackThumbUrl,
@@ -29,26 +28,67 @@
   $: if (track) imgError = false;
 
   $: isLiked = $favorites.has(track.file);
-  $: isCurrent = track.file === $currentSong.file;
-  $: isPlaying = $status.state === "play";
+
+  // --- LOGIC ---
+
+  // 1. Context
+  $: currentView = $navigationStack[$navigationStack.length - 1];
+  $: isQueueContext =
+    currentView?.view === "queue" ||
+    (currentView?.view === "root" && $activeMenuTab === "queue");
+
+  // 2. MPD State
+  $: playingIndex = $status.song; // Теперь должно приходить корректно после правки parser.js
+  $: playingFile = $currentSong.file;
+  $: isPlayingState = $status.state === "play";
+
+  // 3. Active (Solid) - Strict Index Match in Queue
+  $: isExactActive = isQueueContext && Number(index) === Number(playingIndex);
+
+  // 4. Duplicate (Stripes)
+  $: isDuplicate =
+    isPlayingState && track.file === playingFile && !isExactActive;
+
+  // --- DEBUGGING LOGS (Откройте F12) ---
+  $: if (isPlayingState && track.file === playingFile) {
+    console.groupCollapsed(`TrackRow Debug: ${track.title || track.file}`);
+    console.log("Are we in Queue?", isQueueContext);
+    console.log(`My Index: ${index} (${typeof index})`);
+    console.log(
+      `MPD Index ($status.song): ${playingIndex} (${typeof playingIndex})`,
+    );
+    console.log(
+      "Check (MyIndex === MPDIndex):",
+      Number(index) === Number(playingIndex),
+    );
+    console.log(
+      "RESULT -> ExactActive:",
+      isExactActive,
+      "Duplicate:",
+      isDuplicate,
+    );
+    console.groupEnd();
+  }
+  // -------------------------------------
 
   $: isRadio =
     track.file &&
     (track.file.startsWith("http") || track.file.includes("RADIO"));
 
-  $: showPause = isCurrent && isPlaying && isHovering;
+  $: showPause = isExactActive && isPlayingState && isHovering;
   $: showPlay =
-    (isCurrent && !isPlaying && isHovering) || (!isCurrent && isHovering);
-  $: showEq = isCurrent && isPlaying && !isHovering;
-  $: showStatic = isCurrent && !isPlaying && !isHovering;
+    (isExactActive && !isPlayingState && isHovering) ||
+    (!isExactActive && isHovering);
+  $: showEq = isExactActive && isPlayingState && !isHovering;
+  $: showStatic = isExactActive && !isPlayingState && !isHovering;
 
   $: title = track.title || track.file?.split("/").pop();
   $: artist = track.artist || "Unknown";
   $: duration = formatDuration(track.time);
 
-  $: quality = track.qualityBadge ? track.qualityBadge.split(" ")[0] : null; // оставляем только первое слово
+  $: quality = track.qualityBadge ? track.qualityBadge.split(" ")[0] : null;
 
-  $: effectiveStationName = isCurrent ? $currentSong.stationName : null;
+  $: effectiveStationName = isExactActive ? $currentSong.stationName : null;
 
   $: imgUrl = imgError
     ? getTrackCoverUrl(track, $stations, effectiveStationName)
@@ -65,26 +105,17 @@
 
   function handleAction(e) {
     e.stopPropagation();
-    if (isCurrent) MPD.togglePlay();
+    if (isExactActive) MPD.togglePlay();
     else dispatch("play");
   }
 
   function getContextData() {
-    const stack = $navigationStack;
-    const currentView = stack[stack.length - 1];
-    const tab = $activeMenuTab;
-
     if (currentView?.view === "details" && currentView.data?.name) {
       return { type: "playlist", playlistName: currentView.data.name, index };
     }
-
-    if (
-      currentView?.view === "queue" ||
-      (currentView?.view === "root" && tab === "queue")
-    ) {
+    if (isQueueContext) {
       return { type: "queue", index };
     }
-
     return { type: "general" };
   }
 
@@ -101,9 +132,10 @@
 
 <div
   class="row"
-  class:active={isCurrent}
+  class:active={isExactActive}
+  class:duplicate={isDuplicate}
   class:editable={isEditable}
-  on:click={() => !isCurrent && dispatch("play")}
+  on:click={() => !isExactActive && dispatch("play")}
   on:mouseenter={() => (isHovering = true)}
   on:mouseleave={() => (isHovering = false)}
   use:longpress
@@ -221,20 +253,63 @@
     cursor: default;
     user-select: none;
     background: transparent;
+    position: relative;
+    overflow: hidden;
   }
+
   .row:hover {
     background: var(--c-surface-hover);
   }
+
   .row.active {
     background: var(--c-surface-active);
+  }
+
+  .row.duplicate::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    z-index: 0;
+
+    background-image: repeating-linear-gradient(
+      -45deg,
+      transparent,
+      transparent 10px,
+      rgba(255, 255, 255, 0.07) 10px,
+      rgba(255, 255, 255, 0.07) 20px
+    );
+
+    background-size: 28.28px 28.28px;
+    animation: moveStripes 1s linear infinite;
+  }
+
+  @keyframes moveStripes {
+    0% {
+      background-position: 0 0;
+    }
+    100% {
+      /* Должно совпадать с background-size для бесшовности */
+      background-position: 28.28px 0;
+    }
+  }
+
+  /* Поднимаем контент над фоном */
+  .left,
+  .info,
+  .right {
+    position: relative;
+    z-index: 1;
   }
 
   .left {
     display: flex;
     align-items: center;
-    gap: 16px;
+    gap: 12px;
     margin-right: 16px;
+    width: 80-px;
     min-width: 80px;
+    flex-shrink: 0;
   }
 
   .drag-handle {
@@ -261,6 +336,7 @@
     border: none;
     padding: 0;
     cursor: pointer;
+    flex-shrink: 0;
   }
   .num {
     font-size: 14px;

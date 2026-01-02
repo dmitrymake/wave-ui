@@ -90,11 +90,17 @@
 
   function handlePlayAll() {
     pressedPlayAll = true;
+    // Play All по-прежнему заменяет очередь (это логично для кнопки "Играть всё")
     MPD.playPlaylistContext(currentView.data.name, 0);
   }
 
-  function playTrack(index) {
-    if (!isEditMode) MPD.playPlaylistContext(currentView.data.name, index);
+  // ИСПРАВЛЕНО: Теперь используем playTrackOptimistic
+  function playTrack(track) {
+    if (!isEditMode) {
+      // Это вызовет playUri, который сделает addid -> moveid -> playid
+      // не очищая очередь
+      MPD.playTrackOptimistic(track);
+    }
   }
 
   function handleAddToQueue() {
@@ -207,7 +213,7 @@
           track={item}
           {index}
           isEditable={isEditMode}
-          on:play={() => playTrack(index)}
+          on:play={() => playTrack(item)}
           on:remove={() => handleRemoveTrack(index)}
           on:startdrag={startDrag}
         />
@@ -303,7 +309,6 @@
 
   @media (max-width: 768px) {
     .playlists-grid-override {
-      /* На мобильных все равно уменьшаем, чтобы влезало по две */
       grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)) !important;
       gap: 16px !important;
     }

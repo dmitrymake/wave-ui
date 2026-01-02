@@ -35,6 +35,10 @@ export const MpdParser = {
       duration: parseFloat(data.duration) || 0,
       random: data.random === "1",
       repeat: data.repeat === "1",
+
+      // ВОТ ЭТОЙ СТРОКИ НЕ ХВАТАЛО:
+      song: parseInt(data.song) || 0,
+
       songId: parseInt(data.songid) || -1,
       playlistLength: parseInt(data.playlistlength) || 0,
       bitrate: parseInt(data.bitrate) || 0,
@@ -83,7 +87,6 @@ export const MpdParser = {
       const sepIndex = line.indexOf(": ");
 
       if (sepIndex !== -1) {
-        // ВАЖНО: Lowercase key
         const key = line.substring(0, sepIndex).toLowerCase();
         const value = line.substring(sepIndex + 2);
 
@@ -109,8 +112,6 @@ export const MpdParser = {
   },
 
   _normalizeTrack(raw) {
-    // raw ключи уже lowercase, если пришли через parseKeyValue,
-    // но parseTracks заполняет их как есть, поэтому проверяем оба варианта
     const file = raw.file || raw.File || "";
     const title =
       raw.Title ||
@@ -129,6 +130,7 @@ export const MpdParser = {
       time: parseFloat(raw.Time || raw.time || 0),
       track: raw.Track || raw.track || "",
       id: raw.Id || raw.id,
+      pos: raw.Pos || raw.pos || null,
       stationName: raw.name || raw.Name || null,
     };
   },

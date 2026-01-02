@@ -356,10 +356,29 @@ export const PlayerActions = {
     startTicker();
 
     try {
-      await mpdClient.send("stop");
-      await mpdClient.send("clear");
-      await mpdClient.send(`add "${safeUri}"`);
-      await mpdClient.send("play");
+      // 1. Получаем текущую позицию
+      const songData = await mpdClient.send("currentsong");
+      const currentPos = parseInt(MpdParser.parseKeyValue(songData).pos);
+
+      // 2. Добавляем трек и получаем ID
+      const res = await mpdClient.send(`addid "${safeUri}"`);
+      const newId = parseInt(MpdParser.parseKeyValue(res).id);
+
+      if (!isNaN(newId)) {
+        // 3. Вычисляем куда вставить (сразу после текущего)
+        // Если очередь пуста, ставим в начало (0)
+        const targetPos = isNaN(currentPos) ? 0 : currentPos + 1;
+
+        // 4. Перемещаем
+        await mpdClient.send(`moveid ${newId} ${targetPos}`);
+
+        // 5. Запускаем
+        await mpdClient.send(`playid ${newId}`);
+      } else {
+        // Fallback
+        await mpdClient.send(`add "${safeUri}"`);
+        await mpdClient.send("play");
+      }
     } catch (e) {
       console.error("Play error", e);
       showToast("Failed to play", "error");

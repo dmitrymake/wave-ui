@@ -259,7 +259,7 @@ input[type="range"]:hover::-webkit-slider-thumb {
   padding: 12px 32px;
   border-radius: 30px; /* Capsule shape */
   font-size: 14px;
-  font-weight: 700;
+  font-weight: 600;
   cursor: pointer;
   transition: transform var(--trans-fast), opacity var(--trans-fast);
   text-transform: uppercase;
