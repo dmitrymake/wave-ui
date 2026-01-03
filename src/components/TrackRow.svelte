@@ -14,6 +14,7 @@
     getTrackCoverUrl,
     openContextMenu,
     navigationStack,
+    navigateTo,
   } from "../lib/store.js";
   import { longpress } from "../lib/actions";
 
@@ -38,7 +39,7 @@
     (currentView?.view === "root" && $activeMenuTab === "queue");
 
   // 2. MPD State
-  $: playingIndex = $status.song; // Теперь должно приходить корректно после правки parser.js
+  $: playingIndex = $status.song;
   $: playingFile = $currentSong.file;
   $: isPlayingState = $status.state === "play";
 
@@ -48,28 +49,6 @@
   // 4. Duplicate (Stripes)
   $: isDuplicate =
     isPlayingState && track.file === playingFile && !isExactActive;
-
-  // --- DEBUGGING LOGS (Откройте F12) ---
-  $: if (isPlayingState && track.file === playingFile) {
-    console.groupCollapsed(`TrackRow Debug: ${track.title || track.file}`);
-    console.log("Are we in Queue?", isQueueContext);
-    console.log(`My Index: ${index} (${typeof index})`);
-    console.log(
-      `MPD Index ($status.song): ${playingIndex} (${typeof playingIndex})`,
-    );
-    console.log(
-      "Check (MyIndex === MPDIndex):",
-      Number(index) === Number(playingIndex),
-    );
-    console.log(
-      "RESULT -> ExactActive:",
-      isExactActive,
-      "Duplicate:",
-      isDuplicate,
-    );
-    console.groupEnd();
-  }
-  // -------------------------------------
 
   $: isRadio =
     track.file &&
@@ -127,6 +106,16 @@
   function handleLongPress(e) {
     if (isEditable) return;
     openContextMenu(e.detail.originalEvent, track, getContextData());
+  }
+
+  function handleArtistClick(e) {
+    e.stopPropagation();
+    if (!isRadio && track.artist) {
+      // Set active tab to Artists so the menu highlights correctly
+      activeMenuTab.set("artists");
+      // Use navigateTo with an object to ensure compatibility with LibraryView logic
+      navigateTo("albums_by_artist", { name: track.artist });
+    }
   }
 </script>
 
@@ -195,15 +184,11 @@
         <span class="meta-tag quality">{quality}</span>
       {/if}
     </div>
+
     <div
       class="artist text-ellipsis"
       class:link={!isRadio}
-      on:click|stopPropagation={() => {
-        if (!isRadio && track.artist) {
-          activeMenuTab.set("artists");
-          navigateTo("albums_by_artist", track.artist);
-        }
-      }}
+      on:click={handleArtistClick}
     >
       {artist}
     </div>
@@ -272,13 +257,18 @@
     pointer-events: none;
     z-index: 0;
 
+    border-radius: inherit;
+    box-sizing: border-box;
+
     background-image: repeating-linear-gradient(
       -45deg,
       transparent,
       transparent 10px,
-      rgba(255, 255, 255, 0.07) 10px,
-      rgba(255, 255, 255, 0.07) 20px
+      var(--c-surface-active) 10px,
+      var(--c-surface-active) 20px
     );
+
+    opacity: 0.2;
 
     background-size: 28.28px 28.28px;
     animation: moveStripes 1s linear infinite;
@@ -289,12 +279,10 @@
       background-position: 0 0;
     }
     100% {
-      /* Должно совпадать с background-size для бесшовности */
       background-position: 28.28px 0;
     }
   }
 
-  /* Поднимаем контент над фоном */
   .left,
   .info,
   .right {
@@ -307,7 +295,7 @@
     align-items: center;
     gap: 12px;
     margin-right: 16px;
-    width: 80-px;
+    width: 80px;
     min-width: 80px;
     flex-shrink: 0;
   }

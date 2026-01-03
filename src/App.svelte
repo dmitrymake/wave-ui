@@ -2,6 +2,7 @@
   import { onMount } from "svelte";
   import MainScreen from "./components/MainScreen.svelte";
   import ContextMenu from "./components/ContextMenu.svelte";
+  import Modal from "./components/Modal.svelte";
   import * as MPD from "./lib/mpd";
   import { ApiActions } from "./lib/api";
   import { db } from "./lib/db";
@@ -35,3 +36,4 @@
 
 <MainScreen />
 <ContextMenu />
+<Modal />

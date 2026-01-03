@@ -1,5 +1,5 @@
 <script>
-  import { queue } from "../../lib/store";
+  import { queue, showModal, currentSong, status } from "../../lib/store";
   import { PlayerActions } from "../../lib/mpd/player";
   import * as MPD from "../../lib/mpd";
   import { ICONS } from "../../lib/icons";
@@ -46,6 +46,43 @@
     }
   }
 
+  function handleClearQueue() {
+    if ($queue.length === 0) return;
+
+    showModal({
+      title: "Clear Queue",
+      message: "Are you sure you want to clear the entire play queue?",
+      confirmLabel: "Clear All",
+      type: "confirm",
+      onConfirm: async () => {
+        // 1. Optimistic UI update (Instant clear)
+        queue.set([]);
+
+        // 2. Reset Player State locally
+        currentSong.set({
+          title: "Not Playing",
+          artist: "",
+          album: "",
+          file: "",
+          stationName: null,
+          id: null,
+          pos: null,
+        });
+
+        status.update((s) => ({
+          ...s,
+          state: "stop",
+          song: -1,
+          songid: -1,
+          elapsed: 0,
+        }));
+
+        // 3. Send command to server
+        await MPD.runMpdRequest("clear");
+      },
+    });
+  }
+
   function handleMoveTrack(fromIndex, toIndex) {
     PlayerActions.moveTrack(fromIndex, toIndex);
   }
@@ -81,9 +118,19 @@
 
           <div class="header-actions">
             <button
+              class="btn-secondary"
+              on:click={handleClearQueue}
+              title="Clear Queue"
+              disabled={$queue.length === 0}
+            >
+              Clear
+            </button>
+
+            <button
               class="btn-action"
               on:click={handleSaveQueue}
               title="Save Queue"
+              disabled={$queue.length === 0}
             >
               {@html ICONS.SAVE}
             </button>
@@ -93,6 +140,7 @@
               class:active={isEditMode}
               on:click={toggleEditMode}
               title={isEditMode ? "Finish Editing" : "Edit Queue"}
+              disabled={$queue.length === 0}
             >
               {@html isEditMode ? ICONS.ACCEPT : ICONS.EDIT}
             </button>
@@ -116,11 +164,6 @@
 
 <style>
   @import "./MusicViews.css";
-
-  .header-actions {
-    /* т.к. нет больших кнопок */
-    width: revert;
-  }
 
   .header-icon-wrap {
     width: 64px;

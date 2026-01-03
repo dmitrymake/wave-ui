@@ -16,6 +16,49 @@ export function showToast(msg, type = "info") {
   }, 3000);
 }
 
+// --- MODAL STORE ---
+export const modal = writable({
+  isOpen: false,
+  title: "",
+  message: "",
+  confirmLabel: "Confirm",
+  cancelLabel: "Cancel",
+  onConfirm: null,
+  type: "confirm", // 'confirm' | 'alert'
+});
+
+export function showModal({
+  title = "Confirm Action",
+  message = "Are you sure?",
+  confirmLabel = "Confirm",
+  cancelLabel = "Cancel",
+  type = "confirm",
+  onConfirm = () => {},
+}) {
+  modal.set({
+    isOpen: true,
+    title,
+    message,
+    confirmLabel,
+    cancelLabel,
+    type,
+    onConfirm,
+  });
+}
+
+export function closeModal() {
+  modal.set({
+    isOpen: false,
+    title: "",
+    message: "",
+    confirmLabel: "",
+    cancelLabel: "",
+    onConfirm: null,
+    type: "confirm",
+  });
+}
+// -------------------
+
 export const status = writable({
   state: "stop",
   volume: 50,
@@ -35,7 +78,7 @@ export const currentSong = writable({
   album: "",
   file: "",
   stationName: null,
-  id: null, // MPD Queue ID
+  id: null,
   pos: null,
 });
 
@@ -48,7 +91,6 @@ export const activeMenuTab = writable("library");
 export const selectedStationName = writable(null);
 export const isSyncingLibrary = writable(false);
 
-// --- SIDEBAR PERSISTENCE START ---
 const storedSidebar = localStorage.getItem("sidebarCollapsed") === "true";
 export const isSidebarCollapsed = writable(storedSidebar);
 
@@ -57,7 +99,6 @@ isSidebarCollapsed.subscribe((val) => {
     localStorage.setItem("sidebarCollapsed", String(val));
   }
 });
-// --- SIDEBAR PERSISTENCE END ---
 
 // Library
 export const stations = writable([]);
