@@ -336,10 +336,6 @@ input[type="range"]:hover::-webkit-slider-thumb {
     width: 100%;
   }
   
-  .header-actions .btn-action:last-child {
-    margin-left: auto;
-  }
-
   .btn-primary,
   .btn-secondary {
     padding: 8px 16px;

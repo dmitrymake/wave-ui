@@ -52,11 +52,11 @@
     position: fixed;
     inset: 0;
     z-index: var(--z-modal);
-    background: rgba(0, 0, 0, 0.7);
+    background: transparent;
+    backdrop-filter: blur(2px);
     display: flex;
     align-items: center;
     justify-content: center;
-    backdrop-filter: blur(4px);
     padding: 20px;
   }
 
