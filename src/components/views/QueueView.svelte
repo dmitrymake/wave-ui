@@ -39,11 +39,20 @@
   }
 
   async function handleSaveQueue() {
-    const name = prompt("Enter playlist name:");
-    if (name) {
-      await PlayerActions.saveQueue(name);
-      MPD.loadPlaylists();
-    }
+    showModal({
+      title: "Save Playlist",
+      message: "Enter a name for this playlist:",
+      type: "prompt",
+      placeholder: "Playlist Name",
+      confirmLabel: "Save",
+      onConfirm: async (name) => {
+        // name придет из модалки
+        if (name && name.trim().length > 0) {
+          await PlayerActions.saveQueue(name);
+          MPD.loadPlaylists();
+        }
+      },
+    });
   }
 
   function handleClearQueue() {

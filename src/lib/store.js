@@ -24,7 +24,9 @@ export const modal = writable({
   confirmLabel: "Confirm",
   cancelLabel: "Cancel",
   onConfirm: null,
-  type: "confirm", // 'confirm' | 'alert'
+  type: "confirm", // 'confirm' | 'alert' | 'prompt'
+  inputValue: "",
+  placeholder: "",
 });
 
 export function showModal({
@@ -33,6 +35,8 @@ export function showModal({
   confirmLabel = "Confirm",
   cancelLabel = "Cancel",
   type = "confirm",
+  inputValue = "", // Дефолтное значение
+  placeholder = "",
   onConfirm = () => {},
 }) {
   modal.set({
@@ -42,6 +46,8 @@ export function showModal({
     confirmLabel,
     cancelLabel,
     type,
+    inputValue,
+    placeholder,
     onConfirm,
   });
 }
@@ -55,6 +61,8 @@ export function closeModal() {
     cancelLabel: "",
     onConfirm: null,
     type: "confirm",
+    inputValue: "",
+    placeholder: "",
   });
 }
 // -------------------

@@ -7,6 +7,7 @@
     isLoadingTracks,
     navigationStack,
     navigateTo,
+    showModal,
   } from "../../lib/store";
   import Skeleton from "../Skeleton.svelte";
   import * as MPD from "../../lib/mpd";
@@ -89,9 +90,16 @@
   }
 
   function handlePlayAll() {
-    pressedPlayAll = true;
-    // Play All по-прежнему заменяет очередь (это логично для кнопки "Играть всё")
-    MPD.playPlaylistContext(currentView.data.name, 0);
+    showModal({
+      title: "Replace Queue?",
+      message: `This will clear your current queue and play "${currentView.data.name}".`,
+      confirmLabel: "Play",
+      type: "confirm",
+      onConfirm: () => {
+        pressedPlayAll = true;
+        MPD.playPlaylistContext(currentView.data.name, 0);
+      },
+    });
   }
 
   // ИСПРАВЛЕНО: Теперь используем playTrackOptimistic

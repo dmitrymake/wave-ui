@@ -4,13 +4,22 @@
 
   function handleConfirm() {
     if ($modal.onConfirm) {
-      $modal.onConfirm();
+      if ($modal.type === "prompt") {
+        $modal.onConfirm($modal.inputValue);
+      } else {
+        $modal.onConfirm();
+      }
     }
     closeModal();
   }
 
   function handleBackdropClick() {
     closeModal();
+  }
+
+  // Обработка Enter в инпуте
+  function handleKeydown(e) {
+    if (e.key === "Enter") handleConfirm();
   }
 </script>
 
@@ -31,10 +40,23 @@
 
       <div class="modal-body">
         <p class="modal-message">{$modal.message}</p>
+
+        {#if $modal.type === "prompt"}
+          <div class="input-wrapper">
+            <input
+              type="text"
+              class="modal-input"
+              placeholder={$modal.placeholder}
+              bind:value={$modal.inputValue}
+              on:keydown={handleKeydown}
+              autoFocus
+            />
+          </div>
+        {/if}
       </div>
 
       <div class="modal-actions">
-        {#if $modal.type === "confirm"}
+        {#if $modal.type === "confirm" || $modal.type === "prompt"}
           <button class="btn cancel" on:click={closeModal}>
             {$modal.cancelLabel}
           </button>
@@ -52,8 +74,8 @@
     position: fixed;
     inset: 0;
     z-index: var(--z-modal);
-    background: transparent;
-    backdrop-filter: blur(2px);
+    background: rgba(0, 0, 0, 0.5); /* Немного темнее */
+    backdrop-filter: blur(4px);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -61,7 +83,6 @@
   }
 
   .modal-card {
-    /* Match ContextMenu background */
     background: #1e1e1e;
     width: 100%;
     max-width: 320px;
@@ -99,6 +120,27 @@
     font-size: 14px;
     line-height: 1.5;
     color: var(--c-text-primary);
+  }
+
+  /* Стили для инпута */
+  .input-wrapper {
+    margin-top: 16px;
+  }
+
+  .modal-input {
+    width: 100%;
+    background: var(--c-surface-input, #2a2a2a);
+    border: 1px solid var(--c-border);
+    color: var(--c-text-primary);
+    padding: 10px 12px;
+    border-radius: 8px;
+    font-size: 14px;
+    outline: none;
+    box-sizing: border-box;
+  }
+
+  .modal-input:focus {
+    border-color: var(--c-accent);
   }
 
   .modal-actions {

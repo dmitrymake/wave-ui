@@ -7,6 +7,7 @@
     navigateTo,
     getTrackCoverUrl,
     getTrackThumbUrl,
+    showModal,
   } from "../../lib/store";
   import TrackRow from "../TrackRow.svelte";
   import Skeleton from "../Skeleton.svelte";
@@ -240,8 +241,21 @@
   function handlePlayAll() {
     const items = $itemsStore;
     if (items.length > 0) {
-      pressedPlayAll = true;
-      MPD.playAllTracks(items);
+      const targetName =
+        currentView.data.name ||
+        currentView.data.displayName ||
+        "this selection";
+
+      showModal({
+        title: "Replace Queue?",
+        message: `This will clear your queue and play all tracks from "${targetName}".`,
+        confirmLabel: "Play",
+        type: "confirm",
+        onConfirm: () => {
+          pressedPlayAll = true;
+          MPD.playAllTracks(items);
+        },
+      });
     }
   }
 
