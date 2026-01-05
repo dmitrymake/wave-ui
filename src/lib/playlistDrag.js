@@ -163,6 +163,9 @@ export function createPlaylistDrag({ tracksStore, onMoveTrack }) {
   async function commitDrop() {
     stopAutoScroll();
 
+    // 1. Актуализируем индекс назначения
+    calculateHoverIndex();
+
     isDragging.set(false);
     isDropping.set(true);
 
@@ -170,23 +173,43 @@ export function createPlaylistDrag({ tracksStore, onMoveTrack }) {
 
     if (refs.listBodyContainer && finalHoverIndex !== null) {
       const rows = refs.listBodyContainer.querySelectorAll(".row-wrapper");
+      const listRect = refs.listBodyContainer.getBoundingClientRect();
       const targetRow = rows[finalHoverIndex];
+
+      let targetTop = 0;
+      let targetLeft = 0;
+      let shouldAnimate = false;
+
+      // Логика координат (обычная строка, конец списка или пустой список)
       if (targetRow) {
-        const listRect = refs.listBodyContainer.getBoundingClientRect();
-        const targetTopScreen = listRect.top + targetRow.offsetTop;
-        const targetLeftScreen = listRect.left + targetRow.offsetLeft;
+        targetTop = listRect.top + targetRow.offsetTop;
+        targetLeft = listRect.left + targetRow.offsetLeft;
+        shouldAnimate = true;
+      } else if (finalHoverIndex >= rows.length && rows.length > 0) {
+        const lastRow = rows[rows.length - 1];
+        targetTop = listRect.top + lastRow.offsetTop + lastRow.offsetHeight;
+        targetLeft = listRect.left + lastRow.offsetLeft;
+        shouldAnimate = true;
+      } else if (rows.length === 0) {
+        targetTop = listRect.top;
+        targetLeft = listRect.left;
+        shouldAnimate = true;
+      }
+
+      if (shouldAnimate) {
         ghostCoords.update((c) => ({
           ...c,
-          y: targetTopScreen + c.grabOffsetY,
-          x: targetLeftScreen + c.grabOffsetX,
+          y: targetTop + c.grabOffsetY,
+          x: targetLeft + c.grabOffsetX,
         }));
       }
     }
 
-    await new Promise((resolve) => setTimeout(resolve, 200));
+    // Ждем анимацию "доводки" призрака
+    await new Promise((resolve) => setTimeout(resolve, 250));
 
+    // Блокируем CSS переходы для списка
     isReordering.set(true);
-
     await tick();
 
     const currentDragIdx = get(draggingIndex);
@@ -194,6 +217,7 @@ export function createPlaylistDrag({ tracksStore, onMoveTrack }) {
     let validIndex = Math.max(0, Math.min(finalHoverIndex, maxIndex));
     let insertAt = validIndex;
 
+    // --- ОБНОВЛЕНИЕ ДАННЫХ ---
     if (currentDragIdx !== null && currentDragIdx !== validIndex) {
       const tracks = [...get(tracksStore)];
       const [item] = tracks.splice(currentDragIdx, 1);
@@ -206,25 +230,39 @@ export function createPlaylistDrag({ tracksStore, onMoveTrack }) {
       if (onMoveTrack) {
         onMoveTrack(currentDragIdx, insertAt);
       }
+
+      // ВАЖНО: Сразу обновляем index скрываемого элемента на новый!
+      // Это предотвращает появление реального элемента под призраком.
+      draggingIndex.set(insertAt);
     }
 
+    // Даем Svelte время перестроить DOM с новыми данными
+    await tick();
+
+    // --- ПЕРЕКЛЮЧЕНИЕ ВИДИМОСТИ ---
+    // Одновременно убираем призрака и показываем реальный элемент
+    draggedItemData.set(null);
     draggingIndex.set(null);
     hoverIndex.set(null);
-    draggedItemData.set(null);
     isDropping.set(false);
 
+    // Подсветка "только что упавшего"
     const droppedAt = currentDragIdx !== validIndex ? insertAt : currentDragIdx;
     justDroppedIndex.set(droppedAt);
 
     await tick();
 
+    // Возвращаем анимации через двойной кадр
     requestAnimationFrame(() => {
-      isReordering.set(false);
-      setTimeout(() => {
-        justDroppedIndex.set(null);
-      }, 300);
+      requestAnimationFrame(() => {
+        isReordering.set(false);
+        setTimeout(() => {
+          justDroppedIndex.set(null);
+        }, 300);
+      });
     });
   }
+
   function cancelDrag() {
     isDown = false;
     resetDragState();

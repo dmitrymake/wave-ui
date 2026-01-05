@@ -188,6 +188,16 @@
   .skeletons-wrapper {
     padding: 0 32px;
   }
+
+  .row-wrapper {
+    transition: transform 0.2s cubic-bezier(0.2, 0, 0, 1);
+    will-change: transform;
+  }
+
+  .row-wrapper.no-transition {
+    transition: none !important;
+  }
+
   @media (max-width: 768px) {
     .skeletons-wrapper {
       padding: 0 16px;

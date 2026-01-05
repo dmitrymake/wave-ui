@@ -5,7 +5,6 @@
   import * as MPD from "../lib/mpd";
   import { ICONS } from "../lib/icons";
   import {
-    // Убрали status и currentSong отсюда, они придут сверху
     activeMenuTab,
     favorites,
     stations,
@@ -21,11 +20,9 @@
   export let index;
   export let isEditable = false;
 
-  // --- НОВЫЕ ПРОПСЫ (Приходят от родителя) ---
-  export let playingIndex = -1; // Номер текущего трека (из $status.song)
-  export let playingFile = null; // Путь к файлу (из $currentSong.file)
-  export let isPlaying = false; // Играет или пауза (из $status.state)
-  // -------------------------------------------
+  export let playingIndex = -1;
+  export let playingFile = null;
+  export let isPlaying = false;
 
   const dispatch = createEventDispatcher();
   let isHovering = false;
@@ -33,25 +30,21 @@
 
   $: if (track) imgError = false;
 
-  // $favorites обновляется редко, можно оставить здесь
   $: isLiked = $favorites.has(track.file);
 
   $: currentView = $navigationStack[$navigationStack.length - 1];
+
   $: isQueueContext =
     currentView?.view === "queue" ||
     (currentView?.view === "root" && $activeMenuTab === "queue");
 
-  // --- ЛОГИКА ТЕПЕРЬ РАБОТАЕТ НА ПРОПСАХ (Быстро) ---
-
-  $: isFileMatch = track.file === playingFile;
-
-  // Тот самый фикс с "моментальной" реакцией
   $: isExactActive = isQueueContext
-    ? isFileMatch && (isEditable || Number(index) === playingIndex)
-    : false;
+    ? Number(index) === playingIndex
+    : track.file === playingFile;
 
-  $: isDuplicate = isPlaying && isFileMatch && !isExactActive;
-  // --------------------------------------------------
+  $: isDuplicate = isQueueContext
+    ? track.file === playingFile && !isExactActive
+    : false;
 
   $: isRadio =
     track.file &&
@@ -70,11 +63,7 @@
 
   $: quality = track.qualityBadge ? track.qualityBadge.split(" ")[0] : null;
 
-  // Для радио нам все еще нужно имя станции, его проще передать,
-  // но можно оставить вычисление тут, если stations не меняется часто
-  // Для идеальной скорости stationName тоже лучше передать пропсом,
-  // но пока оставим так, чтобы не усложнять родителя слишком сильно.
-  $: effectiveStationName = null; // Упрощение, т.к. currentSong убрали
+  $: effectiveStationName = null;
 
   $: imgUrl = imgError
     ? getTrackCoverUrl(track, $stations, effectiveStationName)
@@ -230,7 +219,6 @@
 </div>
 
 <style>
-  /* СТИЛИ ОСТАЮТСЯ ТЕ ЖЕ САМЫЕ, ЧТО И БЫЛИ */
   .row {
     display: flex;
     align-items: center;
@@ -271,8 +259,9 @@
     );
     opacity: 0.2;
     background-size: 28.28px 28.28px;
-    animation: moveStripes 1s linear infinite;
+    animation: moveStripes 2s linear infinite;
   }
+
   @keyframes moveStripes {
     0% {
       background-position: 0 0;

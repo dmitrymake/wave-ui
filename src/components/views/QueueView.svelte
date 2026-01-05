@@ -1,5 +1,11 @@
 <script>
-  import { queue, showModal, currentSong, status } from "../../lib/store";
+  import {
+    queue,
+    showModal,
+    currentSong,
+    status,
+    isQueueLocked,
+  } from "../../lib/store";
   import { PlayerActions } from "../../lib/mpd/player";
   import * as MPD from "../../lib/mpd";
   import { ICONS } from "../../lib/icons";
@@ -9,6 +15,18 @@
 
   let isEditMode = false;
   let headerTotalDuration = "";
+
+  $: serverPlayingIndex = Number($status.song);
+
+  let optimisticPlayingIndex = -1;
+
+  $: if (!$isQueueLocked) {
+    optimisticPlayingIndex = serverPlayingIndex;
+  }
+
+  $: playingIndex = optimisticPlayingIndex;
+  $: playingFile = $currentSong.file;
+  $: isPlaying = $status.state === "play";
 
   $: if ($queue.length >= 0) {
     const totalSec = $queue.reduce(
@@ -35,6 +53,9 @@
   }
 
   function handleRemove(index) {
+    if (index < optimisticPlayingIndex) {
+      optimisticPlayingIndex -= 1;
+    }
     PlayerActions.removeFromQueue(index);
   }
 
@@ -89,6 +110,17 @@
   }
 
   function handleMoveTrack(fromIndex, toIndex) {
+    let p = optimisticPlayingIndex;
+
+    if (fromIndex === p) {
+      p = toIndex;
+    } else if (fromIndex < p && toIndex >= p) {
+      p -= 1;
+    } else if (fromIndex > p && toIndex <= p) {
+      p += 1;
+    }
+
+    optimisticPlayingIndex = p;
     PlayerActions.moveTrack(fromIndex, toIndex);
   }
 </script>
@@ -158,6 +190,9 @@
       <TrackRow
         track={item}
         {index}
+        {playingIndex}
+        {playingFile}
+        {isPlaying}
         isEditable={isEditMode}
         on:play={() => playTrack(index)}
         on:remove={() => handleRemove(index)}
