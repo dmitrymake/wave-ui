@@ -301,7 +301,6 @@
 </div>
 
 <style>
-  /* --- MAIN CONTAINER --- */
   .full-player {
     position: fixed;
     inset: 0;
@@ -323,7 +322,6 @@
     overflow: hidden;
   }
 
-  /* --- BACKGROUND SYSTEM --- */
   .bg-container {
     position: absolute;
     top: 0;
@@ -380,7 +378,6 @@
     background: rgba(0, 0, 0, 0.7);
   }
 
-  /* --- CONTENT --- */
   .player-body {
     flex: 1;
     display: flex;
@@ -403,9 +400,8 @@
     max-width: 100%;
   }
 
-  /* --- DRAG ZONE --- */
   .drag-zone {
-    height: 30vh;
+    height: 40vh;
     width: 100%;
     position: absolute;
     top: 0;
@@ -431,7 +427,6 @@
     stroke-width: 3;
   }
 
-  /* --- ARTWORK --- */
   .art-container {
     display: flex;
     justify-content: center;
@@ -493,7 +488,6 @@
     opacity: 0.5;
   }
 
-  /* --- CONTROLS --- */
   .controls-area {
     display: flex;
     flex-direction: column;
@@ -548,7 +542,6 @@
     font-size: 13px;
   }
 
-  /* --- BARS & BUTTONS --- */
   .bar-hit-area,
   .volume-hit-area {
     height: 40px;

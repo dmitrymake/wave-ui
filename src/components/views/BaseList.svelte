@@ -16,15 +16,12 @@
   export let isLoading = false;
   export let emptyText = "List is empty";
 
-  // Event callback for item reordering (fromIndex, toIndex)
   export let onMoveItem = (from, to) => {};
 
-  // --- SCROLL RESTORATION LOGIC ---
   let scrollKey = "";
   let savedScrollTop = 0;
   let isRestored = false;
 
-  // Формируем уникальный ключ для текущего экрана (например "albums_by_artist_Pink Floyd")
   $: {
     const stack = $navigationStack;
     const current = stack[stack.length - 1];
@@ -40,10 +37,8 @@
     }
   }
 
-  // 1. При монтировании пытаемся получить позицию
   onMount(async () => {
     savedScrollTop = getScrollPosition(scrollKey);
-    // Пробуем восстановить сразу, если данные уже есть
     if (!isLoading && savedScrollTop > 0 && dragEngine.refs.scrollContainer) {
       await tick();
       dragEngine.refs.scrollContainer.scrollTop = savedScrollTop;
@@ -51,7 +46,6 @@
     }
   });
 
-  // 2. Если данные загрузились позже, восстанавливаем после isLoading = false
   $: if (
     !isLoading &&
     !isRestored &&
@@ -69,7 +63,6 @@
     }
   }
 
-  // 3. Сохраняем позицию при уничтожении компонента (переход на другой view)
   onDestroy(() => {
     dragEngine.cancelDrag();
     if (dragEngine.refs.scrollContainer) {
@@ -77,7 +70,6 @@
     }
   });
 
-  // --- DRAG AND DROP LOGIC ---
   const dragEngine = createPlaylistDrag({
     tracksStore: itemsStore,
     onMoveTrack: (fromIndex, toIndex) => {

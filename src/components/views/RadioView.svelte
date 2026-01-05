@@ -115,7 +115,6 @@
 <style>
   @import "./MusicViews.css";
 
-  /* Standardized search input style matching SearchView */
   .search-input-container {
     display: flex;
     align-items: center;

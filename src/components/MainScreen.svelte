@@ -178,7 +178,6 @@
     flex: 1;
     overflow-x: hidden;
     position: relative;
-    /* Плавный переход отступа при открытии/закрытии плеера */
     transition: padding-bottom 0.3s ease;
   }
 

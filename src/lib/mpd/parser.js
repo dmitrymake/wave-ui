@@ -11,7 +11,6 @@ export const MpdParser = {
     for (const line of lines) {
       const idx = line.indexOf(": ");
       if (idx === -1) continue;
-      // ВАЖНО: приводим ключ к нижнему регистру
       const key = line.substring(0, idx).toLowerCase();
       const val = line.substring(idx + 2);
       result[key] = val;
@@ -35,8 +34,6 @@ export const MpdParser = {
       duration: parseFloat(data.duration) || 0,
       random: data.random === "1",
       repeat: data.repeat === "1",
-
-      // ВОТ ЭТОЙ СТРОКИ НЕ ХВАТАЛО:
       song: parseInt(data.song) || 0,
 
       songId: parseInt(data.songid) || -1,
@@ -72,9 +69,6 @@ export const MpdParser = {
     }));
   },
 
-  /**
-   * STREAMING-LIKE PARSER FOR TRACKS
-   */
   parseTracks(rawText) {
     const tracks = [];
     let currentTrack = null;

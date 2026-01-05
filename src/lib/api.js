@@ -81,9 +81,9 @@ export const ApiActions = {
       const normalized = rawData.map((item) => ({
         id: item.id,
         name: item.name,
-        file: item.station, // Player expects 'file' for playback
+        file: item.station,
         station: item.station,
-        image: item.logo, // Raw value: 'local', URL, or filename
+        image: item.logo,
         genre: item.genre || "Radio",
       }));
 

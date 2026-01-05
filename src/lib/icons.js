@@ -3,7 +3,6 @@
  * Strictly using existing files from ./lib/svg
  */
 
-// Импортируем содержимое файлов как строки (Vite raw import)
 import arrowsShuffle2 from "./svg/arrows-shuffle-2.svg?raw";
 import brandDeezer from "./svg/brand-deezer.svg?raw";
 import chevronCompactDown from "./svg/chevron-compact-down.svg?raw";

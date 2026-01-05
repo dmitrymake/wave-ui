@@ -90,7 +90,6 @@ class MpdClient {
     this.isProcessing = true;
     const { cmd } = this.queue[0];
 
-    // Таймаут 20с для больших запросов (например, playlistinfo)
     if (this.watchdogTimer) clearTimeout(this.watchdogTimer);
     this.watchdogTimer = setTimeout(() => {
       console.error("[MPD] Watchdog timeout");
@@ -117,7 +116,6 @@ class MpdClient {
       this.watchdogTimer = null;
     }
 
-    // Всегда добавляем в буфер
     this._buffer += text;
 
     const isSuccess =
@@ -126,7 +124,7 @@ class MpdClient {
 
     if (isSuccess || isError) {
       const fullResponse = this._buffer;
-      this._buffer = ""; // Очистка буфера
+      this._buffer = "";
 
       const currentRequest = this.queue.shift();
       this.isProcessing = false;
@@ -145,7 +143,6 @@ class MpdClient {
 
       this._processQueue();
     } else {
-      // Если ответ не завершен, перезапускаем таймер, чтобы не разорвать соединение
       if (!this.queue.length) return;
 
       this.watchdogTimer = setTimeout(() => {

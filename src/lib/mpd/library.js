@@ -101,6 +101,46 @@ export const LibraryActions = {
     }
   },
 
+  async createPlaylistFromQueue(name) {
+    if (!name) return;
+    const safeName = name.replace(/"/g, '\\"');
+    try {
+      await mpdClient.send(`save "${safeName}"`);
+      showToast(`Playlist "${name}" created`, "success");
+      await this.loadPlaylists();
+    } catch (e) {
+      console.error(e);
+      showToast("Failed to create playlist", "error");
+    }
+  },
+
+  async deletePlaylist(name) {
+    if (!name) return;
+    const safeName = name.replace(/"/g, '\\"');
+    try {
+      await mpdClient.send(`rm "${safeName}"`);
+      showToast("Playlist deleted", "info");
+      await this.loadPlaylists();
+    } catch (e) {
+      console.error(e);
+      showToast("Delete failed", "error");
+    }
+  },
+
+  async renamePlaylist(oldName, newName) {
+    if (!oldName || !newName) return;
+    const safeOld = oldName.replace(/"/g, '\\"');
+    const safeNew = newName.replace(/"/g, '\\"');
+    try {
+      await mpdClient.send(`rename "${safeOld}" "${safeNew}"`);
+      showToast("Playlist renamed", "success");
+      await this.loadPlaylists();
+    } catch (e) {
+      console.error(e);
+      showToast("Rename failed", "error");
+    }
+  },
+
   async openPlaylistDetails(playlistName) {
     if (!playlistName) return;
     isLoadingTracks.set(true);
@@ -109,7 +149,6 @@ export const LibraryActions = {
       const text = await mpdClient.send(`listplaylistinfo "${safeName}"`);
       const rawTracks = MpdParser.parseTracks(text);
 
-      // Собираем пути файлов, чтобы найти их в DB
       const filesToLookup = rawTracks
         .map((t) => t.file)
         .filter((f) => f && !f.startsWith("http"));
@@ -128,10 +167,8 @@ export const LibraryActions = {
         if (cached) {
           return {
             ...track,
-            // Дополняем данными из базы
             thumbHash: cached.thumbHash,
             qualityBadge: cached.qualityBadge,
-            // Если в MPD нет title/artist, берем из базы (fallback)
             title: track.title || cached.title,
             artist: track.artist || cached.artist,
             album: track.album || cached.album,
@@ -143,7 +180,6 @@ export const LibraryActions = {
           _uid: generateUid(),
         };
       });
-      // --- HYDRATION END ---
 
       activePlaylistTracks.set(enrichedTracks);
     } catch (e) {

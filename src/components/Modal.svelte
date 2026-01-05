@@ -20,7 +20,6 @@
 
       if ($modal.onConfirm) $modal.onConfirm(val);
     } else {
-      // Обычный Confirm
       if ($modal.onConfirm) $modal.onConfirm();
     }
 
@@ -29,10 +28,8 @@
 
   function triggerError() {
     isError = true;
-    // Фокус обратно в поле
     if (inputRef) inputRef.focus();
 
-    // Сбрасываем класс анимации через 400мс, чтобы можно было вызвать её снова
     setTimeout(() => {
       isError = false;
     }, 400);
@@ -44,7 +41,6 @@
 
   function handleKeydown(e) {
     if (e.key === "Enter") handleConfirm();
-    // Скрываем ошибку, если пользователь начал печатать
     if (isError) isError = false;
   }
 </script>
@@ -115,7 +111,7 @@
 
   .shake-error {
     animation: shake 0.3s ease-in-out;
-    border-color: #ff4444 !important; /* Красная рамка */
+    border-color: #ff4444 !important;
     box-shadow: 0 0 0 1px rgba(255, 68, 68, 0.3);
   }
 

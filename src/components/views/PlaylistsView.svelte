@@ -8,12 +8,16 @@
     navigationStack,
     navigateTo,
     showModal,
+    openContextMenu,
+    queue,
   } from "../../lib/store";
   import Skeleton from "../Skeleton.svelte";
   import * as MPD from "../../lib/mpd";
+  import { LibraryActions } from "../../lib/mpd/library";
   import { ICONS } from "../../lib/icons";
   import TrackRow from "../TrackRow.svelte";
   import BaseList from "./BaseList.svelte";
+  import { longpress } from "../../lib/actions";
 
   let isEditMode = false;
 
@@ -89,6 +93,44 @@
     navigateTo("details", playlist);
   }
 
+  function handleNewPlaylist() {
+    if ($queue.length === 0) {
+      showModal({
+        title: "Create Playlist",
+        message:
+          "Queue is empty. Add tracks to queue before saving a playlist.",
+        confirmLabel: "OK",
+        type: "alert",
+      });
+      return;
+    }
+
+    showModal({
+      title: "New Playlist",
+      message: "Save current queue as a new playlist:",
+      type: "prompt",
+      placeholder: "Playlist Name",
+      confirmLabel: "Create",
+      onConfirm: (name) => {
+        if (name) LibraryActions.createPlaylistFromQueue(name);
+      },
+    });
+  }
+
+  function handlePlaylistContext(e, playlist) {
+    if (playlist.name === "Favorites") return;
+
+    e.stopPropagation();
+    e.preventDefault();
+
+    openContextMenu(e, null, {
+      type: "playlist-card",
+      playlist: playlist,
+    });
+  }
+
+  // --- End CRUD Handlers ---
+
   function handlePlayAll() {
     showModal({
       title: "Replace Queue?",
@@ -102,11 +144,8 @@
     });
   }
 
-  // ИСПРАВЛЕНО: Теперь используем playTrackOptimistic
   function playTrack(track) {
     if (!isEditMode) {
-      // Это вызовет playUri, который сделает addid -> moveid -> playid
-      // не очищая очередь
       MPD.playTrackOptimistic(track);
     }
   }
@@ -203,6 +242,7 @@
               >
                 {pressedAddToQueue ? "Added" : "To Queue"}
               </button>
+
               <button
                 class="btn-action"
                 class:active={isEditMode}
@@ -244,15 +284,23 @@
   {:else}
     <div class="content-padded">
       <div class="music-grid playlists-grid-override">
-        <div class="music-card">
+        <div class="music-card" on:click={handleNewPlaylist}>
           <div class="card-img-container dashed-cover">
             <div class="icon-wrap">{@html ICONS.ADD}</div>
           </div>
           <div class="card-title">New Playlist</div>
         </div>
+
         {#each $playlists as playlist}
           {@const isFav = playlist.name === "Favorites"}
-          <div class="music-card" on:click={() => openPlaylist(playlist)}>
+          <div
+            class="music-card"
+            on:click={() => openPlaylist(playlist)}
+            use:longpress
+            on:longpress={(e) =>
+              handlePlaylistContext(e.detail.originalEvent, playlist)}
+            on:contextmenu={(e) => handlePlaylistContext(e, playlist)}
+          >
             <div
               class="card-img-container"
               style="background: {playlist.color};"
@@ -260,6 +308,16 @@
               <div class="icon-wrap">
                 {@html isFav ? ICONS.HEART_FILLED : ICONS.PLAYLISTS}
               </div>
+
+              {#if !isFav}
+                <button
+                  class="card-menu-btn"
+                  on:click={(e) => handlePlaylistContext(e, playlist)}
+                >
+                  {@html ICONS.DOTS}
+                </button>
+              {/if}
+
               <div class="play-overlay">
                 <span class="overlay-icon">{@html ICONS.PLAY}</span>
               </div>
@@ -313,6 +371,44 @@
   .playlists-grid-override {
     grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)) !important;
     gap: 24px !important;
+  }
+
+  .card-menu-btn {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    background: rgba(0, 0, 0, 0.5);
+    border: none;
+    border-radius: 50%;
+    width: 28px;
+    height: 28px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #fff;
+    opacity: 0;
+    transition:
+      opacity 0.2s,
+      background 0.2s;
+    z-index: 10;
+    cursor: pointer;
+  }
+  .music-card:hover .card-menu-btn {
+    opacity: 1;
+  }
+  .card-menu-btn:hover {
+    background: rgba(0, 0, 0, 0.8);
+  }
+  .card-menu-btn :global(svg) {
+    width: 16px;
+    height: 16px;
+  }
+
+  @media (hover: none) {
+    .card-menu-btn {
+      opacity: 1;
+      background: transparent;
+    }
   }
 
   @media (max-width: 768px) {

@@ -99,14 +99,12 @@ async function startSync() {
         : item.genre || "Unknown";
       const genre = decodeEntities(rawGenre).normalize("NFC").trim();
 
-      // Обработка Album Artist (несколько вариантов ключей)
       const rawAlbumArtist =
         item.album_artist || item.albumartist || item.AlbumArtist;
       const album_artist = rawAlbumArtist
         ? decodeEntities(rawAlbumArtist).normalize("NFC").trim()
         : null;
 
-      // Генерация хеша для обложек на основе пути к папке
       let thumbHash = null;
       if (file) {
         try {

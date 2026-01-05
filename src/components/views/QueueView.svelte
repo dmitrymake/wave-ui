@@ -46,7 +46,6 @@
       placeholder: "Playlist Name",
       confirmLabel: "Save",
       onConfirm: async (name) => {
-        // name придет из модалки
         if (name && name.trim().length > 0) {
           await PlayerActions.saveQueue(name);
           MPD.loadPlaylists();
@@ -64,10 +63,8 @@
       confirmLabel: "Clear All",
       type: "confirm",
       onConfirm: async () => {
-        // 1. Optimistic UI update (Instant clear)
         queue.set([]);
 
-        // 2. Reset Player State locally
         currentSong.set({
           title: "Not Playing",
           artist: "",
@@ -86,7 +83,6 @@
           elapsed: 0,
         }));
 
-        // 3. Send command to server
         await MPD.runMpdRequest("clear");
       },
     });

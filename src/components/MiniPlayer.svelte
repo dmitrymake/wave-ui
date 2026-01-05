@@ -128,7 +128,6 @@
   }
 </script>
 
-=== ./components/MiniPlayer.svelte ===
 {#if !$isFullPlayerOpen}
   <div
     class="dock"

@@ -3,8 +3,8 @@
   const dispatch = createEventDispatcher();
 
   export let items = [];
-  export let itemHeight = 60; // Высота строки в px
-  export let component; // Компонент строки (TrackRow)
+  export let itemHeight = 60;
+  export let component;
   export let componentProps = {};
 
   let height = "100%";
@@ -12,12 +12,11 @@
   let viewportHeight = 0;
   let container;
 
-  // Рассчитываем, какие элементы показывать
   $: totalHeight = items.length * itemHeight;
   $: startIndex = Math.floor(scrollTop / itemHeight);
   $: endIndex = Math.min(
     items.length,
-    startIndex + Math.ceil(viewportHeight / itemHeight) + 4, // +4 буфер
+    startIndex + Math.ceil(viewportHeight / itemHeight) + 4,
   );
   $: visibleItems = items.slice(startIndex, endIndex).map((data, i) => ({
     index: startIndex + i,
@@ -59,7 +58,6 @@
     height: 100%;
     overflow-y: auto;
     position: relative;
-    /* Кастомный скроллбар */
     scrollbar-width: thin;
     scrollbar-color: rgba(255, 255, 255, 0.2) transparent;
   }

@@ -14,7 +14,6 @@ body {
     overflow: hidden;
 }
 
-/* Фоны */
 .bg-blur {
     position: fixed;
     inset: -40px;
@@ -32,7 +31,6 @@ body {
     z-index: -1;
 }
 
-/* Общие элементы */
 button {
     cursor: pointer;
     font-family: inherit;

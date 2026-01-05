@@ -8,6 +8,7 @@
     playlists,
     showToast,
     activePlaylistTracks,
+    showModal,
   } from "../lib/store";
   import { ICONS } from "../lib/icons";
   import { PlayerActions } from "../lib/mpd/player";
@@ -20,26 +21,19 @@
   let menuHeight = 0;
   let menuWidth = 0;
 
-  // 'main' | 'playlists'
   let view = "main";
-
-  // Флаг для отслеживания истории браузера
   let historyPushed = false;
 
-  // Сброс вида при открытии
   $: if ($contextMenu.isOpen) {
     view = "main";
   }
 
-  // --- ЛОГИКА ИСТОРИИ (BACK BUTTON / SWIPE) ---
   $: if ($contextMenu.isOpen) {
-    // При открытии меню добавляем запись в историю
     if (!historyPushed && typeof history !== "undefined") {
       history.pushState({ contextMenuOpen: true }, "");
       historyPushed = true;
     }
   } else {
-    // При закрытии (программном) убираем запись, если она была нами добавлена
     if (historyPushed && typeof history !== "undefined") {
       history.back();
       historyPushed = false;
@@ -47,9 +41,7 @@
   }
 
   function handlePopState(event) {
-    // Если нажали "Назад" (или свайпнули) и меню открыто
     if ($contextMenu.isOpen) {
-      // Ставим false, чтобы реактивный блок выше не вызывал history.back() повторно
       historyPushed = false;
       closeContextMenu();
     }
@@ -91,7 +83,6 @@
     closeContextMenu();
   }
 
-  // --- PLAYLIST REMOVAL ---
   async function handleRemoveFromPlaylist() {
     const { playlistName, index } = $contextMenu.context;
     if (playlistName && index !== null) {
@@ -105,7 +96,6 @@
     closeContextMenu();
   }
 
-  // --- QUEUE REMOVAL ---
   function handleRemoveFromQueue() {
     const { index } = $contextMenu.context;
     if (index !== null && index !== undefined) {
@@ -114,7 +104,57 @@
     closeContextMenu();
   }
 
-  // --- ADD TO PLAYLIST NAV ---
+  function handlePlaylistPlay() {
+    const pl = $contextMenu.context.playlist;
+    if (pl) {
+      // Play context clears queue and plays
+      // import { playPlaylistContext } from "../lib/mpd"; // Need this or call via client
+      // Or reuse runMpdRequest
+      mpdClient
+        .send("stop")
+        .then(() => mpdClient.send("clear"))
+        .then(() => mpdClient.send(`load "${pl.name.replace(/"/g, '\\"')}"`))
+        .then(() => mpdClient.send("play 0"));
+    }
+    closeContextMenu();
+  }
+
+  function handlePlaylistRename() {
+    const pl = $contextMenu.context.playlist;
+    if (!pl) return;
+    closeContextMenu();
+
+    showModal({
+      title: "Rename Playlist",
+      message: `Enter new name for "${pl.name}":`,
+      type: "prompt",
+      placeholder: pl.name,
+      inputValue: pl.name,
+      confirmLabel: "Rename",
+      onConfirm: (newName) => {
+        if (newName && newName !== pl.name) {
+          LibraryActions.renamePlaylist(pl.name, newName);
+        }
+      },
+    });
+  }
+
+  function handlePlaylistDelete() {
+    const pl = $contextMenu.context.playlist;
+    if (!pl) return;
+    closeContextMenu();
+
+    showModal({
+      title: "Delete Playlist",
+      message: `Are you sure you want to delete "${pl.name}"? This cannot be undone.`,
+      type: "confirm",
+      confirmLabel: "Delete",
+      onConfirm: () => {
+        LibraryActions.deletePlaylist(pl.name);
+      },
+    });
+  }
+
   function showPlaylists() {
     view = "playlists";
   }
@@ -146,9 +186,9 @@
 
   $: isPlaylistContext = $contextMenu.context?.type === "playlist";
   $: isQueueContext = $contextMenu.context?.type === "queue";
+  $: isPlaylistCard = $contextMenu.context?.type === "playlist-card"; // NEW
   $: isMiniPlayerSource = $contextMenu.context?.source === "miniplayer";
 
-  // --- POSITIONING ALGORITHM ---
   $: stylePosition = (() => {
     if (!$contextMenu.isOpen) return "";
 
@@ -159,7 +199,6 @@
     const mw = menuWidth || 220;
     const mh = menuHeight || 320;
 
-    // 1. MOBILE MINI-PLAYER SPECIAL CASE
     if (innerWidth <= 768 && isMiniPlayerSource && rect) {
       const bottomPos = innerHeight - rect.top;
       return `
@@ -172,7 +211,6 @@
       `;
     }
 
-    // 2. GENERAL POSITIONING (Tracks, Desktop)
     let left = 0;
     let top = 0;
     let transformOrigin = "top left";
@@ -184,7 +222,6 @@
       const isRightHalf = centerX > innerWidth / 2;
       const isBottomHalf = centerY > innerHeight / 2;
 
-      // Горизонталь
       if (isRightHalf) {
         left = rect.right - mw;
         transformOrigin = isBottomHalf ? "bottom right" : "top right";
@@ -193,21 +230,18 @@
         transformOrigin = isBottomHalf ? "bottom left" : "top left";
       }
 
-      // Вертикаль
       if (isBottomHalf) {
         top = rect.top - mh;
       } else {
         top = rect.bottom;
       }
     } else {
-      // Fallback
       left = clickX;
       top = clickY;
       if (left + mw > innerWidth) left = innerWidth - mw - 10;
       if (top + mh > innerHeight) top = innerHeight - mh - 10;
     }
 
-    // Защита от вылета за границы экрана
     const padding = 8;
     if (left < padding) left = padding;
     if (left + mw > innerWidth - padding) left = innerWidth - mw - padding;
@@ -241,6 +275,13 @@
             <span class="back-icon">{@html ICONS.BACK}</span>
           </button>
           <span class="header-title">Select Playlist</span>
+        {:else if isPlaylistCard}
+          <div class="track-info">
+            <div class="title text-ellipsis">
+              {$contextMenu.context.playlist.name}
+            </div>
+            <div class="artist text-ellipsis">Playlist</div>
+          </div>
         {:else}
           <div class="track-info">
             <div class="title text-ellipsis">{$contextMenu.track.title}</div>
@@ -262,6 +303,23 @@
           {#if $playlists.filter((p) => p.name !== "Favorites").length === 0}
             <div class="empty-msg">No custom playlists</div>
           {/if}
+        {:else if isPlaylistCard}
+          <button class="menu-row" on:click={handlePlaylistPlay}>
+            <span class="icon">{@html ICONS.PLAY}</span>
+            <span>Play Now</span>
+          </button>
+
+          <div class="sep"></div>
+
+          <button class="menu-row" on:click={handlePlaylistRename}>
+            <span class="icon">{@html ICONS.EDIT}</span>
+            <span>Rename</span>
+          </button>
+
+          <button class="menu-row" on:click={handlePlaylistDelete}>
+            <span class="icon">{@html ICONS.REMOVE}</span>
+            <span>Delete Playlist</span>
+          </button>
         {:else}
           <button class="menu-row" on:click={handlePlayNext}>
             <span class="icon">{@html ICONS.NEXT}</span>

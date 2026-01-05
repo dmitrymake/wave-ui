@@ -2,7 +2,6 @@ export function longpress(node, duration = 2000) {
   let timer;
 
   const handleStart = (e) => {
-    // Игнорируем правый клик
     if (e.type === "mousedown" && e.button !== 0) return;
 
     timer = setTimeout(() => {

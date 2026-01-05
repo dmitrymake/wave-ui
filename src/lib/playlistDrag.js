@@ -1,6 +1,9 @@
 import { writable, get } from "svelte/store";
 import { tick } from "svelte";
 
+// THIS JUST WORKS FINE
+// DON'T TOUCH
+
 const SCROLL_ZONE_PX = 100;
 const SCROLL_SPEED_BASE = 5;
 const SCROLL_SPEED_MAX = 25;
@@ -131,7 +134,6 @@ export function createPlaylistDrag({ tracksStore, onMoveTrack }) {
     let bestIndex = -1;
     let minDistance = Infinity;
 
-    // Мы должны учитывать расстояние до оригинального слота, чтобы можно было вернуть трек назад.
     rows.forEach((row, idx) => {
       const rowCenterY = row.offsetTop + row.offsetHeight / 2;
       const dist = Math.abs(ghostCenterInList - rowCenterY);
@@ -161,14 +163,11 @@ export function createPlaylistDrag({ tracksStore, onMoveTrack }) {
   async function commitDrop() {
     stopAutoScroll();
 
-    // 1. Фаза полета
     isDragging.set(false);
     isDropping.set(true);
 
     const finalHoverIndex = get(hoverIndex);
-    const gCoords = get(ghostCoords);
 
-    // Расчет координат для анимации полета (без изменений)
     if (refs.listBodyContainer && finalHoverIndex !== null) {
       const rows = refs.listBodyContainer.querySelectorAll(".row-wrapper");
       const targetRow = rows[finalHoverIndex];
@@ -184,21 +183,12 @@ export function createPlaylistDrag({ tracksStore, onMoveTrack }) {
       }
     }
 
-    // Ждем анимацию полета
     await new Promise((resolve) => setTimeout(resolve, 200));
 
-    // Блокируем анимации
     isReordering.set(true);
 
-    // Ждем, пока Svelte добавит класс в DOM
     await tick();
 
-    // Без этого на мобилке класс применяется слишком поздно.
-    if (refs.listBodyContainer) {
-      const _forceReflow = refs.listBodyContainer.offsetHeight;
-    }
-
-    // Теперь, когда анимации гарантированно выключены, меняем всё разом.
     const currentDragIdx = get(draggingIndex);
     const maxIndex = get(tracksStore).length;
     let validIndex = Math.max(0, Math.min(finalHoverIndex, maxIndex));
@@ -211,7 +201,6 @@ export function createPlaylistDrag({ tracksStore, onMoveTrack }) {
       insertAt = Math.max(0, Math.min(insertAt, tracks.length));
       tracks.splice(insertAt, 0, item);
 
-      // Обновляем массив
       tracksStore.set(tracks);
 
       if (onMoveTrack) {
@@ -219,20 +208,16 @@ export function createPlaylistDrag({ tracksStore, onMoveTrack }) {
       }
     }
 
-    // Мгновенно сбрасываем индексы.
     draggingIndex.set(null);
     hoverIndex.set(null);
     draggedItemData.set(null);
     isDropping.set(false);
 
-    // Включаем анимацию приземления для нового элемента
     const droppedAt = currentDragIdx !== validIndex ? insertAt : currentDragIdx;
     justDroppedIndex.set(droppedAt);
 
-    // Ждем отрисовки нового состояния DOM
     await tick();
 
-    // Возвращаем анимации обратно
     requestAnimationFrame(() => {
       isReordering.set(false);
       setTimeout(() => {
@@ -310,7 +295,6 @@ export function createPlaylistDrag({ tracksStore, onMoveTrack }) {
     hoverIdxVal,
     isReorderingVal,
   ) {
-    // Пусть DOM элементы встанут на свои новые места чисто.
     if (isReorderingVal) return "";
 
     if (
@@ -320,14 +304,12 @@ export function createPlaylistDrag({ tracksStore, onMoveTrack }) {
     )
       return "";
 
-    // Скрытие элемента под пальцем
     if (index === dragIdxVal) {
       return "opacity: 0; pointer-events: none;";
     }
 
     if (dragIdxVal === hoverIdxVal) return "";
 
-    // Сдвиги
     if (dragIdxVal < hoverIdxVal) {
       if (index > dragIdxVal && index <= hoverIdxVal) {
         return "transform: translateY(-100%);";

@@ -41,7 +41,6 @@
     isSidebarCollapsed.update((v) => !v);
   }
 
-  // --- Mobile Swipe Logic (Сохранено из оригинала) ---
   function handleTouchStart(e) {
     if (!isOpen) return;
     touchStartX = e.touches[0].clientX;
@@ -358,7 +357,7 @@
   .sep {
     height: 1px;
     background: var(--c-border);
-    margin: 10px 28px; /* Align separator with text start (12+16) */
+    margin: 10px 28px;
     flex-shrink: 0;
     opacity: 0.5;
   }
@@ -450,9 +449,6 @@
     }
     .nav-item {
       padding: 0 12px;
-      /* Re-calc center for 80px collapsed width in landscape */
-      /* margin 12px -> 12 left. Center is 40. Icon half is 12. 
-         Pad = 40 - 12 - 12 = 16px. Same math holds! */
       padding-left: 16px;
     }
     .header {

@@ -30,23 +30,17 @@
 
   $: isLiked = $favorites.has(track.file);
 
-  // --- LOGIC ---
-
-  // 1. Context
   $: currentView = $navigationStack[$navigationStack.length - 1];
   $: isQueueContext =
     currentView?.view === "queue" ||
     (currentView?.view === "root" && $activeMenuTab === "queue");
 
-  // 2. MPD State
   $: playingIndex = $status.song;
   $: playingFile = $currentSong.file;
   $: isPlayingState = $status.state === "play";
 
-  // 3. Active (Solid) - Strict Index Match in Queue
   $: isExactActive = isQueueContext && Number(index) === Number(playingIndex);
 
-  // 4. Duplicate (Stripes)
   $: isDuplicate =
     isPlayingState && track.file === playingFile && !isExactActive;
 
@@ -111,9 +105,7 @@
   function handleArtistClick(e) {
     e.stopPropagation();
     if (!isRadio && track.artist) {
-      // Set active tab to Artists so the menu highlights correctly
       activeMenuTab.set("artists");
-      // Use navigateTo with an object to ensure compatibility with LibraryView logic
       navigateTo("albums_by_artist", { name: track.artist });
     }
   }

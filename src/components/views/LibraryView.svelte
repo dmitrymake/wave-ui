@@ -33,18 +33,16 @@
     { id: "year_desc", label: "Newest" },
   ];
 
-  // UI State (Unified)
   let pressedPlayAll = false;
   let pressedAddToQueue = false;
 
-  // Header Data
   let headerItem = null;
-  let headerTotalDuration = ""; // Renamed from albumTotalDuration for unification
-  let headerQuality = ""; // Renamed from albumQuality
-  let headerSubtitle = ""; // Renamed from albumYear to be more generic
+  let headerTotalDuration = "";
+  let headerQuality = "";
+  let headerSubtitle = "";
   let trackCount = 0;
 
-  // === ЗАЩИТА ОТ ГОНКИ ЗАПРОСОВ ===
+  // Race condition protection
   let lastRequestId = 0;
 
   $: currentSortIcon =
@@ -70,7 +68,6 @@
     else sortOption = "name";
   }
 
-  // Реактивная загрузка контента
   $: loadContent(activeCategory, currentView);
 
   $: if (currentView) {
@@ -510,7 +507,6 @@
     align-items: center;
     justify-content: center;
     width: 100%;
-    height: 100%;
     color: var(--c-icon-faint);
     background: var(--c-bg-placeholder);
   }

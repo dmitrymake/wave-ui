@@ -34,12 +34,10 @@ export const Router = {
     if (!data) {
       if (parts.length > 1) {
         if (route === "album" && parts.length >= 3) {
-          // ФОРМАТ: #/album/Artist Name/Album Name
           data = { artist: parts[1], name: parts[2] };
         } else if (route === "artist" && parts.length >= 2) {
           data = { name: parts[1] };
         } else {
-          // Старый формат (fallback)
           data = { name: parts[1], displayName: parts[1] };
         }
       }

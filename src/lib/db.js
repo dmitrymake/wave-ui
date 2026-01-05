@@ -187,7 +187,6 @@ export const db = {
 
   async getAlbumTracks(albumName, artistFilter = null) {
     const database = await this.open();
-    // Нормализуем входные данные
     const safeAlbum = albumName.normalize("NFC").trim();
     const safeArtist = artistFilter
       ? artistFilter.normalize("NFC").trim()
@@ -201,7 +200,6 @@ export const db = {
       const tx = database.transaction(DATABASE.STORE_NAME, "readonly");
       const index = tx.objectStore(DATABASE.STORE_NAME).index("album");
 
-      // 1. Получаем ВСЕ треки с таким названием альбома (например, "Film Music")
       const range = IDBKeyRange.only(safeAlbum);
       const request = index.getAll(range);
 
@@ -211,7 +209,6 @@ export const db = {
           `[DB] Found ${tracks.length} raw tracks for album "${safeAlbum}"`,
         );
 
-        // 2. Если указан фильтр по артисту, оставляем только его треки
         if (safeArtist) {
           const beforeCount = tracks.length;
           tracks = tracks.filter((t) => {
@@ -231,7 +228,6 @@ export const db = {
           console.log("[DB] No artist filter provided. Returning all tracks.");
         }
 
-        // 3. Сортировка
         tracks.sort((a, b) => {
           const discA = parseInt(a.disc || 1);
           const discB = parseInt(b.disc || 1);

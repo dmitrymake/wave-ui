@@ -1,5 +1,4 @@
 import { writable, derived, get } from "svelte/store";
-import { CONFIG } from "../config";
 import { getStationImageUrl } from "./utils";
 import md5 from "md5";
 
@@ -16,7 +15,6 @@ export function showToast(msg, type = "info") {
   }, 3000);
 }
 
-// --- MODAL STORE ---
 export const modal = writable({
   isOpen: false,
   title: "",
@@ -35,7 +33,7 @@ export function showModal({
   confirmLabel = "Confirm",
   cancelLabel = "Cancel",
   type = "confirm",
-  inputValue = "", // Дефолтное значение
+  inputValue = "",
   placeholder = "",
   onConfirm = () => {},
 }) {
@@ -65,7 +63,6 @@ export function closeModal() {
     placeholder: "",
   });
 }
-// -------------------
 
 export const status = writable({
   state: "stop",
@@ -108,7 +105,6 @@ isSidebarCollapsed.subscribe((val) => {
   }
 });
 
-// Library
 export const stations = writable([]);
 export const playlists = writable([]);
 export const activePlaylistTracks = writable([]);
@@ -116,13 +112,11 @@ export const activePlaylistName = writable(null);
 export const favorites = writable(new Set());
 export const isQueueLocked = writable(false);
 
-// Navigation
 export const navigationStack = writable([{ view: "root" }]);
 export const queue = writable([]);
 export const queueVersion = writable(0);
 export const searchQuery = writable("");
 
-// Scroll
 export const scrollPositions = writable({});
 export function saveScrollPosition(key, pos) {
   scrollPositions.update((s) => ({ ...s, [key]: pos }));
@@ -156,7 +150,8 @@ function vibrate() {
 }
 
 export function openContextMenu(e, track, contextData = {}) {
-  if (!track) return;
+  if (!track && contextData.type !== "playlist-card") return;
+
   vibrate();
 
   let clientX = 0;
@@ -218,7 +213,6 @@ export function closePlaylistSelector() {
   playlistSelector.set({ isOpen: false, track: null });
 }
 
-// Routing
 let pendingRouteData = null;
 let onNavigateCallback = null;
 
@@ -246,11 +240,8 @@ export function navigateBack() {
   window.history.back();
 }
 
-export function handleBrowserBack() {
-  // Placeholder
-}
+export function handleBrowserBack() {}
 
-// FULL SIZE (for player)
 export function getTrackCoverUrl(
   track,
   stationList = [],
@@ -278,7 +269,6 @@ export function getTrackThumbUrl(
   stationList = [],
   selectedRadioName = null,
 ) {
-  // Handle Radio
   if (
     !track ||
     (track.file &&
@@ -371,7 +361,6 @@ export const currentArtistImage = derived(currentSong, ($song) => {
 
 export const coverUrl = currentCover;
 
-// OPTIONAL ALARM FUNCTIONS
 const savedAlarmTime = localStorage.getItem("alarmTime") || "08:00";
 const savedAlarmEnabled = localStorage.getItem("alarmEnabled") === "true";
 

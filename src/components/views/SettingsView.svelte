@@ -4,7 +4,6 @@
   import { showToast } from "../../lib/store";
   import { ICONS } from "../../lib/icons";
 
-  // --- Connection Settings ---
   let ipAddress = CONFIG.MOODE_IP;
 
   function saveConnection() {
@@ -13,8 +12,6 @@
     setTimeout(() => location.reload(), 1000);
   }
 
-  // --- Build Info ---
-  // Vite заменит эти переменные при сборке
   const appVersion =
     typeof __APP_VERSION__ !== "undefined" ? __APP_VERSION__ : "1.0.0";
   const buildDateRaw =

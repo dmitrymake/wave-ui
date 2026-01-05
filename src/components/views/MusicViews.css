@@ -228,7 +228,7 @@
 .header-info {
   display: flex;
   flex-direction: column;
-  justify-content: space-between; /* Pushes text to top, actions to bottom */
+  justify-content: space-between;
   flex: 1;
   min-width: 0;
   padding-top: 4px; /* Visual alignment fix */
@@ -249,7 +249,7 @@
 }
 
 .header-title {
-  font-size: 40px; /* Reduced slightly from 48 for better fit */
+  font-size: 40px;
   font-weight: 800;
   margin: 0 0 8px 0;
   line-height: 1.1;

@@ -1,14 +1,12 @@
 const CACHE_NAME = "covers-v1";
 
-// кешируем обложки
 const ASSET_REGEX = /\/coverart\.php|\/imagesw\//;
 
 self.addEventListener("install", (event) => {
-  self.skipWaiting(); // Активируем сразу после загрузки
+  self.skipWaiting();
 });
 
 self.addEventListener("activate", (event) => {
-  // Очистка старых кэшей, если имя изменится
   event.waitUntil(
     caches
       .keys()
@@ -21,7 +19,7 @@ self.addEventListener("activate", (event) => {
           }),
         );
       })
-      .then(() => self.clients.claim()), // Немедленно берем контроль над страницей
+      .then(() => self.clients.claim()),
   );
 });
 
@@ -29,7 +27,6 @@ self.addEventListener("fetch", (event) => {
   const request = event.request;
   const url = new URL(request.url);
 
-  // Проверяем, GET запрос ли это и соответствует ли нашим путям картинок
   if (request.method !== "GET" || !ASSET_REGEX.test(url.pathname)) {
     return;
   }
@@ -41,7 +38,6 @@ self.addEventListener("fetch", (event) => {
           return cachedResponse;
         }
 
-        // 2. Если нет в кэше — идем в сеть
         return fetch(request)
           .then((networkResponse) => {
             if (
@@ -56,9 +52,7 @@ self.addEventListener("fetch", (event) => {
 
             return networkResponse;
           })
-          .catch(() => {
-            // return caches.match('/images/default_icon.png');
-          });
+          .catch(() => {});
       });
     }),
   );

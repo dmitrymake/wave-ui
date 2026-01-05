@@ -53,10 +53,7 @@
     hasSearched = true;
 
     try {
-      // 1. Search tracks
       const results = await db.search(term);
-
-      // Add unique IDs for BaseList
       const tracksWithIds = results.map((t, i) => ({
         ...t,
         _uid: t.file ? `${t.file}-${i}` : `search-${i}`,
@@ -64,7 +61,6 @@
 
       tracksStore.set(tracksWithIds);
 
-      // 2. Extract albums
       const albumMap = new Map();
       results.forEach((track) => {
         const albumName = track.album;

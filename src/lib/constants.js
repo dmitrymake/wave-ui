@@ -1,5 +1,3 @@
-import { CONFIG } from "../config";
-
 export const DATABASE = {
   NAME: "MoodePlayerDB",
   STORE_NAME: "music",
