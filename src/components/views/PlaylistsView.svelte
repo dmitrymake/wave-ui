@@ -10,6 +10,8 @@
     showModal,
     openContextMenu,
     queue,
+    status, // <-- Добавлен импорт
+    currentSong, // <-- Добавлен импорт
   } from "../../lib/store";
   import Skeleton from "../Skeleton.svelte";
   import * as MPD from "../../lib/mpd";
@@ -28,6 +30,11 @@
   // Header Data
   let headerTotalDuration = "";
   let headerQuality = "";
+
+  // Глобальное состояние для оптимизации TrackRow
+  $: playingIndex = Number($status.song);
+  $: playingFile = $currentSong.file;
+  $: isPlaying = $status.state === "play";
 
   $: currentView = $navigationStack[$navigationStack.length - 1];
   $: isDetailsView = currentView.view === "details";
@@ -260,6 +267,9 @@
         <TrackRow
           track={item}
           {index}
+          {playingIndex}
+          {playingFile}
+          {isPlaying}
           isEditable={isEditMode}
           on:play={() => playTrack(item)}
           on:remove={() => handleRemoveTrack(index)}

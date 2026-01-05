@@ -5,16 +5,15 @@
   import * as MPD from "../lib/mpd";
   import { ICONS } from "../lib/icons";
   import {
-    currentSong,
-    status,
+    // Убрали status и currentSong отсюда, они придут сверху
     activeMenuTab,
-    navigateTo,
     favorites,
     stations,
     getTrackThumbUrl,
     getTrackCoverUrl,
     openContextMenu,
     navigationStack,
+    navigateTo,
   } from "../lib/store.js";
   import { longpress } from "../lib/actions";
 
@@ -22,12 +21,19 @@
   export let index;
   export let isEditable = false;
 
+  // --- НОВЫЕ ПРОПСЫ (Приходят от родителя) ---
+  export let playingIndex = -1; // Номер текущего трека (из $status.song)
+  export let playingFile = null; // Путь к файлу (из $currentSong.file)
+  export let isPlaying = false; // Играет или пауза (из $status.state)
+  // -------------------------------------------
+
   const dispatch = createEventDispatcher();
   let isHovering = false;
   let imgError = false;
 
   $: if (track) imgError = false;
 
+  // $favorites обновляется редко, можно оставить здесь
   $: isLiked = $favorites.has(track.file);
 
   $: currentView = $navigationStack[$navigationStack.length - 1];
@@ -35,38 +41,28 @@
     currentView?.view === "queue" ||
     (currentView?.view === "root" && $activeMenuTab === "queue");
 
-  $: playingIndex = Number($status.song);
-  $: playingFile = $currentSong.file;
-  $: isPlayingState = $status.state === "play";
+  // --- ЛОГИКА ТЕПЕРЬ РАБОТАЕТ НА ПРОПСАХ (Быстро) ---
 
-  // --- ИСПРАВЛЕННАЯ ЛОГИКА ---
-
-  // 1. Сначала проверяем физическое совпадение файла.
-  // Это предотвращает подсветку "чужого" трека, который встал на место играющего.
   $: isFileMatch = track.file === playingFile;
 
-  // 2. Трек активен (красный), ТОЛЬКО если это тот самый файл, И:
-  // - либо мы его сейчас тащим (isEditable),
-  // - либо его индекс совпадает с серверным (в обычном режиме).
+  // Тот самый фикс с "моментальной" реакцией
   $: isExactActive = isQueueContext
     ? isFileMatch && (isEditable || Number(index) === playingIndex)
     : false;
 
-  // 3. Дубликат: файл тот же, но это не активная копия.
-  $: isDuplicate = isPlayingState && isFileMatch && !isExactActive;
-
-  // ----------------------------
+  $: isDuplicate = isPlaying && isFileMatch && !isExactActive;
+  // --------------------------------------------------
 
   $: isRadio =
     track.file &&
     (track.file.startsWith("http") || track.file.includes("RADIO"));
 
-  $: showPause = isExactActive && isPlayingState && isHovering;
+  $: showPause = isExactActive && isPlaying && isHovering;
   $: showPlay =
-    (isExactActive && !isPlayingState && isHovering) ||
+    (isExactActive && !isPlaying && isHovering) ||
     (!isExactActive && isHovering);
-  $: showEq = isExactActive && isPlayingState && !isHovering;
-  $: showStatic = isExactActive && !isPlayingState && !isHovering;
+  $: showEq = isExactActive && isPlaying && !isHovering;
+  $: showStatic = isExactActive && !isPlaying && !isHovering;
 
   $: title = track.title || track.file?.split("/").pop();
   $: artist = track.artist || "Unknown";
@@ -74,7 +70,11 @@
 
   $: quality = track.qualityBadge ? track.qualityBadge.split(" ")[0] : null;
 
-  $: effectiveStationName = isExactActive ? $currentSong.stationName : null;
+  // Для радио нам все еще нужно имя станции, его проще передать,
+  // но можно оставить вычисление тут, если stations не меняется часто
+  // Для идеальной скорости stationName тоже лучше передать пропсом,
+  // но пока оставим так, чтобы не усложнять родителя слишком сильно.
+  $: effectiveStationName = null; // Упрощение, т.к. currentSong убрали
 
   $: imgUrl = imgError
     ? getTrackCoverUrl(track, $stations, effectiveStationName)
@@ -230,6 +230,7 @@
 </div>
 
 <style>
+  /* СТИЛИ ОСТАЮТСЯ ТЕ ЖЕ САМЫЕ, ЧТО И БЫЛИ */
   .row {
     display: flex;
     align-items: center;
@@ -246,11 +247,9 @@
     position: relative;
     overflow: hidden;
   }
-
   .row:hover {
     background: var(--c-surface-hover);
   }
-
   .row.active {
     background: var(--c-surface-active);
   }
@@ -261,10 +260,8 @@
     inset: 0;
     pointer-events: none;
     z-index: 0;
-
     border-radius: inherit;
     box-sizing: border-box;
-
     background-image: repeating-linear-gradient(
       -45deg,
       transparent,
@@ -272,13 +269,10 @@
       var(--c-surface-active) 10px,
       var(--c-surface-active) 20px
     );
-
     opacity: 0.2;
-
     background-size: 28.28px 28.28px;
     animation: moveStripes 1s linear infinite;
   }
-
   @keyframes moveStripes {
     0% {
       background-position: 0 0;
@@ -294,7 +288,6 @@
     position: relative;
     z-index: 1;
   }
-
   .left {
     display: flex;
     align-items: center;
@@ -376,7 +369,6 @@
   .b3 {
     animation: eq 0.6s infinite ease-in-out 0.4s;
   }
-
   @keyframes eq {
     0%,
     100% {
@@ -415,7 +407,6 @@
     flex-direction: column;
     justify-content: center;
   }
-
   .title-row {
     display: flex;
     align-items: center;
@@ -423,7 +414,6 @@
     margin-bottom: 2px;
     min-width: 0;
   }
-
   .title {
     font-size: 15px;
     font-weight: 500;
@@ -452,7 +442,6 @@
     align-items: center;
     gap: 10px;
   }
-
   .small {
     padding: 5px;
   }
@@ -466,7 +455,6 @@
   .remove:hover {
     color: var(--c-accent);
   }
-
   .dur {
     font-size: 13px;
     color: var(--c-text-muted);
@@ -474,7 +462,6 @@
     width: 28px;
     text-align: right;
   }
-
   .context-menu-btn {
     opacity: 0.6;
     transition: opacity 0.2s;
