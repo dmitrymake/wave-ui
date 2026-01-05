@@ -8,13 +8,13 @@
     currentSong,
     status,
     activeMenuTab,
+    navigateTo,
     favorites,
     stations,
     getTrackThumbUrl,
     getTrackCoverUrl,
     openContextMenu,
     navigationStack,
-    navigateTo,
   } from "../lib/store.js";
   import { longpress } from "../lib/actions";
 
@@ -35,14 +35,27 @@
     currentView?.view === "queue" ||
     (currentView?.view === "root" && $activeMenuTab === "queue");
 
-  $: playingIndex = $status.song;
+  $: playingIndex = Number($status.song);
   $: playingFile = $currentSong.file;
   $: isPlayingState = $status.state === "play";
 
-  $: isExactActive = isQueueContext && Number(index) === Number(playingIndex);
+  // --- ИСПРАВЛЕННАЯ ЛОГИКА ---
 
-  $: isDuplicate =
-    isPlayingState && track.file === playingFile && !isExactActive;
+  // 1. Сначала проверяем физическое совпадение файла.
+  // Это предотвращает подсветку "чужого" трека, который встал на место играющего.
+  $: isFileMatch = track.file === playingFile;
+
+  // 2. Трек активен (красный), ТОЛЬКО если это тот самый файл, И:
+  // - либо мы его сейчас тащим (isEditable),
+  // - либо его индекс совпадает с серверным (в обычном режиме).
+  $: isExactActive = isQueueContext
+    ? isFileMatch && (isEditable || Number(index) === playingIndex)
+    : false;
+
+  // 3. Дубликат: файл тот же, но это не активная копия.
+  $: isDuplicate = isPlayingState && isFileMatch && !isExactActive;
+
+  // ----------------------------
 
   $: isRadio =
     track.file &&
