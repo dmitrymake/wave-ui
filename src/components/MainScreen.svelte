@@ -7,7 +7,7 @@
     navigationStack,
     navigateBack,
     handleBrowserBack,
-    isFullPlayerOpen, // Мы используем это состояние для расчета отступа
+    isFullPlayerOpen,
     toastMessage,
   } from "../lib/store";
 
@@ -15,11 +15,12 @@
   import RadioView from "./views/RadioView.svelte";
   import PlaylistsView from "./views/PlaylistsView.svelte";
   import SearchView from "./views/SearchView.svelte";
+  import SettingsView from "./views/SettingsView.svelte";
+  import QueueView from "./views/QueueView.svelte";
 
   import MiniPlayer from "./MiniPlayer.svelte";
   import FullPlayer from "./FullPlayer.svelte";
   import SideMenu from "./SideMenu.svelte";
-  import QueueView from "./views/QueueView.svelte";
 
   let isMobileMenuOpen = false;
 
@@ -66,6 +67,7 @@
             {:else if $activeMenuTab === "search"}Search
             {:else if $activeMenuTab === "queue"}Queue
             {:else if $activeMenuTab === "favorites"}Favorites
+            {:else if $activeMenuTab === "settings"}Settings
             {:else}{($activeMenuTab || "Library").charAt(0).toUpperCase() +
                 ($activeMenuTab || "library").slice(1)}
             {/if}
@@ -88,6 +90,8 @@
             <PlaylistsView />
           {:else if $activeMenuTab === "search"}
             <SearchView />
+          {:else if $activeMenuTab === "settings"}
+            <SettingsView />
           {:else}
             <LibraryView activeCategory={$activeMenuTab} />
           {/if}

@@ -9,7 +9,6 @@
     isSidebarCollapsed,
   } from "../lib/store";
   import { ApiActions } from "../lib/api";
-  import { CONFIG } from "../config";
 
   export let isOpen = false;
   const dispatch = createEventDispatcher();
@@ -27,8 +26,6 @@
     { id: "radio", label: "Radio", icon: ICONS.RADIO },
   ];
 
-  let ipAddress = CONFIG.MOODE_IP;
-
   function switchTab(id) {
     window.location.hash = `/${id}`;
     dispatch("close");
@@ -44,6 +41,7 @@
     isSidebarCollapsed.update((v) => !v);
   }
 
+  // --- Mobile Swipe Logic (Сохранено из оригинала) ---
   function handleTouchStart(e) {
     if (!isOpen) return;
     touchStartX = e.touches[0].clientX;
@@ -155,24 +153,19 @@
         >
       </button>
 
-      <div class="settings-wrapper" class:hidden={$isSidebarCollapsed}>
-        <div class="settings">
-          <div class="row">
-            <input
-              type="text"
-              bind:value={ipAddress}
-              placeholder="192.168..."
-            />
-            <button
-              class="save"
-              on:click={() => {
-                CONFIG.setMoodeIp(ipAddress);
-                location.reload();
-              }}>OK</button
-            >
-          </div>
-        </div>
-      </div>
+      <div class="sep"></div>
+
+      <button
+        class="nav-item"
+        class:active={$activeMenuTab === "settings"}
+        title="Settings"
+        on:click={() => switchTab("settings")}
+      >
+        <span class="icon">{@html ICONS.SETTINGS}</span>
+        <span class="label-text" class:hidden={$isSidebarCollapsed}
+          >Settings</span
+        >
+      </button>
     </nav>
 
     <div class="footer">
@@ -381,58 +374,6 @@
     }
   }
 
-  .settings-wrapper {
-    transition:
-      opacity 0.2s ease,
-      height 0.2s ease,
-      margin 0.2s ease;
-    opacity: 1;
-    height: auto;
-    overflow: hidden;
-  }
-  .settings-wrapper.hidden {
-    opacity: 0;
-    height: 0;
-    pointer-events: none;
-    margin: 0;
-  }
-
-  .settings {
-    padding: 10px 16px 0;
-    margin: 0 12px; /* Align with nav items */
-  }
-
-  .row {
-    display: flex;
-    gap: 8px;
-  }
-
-  input {
-    flex: 1;
-    background: var(--c-surface-input);
-    border: 1px solid var(--c-border);
-    color: var(--c-text-primary);
-    padding: 8px;
-    border-radius: 8px;
-    outline: none;
-    width: 100%;
-    min-width: 0;
-    font-size: 13px;
-  }
-  .save {
-    background: var(--c-surface-button);
-    border: 1px solid var(--c-border);
-    color: var(--c-text-primary);
-    padding: 0 10px;
-    border-radius: 8px;
-    cursor: pointer;
-    font-size: 12px;
-    font-weight: 700;
-  }
-  .save:hover {
-    background: var(--c-surface-hover);
-  }
-
   .footer {
     padding: 20px 0;
     text-align: center;
@@ -495,11 +436,6 @@
     .label-text.hidden {
       opacity: 1 !important;
     }
-    .settings-wrapper.hidden {
-      opacity: 1 !important;
-      height: auto !important;
-      pointer-events: auto !important;
-    }
     .footer-text.hidden {
       opacity: 0.5 !important;
     }
@@ -518,9 +454,6 @@
       /* margin 12px -> 12 left. Center is 40. Icon half is 12. 
          Pad = 40 - 12 - 12 = 16px. Same math holds! */
       padding-left: 16px;
-    }
-    .settings {
-      padding: 4px 0 0; /* Adjusted for tighter space */
     }
     .header {
       padding: 0 10px;

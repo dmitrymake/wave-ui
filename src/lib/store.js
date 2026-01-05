@@ -370,3 +370,15 @@ export const currentArtistImage = derived(currentSong, ($song) => {
 });
 
 export const coverUrl = currentCover;
+
+// OPTIONAL ALARM FUNCTIONS
+const savedAlarmTime = localStorage.getItem("alarmTime") || "08:00";
+const savedAlarmEnabled = localStorage.getItem("alarmEnabled") === "true";
+
+export const alarmTime = writable(savedAlarmTime);
+export const isAlarmEnabled = writable(savedAlarmEnabled);
+
+alarmTime.subscribe((val) => localStorage.setItem("alarmTime", val));
+isAlarmEnabled.subscribe((val) =>
+  localStorage.setItem("alarmEnabled", String(val)),
+);

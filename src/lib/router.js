@@ -57,6 +57,9 @@ export const Router = {
       case "playlists":
         this.setRootTab("playlists");
         break;
+      case "settings":
+        this.setRootTab("settings");
+        break;
       case "favorites":
         activeMenuTab.set("favorites");
         navigationStack.set([

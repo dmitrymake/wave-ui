@@ -2,24 +2,50 @@
   import { fade, scale } from "svelte/transition";
   import { modal, closeModal } from "../lib/store";
 
+  let isError = false;
+  let inputRef;
+
+  $: if (!$modal.isOpen) {
+    isError = false;
+  }
+
   function handleConfirm() {
-    if ($modal.onConfirm) {
-      if ($modal.type === "prompt") {
-        $modal.onConfirm($modal.inputValue);
-      } else {
-        $modal.onConfirm();
+    if ($modal.type === "prompt") {
+      const val = $modal.inputValue ? $modal.inputValue.trim() : "";
+
+      if (val.length === 0) {
+        triggerError();
+        return;
       }
+
+      if ($modal.onConfirm) $modal.onConfirm(val);
+    } else {
+      // Обычный Confirm
+      if ($modal.onConfirm) $modal.onConfirm();
     }
+
     closeModal();
+  }
+
+  function triggerError() {
+    isError = true;
+    // Фокус обратно в поле
+    if (inputRef) inputRef.focus();
+
+    // Сбрасываем класс анимации через 400мс, чтобы можно было вызвать её снова
+    setTimeout(() => {
+      isError = false;
+    }, 400);
   }
 
   function handleBackdropClick() {
     closeModal();
   }
 
-  // Обработка Enter в инпуте
   function handleKeydown(e) {
     if (e.key === "Enter") handleConfirm();
+    // Скрываем ошибку, если пользователь начал печатать
+    if (isError) isError = false;
   }
 </script>
 
@@ -44,8 +70,10 @@
         {#if $modal.type === "prompt"}
           <div class="input-wrapper">
             <input
+              bind:this={inputRef}
               type="text"
               class="modal-input"
+              class:shake-error={isError}
               placeholder={$modal.placeholder}
               bind:value={$modal.inputValue}
               on:keydown={handleKeydown}
@@ -70,11 +98,32 @@
 {/if}
 
 <style>
+  @keyframes shake {
+    0%,
+    100% {
+      transform: translateX(0);
+    }
+    20%,
+    60% {
+      transform: translateX(-5px);
+    }
+    40%,
+    80% {
+      transform: translateX(5px);
+    }
+  }
+
+  .shake-error {
+    animation: shake 0.3s ease-in-out;
+    border-color: #ff4444 !important; /* Красная рамка */
+    box-shadow: 0 0 0 1px rgba(255, 68, 68, 0.3);
+  }
+
   .backdrop {
     position: fixed;
     inset: 0;
     z-index: var(--z-modal);
-    background: rgba(0, 0, 0, 0.5); /* Немного темнее */
+    background: rgba(0, 0, 0, 0.6);
     backdrop-filter: blur(4px);
     display: flex;
     align-items: center;
@@ -122,7 +171,6 @@
     color: var(--c-text-primary);
   }
 
-  /* Стили для инпута */
   .input-wrapper {
     margin-top: 16px;
   }
@@ -137,6 +185,7 @@
     font-size: 14px;
     outline: none;
     box-sizing: border-box;
+    transition: border-color 0.2s;
   }
 
   .modal-input:focus {
