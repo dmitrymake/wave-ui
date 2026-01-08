@@ -234,7 +234,6 @@
     transition:
       color 0.2s,
       background 0.2s;
-    /* Position absolutely to keep it fixed while menu shrinks */
     position: absolute;
     left: 8px;
     z-index: 10;

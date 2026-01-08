@@ -514,7 +514,7 @@
 
   .header-sub-text {
     font-size: 20px;
-    color: rgba(255, 255, 255, 0.7);
+    color: var(--c-white-60);
     margin: 0;
     overflow: hidden;
     text-overflow: ellipsis;

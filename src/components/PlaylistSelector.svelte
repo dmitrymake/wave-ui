@@ -68,7 +68,7 @@
     position: fixed;
     inset: 0;
     z-index: var(--z-modal);
-    background: rgba(0, 0, 0, 0.7);
+    background: var(--c-black-70);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -84,7 +84,7 @@
     border-radius: 16px;
     display: flex;
     flex-direction: column;
-    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+    box-shadow: 0 10px 30px var(c-black-70);
     border: 1px solid var(--c-border);
   }
 

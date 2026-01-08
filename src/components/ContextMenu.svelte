@@ -392,7 +392,7 @@
     width: 220px;
     max-height: 400px;
     border-radius: 12px;
-    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.7);
+    box-shadow: 0 10px 40px var(--c-black-70);
     display: flex;
     flex-direction: column;
     overflow: hidden;
@@ -403,7 +403,7 @@
   .menu-header {
     padding: 0;
     height: 50px;
-    background: var(--c-white-04);
+    background: var(--c-white-10);
     border-bottom: 1px solid var(--c-border);
     display: flex;
     align-items: center;

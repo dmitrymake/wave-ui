@@ -334,7 +334,7 @@
     background: var(--c-text-primary);
     transform: scale(0);
     transition: transform 0.2s;
-    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.5);
+    box-shadow: 0 1px 3px var(--c-black-50);
   }
   .progress-bar:hover .knob {
     transform: scale(1);
@@ -540,7 +540,7 @@
     position: absolute;
     top: 50%;
     transform: translate(-50%, -50%);
-    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.4);
+    box-shadow: 0 1px 3px var(--c-black-40);
     pointer-events: none;
     transition: transform 0.1s;
   }

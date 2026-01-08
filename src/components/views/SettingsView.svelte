@@ -31,7 +31,6 @@
 
     <div class="section">
       <div class="section-header">
-        <span class="icon-svg">{@html ICONS.SETTINGS || ICONS.MENU}</span>
         <span>Connection</span>
       </div>
       <div class="card">
@@ -227,7 +226,7 @@
   }
   .mono {
     font-family: monospace;
-    background: rgba(255, 255, 255, 0.1);
+    background: var(--c-white-10);
     padding: 2px 6px;
     border-radius: 4px;
   }

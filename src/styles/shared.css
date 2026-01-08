@@ -1,7 +1,5 @@
 :root {
   /* --- 0. ATOMIC TRANSPARENCIES (THE SOURCE OF TRUTH) --- */
-  --c-white-04: rgba(255, 255, 255, 0.04);
-  --c-white-05: rgba(255, 255, 255, 0.05);
   --c-white-10: rgba(255, 255, 255, 0.1);
   --c-white-20: rgba(255, 255, 255, 0.2);
   --c-white-30: rgba(255, 255, 255, 0.3);
@@ -36,7 +34,7 @@
   --c-bg-main: #121212;
   --c-bg-sidebar: #000000;
   --c-bg-card: #1a1a1a;
-  --c-bg-placeholder: var(--c-white-04);
+  --c-bg-placeholder: var(--c-white-10);
   --c-bg-glass: rgba(18, 18, 18, 0.95); 
   --c-bg-toast: #333333;
 
@@ -47,12 +45,12 @@
   --c-surface-active: var(--c-white-20);
   --c-surface-input: #1a1a1a;
   --c-surface-input-focus: var(--c-white-10);
-  --c-surface-button: var(--c-white-05);
+  --c-surface-button: var(--c-white-10);
   --c-surface-button-hover: var(--c-white-10);
   
   /* Drag & Drop Surfaces */
   --c-surface-drag-phantom: #1a1a1a;
-  --c-surface-drag-land: var(--c-white-05);
+  --c-surface-drag-land: var(--c-white-10);
 
   /* Progress Bars */
   --c-rail-bg: var(--c-white-20);
@@ -65,7 +63,7 @@
      5. BORDERS & SEPARATORS
      ========================= */
   --c-border: var(--c-white-10);
-  --c-border-dim: var(--c-white-05);
+  --c-border-dim: var(--c-white-10);
   --c-border-bright: var(--c-white-20);
   --c-border-dashed: var(--c-white-20);
   --c-border-dashed-hover: var(--c-white-50);

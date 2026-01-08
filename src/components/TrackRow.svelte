@@ -242,7 +242,6 @@
     background: var(--c-surface-hover);
   }
 
-  /* Solid active background only for EXACT match (Queue) */
   .row.active {
     background: var(--c-surface-active);
   }

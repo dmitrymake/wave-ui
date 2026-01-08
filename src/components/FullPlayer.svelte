@@ -368,7 +368,6 @@
     );
   }
 
-  /* DOCKED MODE OVERRIDES */
   .is-docked .bg-img {
     filter: blur(35px) brightness(1.2) saturate(3.5);
     opacity: 1;
@@ -591,7 +590,7 @@
     height: 14px;
     background: #fff;
     border-radius: 50%;
-    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.5);
+    box-shadow: 0 2px 4px var(--c-black-50);
     pointer-events: none;
   }
 

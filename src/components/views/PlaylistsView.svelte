@@ -559,7 +559,7 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    color: rgba(255, 255, 255, 0.9);
+    color: var(--c-white-90);
   }
   .icon-wrap :global(svg) {
     width: 100%;
@@ -575,7 +575,7 @@
     position: absolute;
     top: 8px;
     right: 8px;
-    background: rgba(0, 0, 0, 0.5);
+    background: var(--c-white-50);
     border: none;
     border-radius: 50%;
     width: 28px;
@@ -595,7 +595,7 @@
     opacity: 1;
   }
   .card-menu-btn:hover {
-    background: rgba(0, 0, 0, 0.8);
+    background: var(-c-black-90);
   }
   .card-menu-btn :global(svg) {
     width: 16px;

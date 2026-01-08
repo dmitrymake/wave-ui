@@ -119,7 +119,7 @@
     position: fixed;
     inset: 0;
     z-index: var(--z-modal);
-    background: rgba(0, 0, 0, 0.6);
+    background: var(--c-black-60);
     backdrop-filter: blur(4px);
     display: flex;
     align-items: center;
@@ -132,7 +132,7 @@
     width: 100%;
     max-width: 320px;
     border-radius: 12px;
-    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.7);
+    box-shadow: 0 10px 40px var(--c-black-70);
     border: 1px solid var(--c-border);
     overflow: hidden;
     display: flex;
@@ -141,7 +141,7 @@
 
   .modal-header {
     height: 50px;
-    background: rgba(255, 255, 255, 0.04);
+    background: var(c-white-10);
     border-bottom: 1px solid var(--c-border);
     display: flex;
     align-items: center;
