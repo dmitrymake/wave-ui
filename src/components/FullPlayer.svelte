@@ -102,6 +102,23 @@
 
   let isDraggingVol = false;
   let volumeBar;
+  let lastVolume = 50;
+
+  function toggleMute() {
+    if ($status.volume > 0) {
+      lastVolume = $status.volume;
+      MPD.setVolume(0);
+    } else {
+      MPD.setVolume(lastVolume > 0 ? lastVolume : 30);
+    }
+  }
+
+  $: volumeIcon =
+    $status.volume === 0
+      ? ICONS.VOLUME_MUTE
+      : $status.volume < 50
+        ? ICONS.VOLUME_MEDIUM
+        : ICONS.VOLUME_FULL;
 
   function handleVolStart(e) {
     isDraggingVol = true;
@@ -280,7 +297,10 @@
       </div>
 
       <div class="volume-row">
-        <div class="vol-icon">{@html ICONS.VOLUME}</div>
+        <button class="btn-icon small vol-btn" on:click={toggleMute}>
+          {@html volumeIcon}
+        </button>
+
         <div
           class="volume-hit-area"
           bind:this={volumeBar}
@@ -294,6 +314,10 @@
               style="left: {$status.volume}%; right: auto;"
             ></div>
           </div>
+        </div>
+
+        <div class="vol-icon-static">
+          {@html ICONS.VOLUME_FULL}
         </div>
       </div>
     </div>
@@ -634,10 +658,13 @@
   .side-btn:active {
     opacity: 0.7;
   }
-  .side-btn.active,
-  .side-btn.liked {
+  .side-btn.active {
     color: var(--c-accent);
   }
+  .side-btn.liked {
+    color: var(--c-heart);
+  }
+
   .side-btn :global(svg) {
     width: 24px;
     height: 24px;
@@ -703,19 +730,51 @@
   .volume-row {
     display: flex;
     align-items: center;
-    gap: 16px;
+    gap: 12px;
     opacity: 0.9;
     padding: 0 4px;
   }
-  .vol-icon :global(svg) {
+
+  /* NEW STYLES FOR VOLUME CONTROLS */
+  .vol-btn {
+    background: transparent;
+    border: none;
+    color: var(--c-text-secondary);
+    padding: 8px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    transition:
+      color 0.2s,
+      background 0.2s;
+  }
+  .vol-btn:hover {
+    color: var(--c-text-primary);
+    background: var(--c-white-10);
+  }
+  .vol-btn :global(svg) {
+    width: 24px;
+    height: 24px;
+  }
+
+  .vol-icon-static {
+    color: var(--c-text-secondary);
+    opacity: 0.5;
+    display: flex;
+    align-items: center;
+  }
+  .vol-icon-static :global(svg) {
     width: 20px;
     height: 20px;
-    fill: var(--c-text-secondary);
   }
+
   .is-docked .volume-row {
     gap: 8px;
   }
-  .is-docked .vol-icon :global(svg) {
+  .is-docked .vol-btn :global(svg),
+  .is-docked .vol-icon-static :global(svg) {
     width: 16px;
     height: 16px;
   }

@@ -1,7 +1,7 @@
 <script>
   import { createEventDispatcher } from "svelte";
   import { fade } from "svelte/transition";
-  import logo from "../assets/wave-logo.svg";
+  import logo from "../assets/wave-logo.svg?raw";
   import { ICONS } from "../lib/icons";
   import {
     activeMenuTab,
@@ -100,7 +100,9 @@
       </button>
 
       <div class="logo-wrapper" class:hidden={$isSidebarCollapsed}>
-        <img src={logo} alt="Logo" class="logo" />
+        <div class="logo">
+          {@html logo}
+        </div>
       </div>
     </div>
 
@@ -279,8 +281,25 @@
 
   .logo {
     height: 32px;
-    filter: drop-shadow(0 0 10px var(--c-shadow-glow-accent));
-    display: block;
+    color: var(--c-accent);
+    filter: drop-shadow(0 0 8px var(--c-shadow-glow-accent));
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .logo :global(svg) {
+    height: 100%;
+    width: auto;
+    fill: currentColor !important;
+  }
+
+  .logo :global(svg path),
+  .logo :global(svg rect),
+  .logo :global(svg circle),
+  .logo :global(svg polygon) {
+    fill: currentColor !important;
+    stroke: none;
   }
 
   .mobile-close {

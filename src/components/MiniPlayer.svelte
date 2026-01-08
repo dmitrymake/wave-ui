@@ -90,6 +90,25 @@
     window.removeEventListener("mouseup", onWinUp);
   }
 
+  let lastVolume = 50;
+
+  function toggleMute(e) {
+    e.stopPropagation();
+    if ($status.volume > 0) {
+      lastVolume = $status.volume;
+      MPD.setVolume(0);
+    } else {
+      MPD.setVolume(lastVolume > 0 ? lastVolume : 30);
+    }
+  }
+
+  $: volumeIcon =
+    $status.volume === 0
+      ? ICONS.VOLUME_MUTE
+      : $status.volume < 50
+        ? ICONS.VOLUME_MEDIUM
+        : ICONS.VOLUME_FULL;
+
   function handleVolDown(e) {
     isDraggingVol = true;
     const vol = Math.round(getPct(e, volumeBar) * 100);
@@ -117,7 +136,10 @@
 
   function handleContext(e) {
     e.stopPropagation();
-    openContextMenu(e, $currentSong, { type: "general", source: "miniplayer" });
+    openContextMenu(e, $currentSong, {
+      type: "general",
+      source: "miniplayer",
+    });
   }
 
   function handleLongPress(e) {
@@ -241,7 +263,10 @@
       </div>
 
       <div class="volume desktop">
-        <div class="vol-icon">{@html ICONS.VOLUME}</div>
+        <button class="vol-btn-mini" on:click={toggleMute} title="Mute/Unmute">
+          {@html volumeIcon}
+        </button>
+
         <div
           class="custom-slider"
           bind:this={volumeBar}
@@ -482,6 +507,12 @@
     opacity: 1;
     color: var(--c-accent);
   }
+
+  /* NEW COLOR LOGIC */
+  .btn-icon.liked {
+    color: var(--c-heart);
+  }
+
   .dot {
     position: absolute;
     bottom: 6px;
@@ -499,8 +530,26 @@
     justify-content: flex-end;
     gap: 12px;
   }
-  .vol-icon :global(svg) {
-    fill: var(--c-text-secondary);
+
+  .vol-btn-mini {
+    background: transparent;
+    border: none;
+    color: var(--c-text-secondary);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 4px;
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    transition: color 0.2s;
+  }
+  .vol-btn-mini:hover {
+    color: var(--c-text-primary);
+    background: var(--c-white-10);
+  }
+  .vol-btn-mini :global(svg) {
     width: 20px;
     height: 20px;
   }

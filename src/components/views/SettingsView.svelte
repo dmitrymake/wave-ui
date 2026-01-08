@@ -1,7 +1,8 @@
 <script>
   import { fade } from "svelte/transition";
   import { CONFIG } from "../../config";
-  import { showToast } from "../../lib/store";
+  import { showToast, showModal, currentTheme } from "../../lib/store";
+  import { THEMES } from "../../lib/theme";
   import { ICONS } from "../../lib/icons";
 
   let ipAddress = CONFIG.MOODE_IP;
@@ -23,6 +24,25 @@
   function handleFeatureNotReady() {
     showToast("Coming soon in next update", "info");
   }
+
+  function openThemeSelector() {
+    const options = THEMES.map((t) => ({ label: t.label, value: t.id }));
+
+    showModal({
+      title: "Select Theme",
+      message: "Choose your preferred interface style:",
+      type: "select",
+      inputValue: $currentTheme,
+      options: options,
+      onConfirm: (val) => {
+        currentTheme.set(val);
+        showToast("Theme updated", "success");
+      },
+    });
+  }
+
+  $: activeThemeLabel =
+    THEMES.find((t) => t.id === $currentTheme)?.label || "Default";
 </script>
 
 <div class="view-container scrollable" in:fade={{ duration: 200 }}>
@@ -54,24 +74,27 @@
 
     <div class="section">
       <div class="section-header">
-        <span>Alarm Clock</span>
+        <span>Appearance</span>
       </div>
-      <div class="card clickable" on:click={handleFeatureNotReady}>
+      <div class="card clickable" on:click={openThemeSelector}>
         <div class="row space-between">
-          <span>Wake up time</span>
-          <span class="value">Coming Soon</span>
+          <span>Interface Theme</span>
+          <div class="row-gap">
+            <span class="value">{activeThemeLabel}</span>
+            <span class="chevron">{@html ICONS.NEXT}</span>
+          </div>
         </div>
       </div>
     </div>
 
     <div class="section">
       <div class="section-header">
-        <span>Appearance</span>
+        <span>Alarm Clock</span>
       </div>
       <div class="card clickable" on:click={handleFeatureNotReady}>
         <div class="row space-between">
-          <span>Theme</span>
-          <span class="value">Dark (Default)</span>
+          <span>Wake up time</span>
+          <span class="value">Coming Soon</span>
         </div>
       </div>
     </div>
@@ -136,20 +159,8 @@
     padding-left: 4px;
   }
 
-  .icon-svg {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    width: 24px;
-    height: 24px;
-  }
-  .icon-svg :global(svg) {
-    width: 100%;
-    height: 100%;
-  }
-
   .card {
-    background: var(--c-surface);
+    background: var(--c-bg-card);
     border: 1px solid var(--c-border);
     border-radius: 12px;
     padding: 16px;
@@ -174,6 +185,11 @@
   .row.space-between {
     justify-content: space-between;
     width: 100%;
+  }
+  .row-gap {
+    display: flex;
+    align-items: center;
+    gap: 8px;
   }
 
   label {
@@ -216,6 +232,17 @@
     font-size: 14px;
   }
 
+  .chevron {
+    width: 16px;
+    height: 16px;
+    color: var(--c-text-muted);
+    display: flex;
+  }
+  .chevron :global(svg) {
+    width: 100%;
+    height: 100%;
+  }
+
   .info-row {
     display: flex;
     justify-content: space-between;
@@ -226,7 +253,7 @@
   }
   .mono {
     font-family: monospace;
-    background: var(--c-white-10);
+    background: var(--c-surface-hover);
     padding: 2px 6px;
     border-radius: 4px;
   }

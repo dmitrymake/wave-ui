@@ -1,5 +1,6 @@
 import { writable, derived, get } from "svelte/store";
 import { getStationImageUrl } from "./utils";
+import { THEMES } from "./theme";
 import md5 from "md5";
 
 export const connectionStatus = writable("Disconnected");
@@ -15,6 +16,27 @@ export function showToast(msg, type = "info") {
   }, 3000);
 }
 
+const savedTheme = localStorage.getItem("app_theme") || "default";
+export const currentTheme = writable(savedTheme);
+
+currentTheme.subscribe((id) => {
+  if (typeof document === "undefined") return;
+
+  localStorage.setItem("app_theme", id);
+
+  // Находим объект темы в массиве
+  const theme = THEMES.find((t) => t.id === id);
+  if (!theme) return;
+
+  const root = document.documentElement;
+
+  document.body.setAttribute("data-theme", id);
+
+  Object.entries(theme.colors).forEach(([key, value]) => {
+    root.style.setProperty(key, value);
+  });
+});
+
 export const modal = writable({
   isOpen: false,
   title: "",
@@ -22,9 +44,10 @@ export const modal = writable({
   confirmLabel: "Confirm",
   cancelLabel: "Cancel",
   onConfirm: null,
-  type: "confirm", // 'confirm' | 'alert' | 'prompt'
+  type: "confirm", // 'confirm' | 'alert' | 'prompt' | 'select'
   inputValue: "",
   placeholder: "",
+  options: [],
 });
 
 export function showModal({
@@ -35,6 +58,7 @@ export function showModal({
   type = "confirm",
   inputValue = "",
   placeholder = "",
+  options = [],
   onConfirm = () => {},
 }) {
   modal.set({
@@ -46,6 +70,7 @@ export function showModal({
     type,
     inputValue,
     placeholder,
+    options,
     onConfirm,
   });
 }
@@ -61,6 +86,7 @@ export function closeModal() {
     type: "confirm",
     inputValue: "",
     placeholder: "",
+    options: [],
   });
 }
 

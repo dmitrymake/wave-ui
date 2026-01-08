@@ -324,7 +324,6 @@
     font-variant-numeric: tabular-nums;
   }
 
-  /* Only color number/text if solid active (Queue context) */
   .active .num {
     color: var(--c-accent);
     font-weight: 700;

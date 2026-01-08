@@ -502,7 +502,7 @@
   }
 
   .icon.liked {
-    color: var(--c-accent);
+    color: var(--c-heart);
   }
   .icon.liked :global(svg) {
     stroke: none;

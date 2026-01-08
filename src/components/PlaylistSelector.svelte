@@ -84,7 +84,7 @@
     border-radius: 16px;
     display: flex;
     flex-direction: column;
-    box-shadow: 0 10px 30px var(c-black-70);
+    box-shadow: 0 10px 30px var(c-black-50);
     border: 1px solid var(--c-border);
   }
 

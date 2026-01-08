@@ -26,6 +26,11 @@
     closeModal();
   }
 
+  function handleSelect(optionValue) {
+    if ($modal.onConfirm) $modal.onConfirm(optionValue);
+    closeModal();
+  }
+
   function triggerError() {
     isError = true;
     if (inputRef) inputRef.focus();
@@ -40,7 +45,7 @@
   }
 
   function handleKeydown(e) {
-    if (e.key === "Enter") handleConfirm();
+    if (e.key === "Enter" && $modal.type !== "select") handleConfirm();
     if (isError) isError = false;
   }
 </script>
@@ -61,7 +66,9 @@
       </div>
 
       <div class="modal-body">
-        <p class="modal-message">{$modal.message}</p>
+        {#if $modal.message}
+          <p class="modal-message">{$modal.message}</p>
+        {/if}
 
         {#if $modal.type === "prompt"}
           <div class="input-wrapper">
@@ -76,19 +83,36 @@
               autoFocus
             />
           </div>
+        {:else if $modal.type === "select"}
+          <div class="select-list">
+            {#each $modal.options as opt}
+              <button
+                class="select-item"
+                class:active={opt.value === $modal.inputValue}
+                on:click={() => handleSelect(opt.value)}
+              >
+                {opt.label}
+                {#if opt.value === $modal.inputValue}
+                  <span class="check">✓</span>
+                {/if}
+              </button>
+            {/each}
+          </div>
         {/if}
       </div>
 
-      <div class="modal-actions">
-        {#if $modal.type === "confirm" || $modal.type === "prompt"}
-          <button class="btn cancel" on:click={closeModal}>
-            {$modal.cancelLabel}
+      {#if $modal.type !== "select"}
+        <div class="modal-actions">
+          {#if $modal.type === "confirm" || $modal.type === "prompt"}
+            <button class="btn cancel" on:click={closeModal}>
+              {$modal.cancelLabel}
+            </button>
+          {/if}
+          <button class="btn confirm" on:click={handleConfirm}>
+            {$modal.confirmLabel}
           </button>
-        {/if}
-        <button class="btn confirm" on:click={handleConfirm}>
-          {$modal.confirmLabel}
-        </button>
-      </div>
+        </div>
+      {/if}
     </div>
   </div>
 {/if}
@@ -129,6 +153,7 @@
 
   .modal-card {
     background: #1e1e1e;
+    background: var(--c-bg-card);
     width: 100%;
     max-width: 320px;
     border-radius: 12px;
@@ -141,7 +166,7 @@
 
   .modal-header {
     height: 50px;
-    background: var(c-white-10);
+    background: var(--c-white-10);
     border-bottom: 1px solid var(--c-border);
     display: flex;
     align-items: center;
@@ -173,7 +198,7 @@
 
   .modal-input {
     width: 100%;
-    background: var(--c-surface-input, #2a2a2a);
+    background: var(--c-surface-input);
     border: 1px solid var(--c-border);
     color: var(--c-text-primary);
     padding: 10px 12px;
@@ -186,6 +211,43 @@
 
   .modal-input:focus {
     border-color: var(--c-accent);
+  }
+
+  .select-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin-top: 10px;
+  }
+
+  .select-item {
+    background: var(--c-surface-hover);
+    border: 1px solid transparent;
+    color: var(--c-text-primary);
+    padding: 12px;
+    border-radius: 8px;
+    text-align: left;
+    font-size: 14px;
+    cursor: pointer;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    transition: all 0.2s;
+  }
+
+  .select-item:hover {
+    background: var(--c-surface-active);
+  }
+
+  .select-item.active {
+    border-color: var(--c-accent);
+    background: var(--c-surface-active);
+    color: var(--c-accent);
+    font-weight: 600;
+  }
+
+  .check {
+    font-weight: bold;
   }
 
   .modal-actions {

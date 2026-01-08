@@ -14,6 +14,7 @@
     currentSong,
     activePlaylistName,
     showToast,
+    currentTheme,
   } from "../../lib/store";
   import Skeleton from "../Skeleton.svelte";
   import * as MPD from "../../lib/mpd";
@@ -281,6 +282,43 @@
   }
 
   $: isFavPlaylist = currentView?.data?.name === "Favorites";
+
+  function resolveCardStyle(playlist) {
+    if (playlist.name === "Favorites") {
+      if ($currentTheme === "gruvbox") {
+        const c = "var(--c-heart)";
+        return `background: linear-gradient(135deg, ${c}, transparent); background-color: ${c};`;
+      }
+      return `background: linear-gradient(135deg, hsl(348, 95%, 58%), hsl(348, 90%, 40%));`;
+    }
+
+    if ($currentTheme === "gruvbox") {
+      return `background: linear-gradient(135deg, ${playlist.colorVar}, transparent); background-color: ${playlist.colorVar};`;
+    }
+    return `background: ${playlist.color}`;
+  }
+
+  function resolveHeaderStyle(data) {
+    if (!data) return "";
+
+    if (data.name === "Favorites") {
+      if ($currentTheme === "gruvbox") {
+        const c = "var(--c-heart)";
+        return `background: linear-gradient(135deg, ${c}, transparent); background-color: ${c};`;
+      }
+      return `background: linear-gradient(135deg, hsl(348, 95%, 58%), hsl(348, 90%, 40%));`;
+    }
+
+    const defaultColor = "var(--c-bg-card)";
+
+    if ($currentTheme === "gruvbox") {
+      const c = data.colorVar || data.color || defaultColor;
+      return `background: linear-gradient(135deg, ${c}, transparent); background-color: ${c};`;
+    }
+
+    const c = data.color || data.colorVar || defaultColor;
+    return `background: ${c}`;
+  }
 </script>
 
 <div class="view-container" class:scrollable={!isDetailsView}>
@@ -324,12 +362,7 @@
     >
       <div slot="header" class="content-padded">
         <div class="view-header">
-          <div
-            class="header-art"
-            style="background: {isFavPlaylist
-              ? 'linear-gradient(135deg, hsl(348, 95%, 58%), hsl(348, 90%, 40%))'
-              : currentView.data.color || '#333'};"
-          >
+          <div class="header-art" style={resolveHeaderStyle(currentView.data)}>
             <div class="header-icon-wrap">
               {@html isFavPlaylist ? ICONS.HEART_FILLED : ICONS.PLAYLISTS}
             </div>
@@ -439,7 +472,7 @@
             >
               <div
                 class="card-img-container"
-                style="background: {playlist.color};"
+                style={resolveCardStyle(playlist)}
               >
                 <div class="icon-wrap">
                   {@html isFav ? ICONS.HEART_FILLED : ICONS.PLAYLISTS}
@@ -479,7 +512,7 @@
               <div class="music-card" on:click={() => openPlaylist(playlist)}>
                 <div
                   class="card-img-container"
-                  style="background: {playlist.color}; aspect-ratio: 1;"
+                  style={resolveCardStyle(playlist)}
                 >
                   <div class="icon-wrap">
                     {@html isFav ? ICONS.HEART_FILLED : ICONS.PLAYLISTS}
@@ -575,7 +608,7 @@
     position: absolute;
     top: 8px;
     right: 8px;
-    background: var(--c-white-50);
+    background: var(--c-black-20);
     border: none;
     border-radius: 50%;
     width: 28px;
@@ -595,7 +628,7 @@
     opacity: 1;
   }
   .card-menu-btn:hover {
-    background: var(-c-black-90);
+    background: var(--c-black-50);
   }
   .card-menu-btn :global(svg) {
     width: 16px;

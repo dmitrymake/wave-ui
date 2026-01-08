@@ -27,6 +27,7 @@
   --c-text-muted: #888888;
   --c-text-inverse: #000000;
 
+
   /* =========================
      3. PALETTE: BACKGROUNDS
      ========================= */
@@ -37,6 +38,9 @@
   --c-bg-placeholder: var(--c-white-10);
   --c-bg-glass: rgba(18, 18, 18, 0.95); 
   --c-bg-toast: #333333;
+
+  --c-heart: #ff4444;
+  --c-error: #ff4444;
 
   /* =========================
      4. PALETTE: INTERACTIVE SURFACES
@@ -180,7 +184,7 @@ button {
 
 .btn-icon.active, 
 .btn-icon.liked {
-  color: var(--c-accent);
+  color: var(--c-heart);
 }
 
 .btn-icon svg {

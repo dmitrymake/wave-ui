@@ -40,8 +40,10 @@ const cleanUrl = (url) => {
     .replace(/\/$/, "");
 };
 
+// --- ОРИГИНАЛЬНЫЙ HSL ГРАДИЕНТ (Для Default темы) ---
 function getGradient(name) {
   if (name === "Favorites") {
+    // Тот самый оригинальный градиент: ярко-красный в темно-красный
     return `linear-gradient(135deg, hsl(348, 95%, 58%), hsl(348, 90%, 40%))`;
   }
   let hash = 0;
@@ -50,6 +52,17 @@ function getGradient(name) {
   }
   const hue = Math.abs(hash % 360);
   return `linear-gradient(135deg, hsl(${hue}, 60%, 40%), hsl(${(hue + 40) % 360}, 60%, 30%))`;
+}
+
+// --- НОВАЯ ЛОГИКА (Для тем вроде Gruvbox) ---
+function assignColorVar(name) {
+  if (name === "Favorites") return "var(--c-heart)";
+  let hash = 0;
+  for (let i = 0; i < name.length; i++) {
+    hash = name.charCodeAt(i) + ((hash << 5) - hash);
+  }
+  const index = Math.abs(hash % 6);
+  return `var(--c-pl-${index})`;
 }
 
 export const LibraryActions = {
@@ -90,7 +103,8 @@ export const LibraryActions = {
 
       const enhanced = rawPlaylists.map((pl) => ({
         ...pl,
-        color: getGradient(pl.name),
+        color: getGradient(pl.name), // LEGACY STYLE (Default)
+        colorVar: assignColorVar(pl.name), // THEME STYLE (Gruvbox)
       }));
 
       playlists.set(enhanced);
