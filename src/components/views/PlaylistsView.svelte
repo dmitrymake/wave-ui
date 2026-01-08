@@ -32,17 +32,14 @@
   let pressedPlayAll = false;
   let pressedAddToQueue = false;
 
-  // SEARCH STATE (Root View Only)
   let searchTerm = "";
   let isDeepSearching = false;
   let searchDebounceTimer;
   let currentSearchId = 0;
 
-  // Search Results
   let matchedPlaylists = [];
   let searchResultsGrouped = [];
 
-  // Header Data
   let headerTotalDuration = "";
   let headerQuality = "";
 
@@ -53,7 +50,6 @@
   $: currentView = $navigationStack[$navigationStack.length - 1];
   $: isDetailsView = currentView.view === "details";
 
-  // Reset state on view navigation
   let lastViewJson = "";
   $: {
     const currentJson = JSON.stringify(currentView);
@@ -69,7 +65,6 @@
     }
   }
 
-  // --- DEEP SEARCH LOGIC (Root View Only) ---
   function handleSearchInput(e) {
     searchTerm = e.target.value;
     clearTimeout(searchDebounceTimer);
@@ -93,12 +88,10 @@
     isDeepSearching = true;
     const q = query.toLowerCase();
 
-    // 1. Filter Playlists by Name
     matchedPlaylists = $playlists.filter((p) =>
       p.name.toLowerCase().includes(q),
     );
 
-    // 2. Search Tracks inside All Playlists
     let newGroups = [];
     const targets = $playlists.filter((p) => p.name !== "Favorites");
 
@@ -111,7 +104,6 @@
         );
         const tracks = MpdParser.parseTracks(raw);
 
-        // ВАЖНО: Сначала мапим индекс, потому что MPD listplaylistinfo не возвращает поле Pos
         const tracksWithPos = tracks.map((t, i) => ({ ...t, playlistPos: i }));
 
         const matches = tracksWithPos.filter(
@@ -153,7 +145,22 @@
     }
   }
 
-  // --- STANDARD COMPONENT LOGIC ---
+  function playFoundTracks(tracks, playlistName) {
+    showModal({
+      title: "Play Search Results?",
+      message: `This will clear your queue and play ${tracks.length} matching tracks from "${playlistName}".`,
+      confirmLabel: "Play",
+      type: "confirm",
+      onConfirm: () => {
+        MPD.playAllTracks(tracks);
+      },
+    });
+  }
+
+  function queueFoundTracks(tracks) {
+    if (!tracks || tracks.length === 0) return;
+    MPD.addAllToQueue(tracks);
+  }
 
   $: if (isDetailsView && $activePlaylistTracks.length > 0) {
     calculateMeta($activePlaylistTracks);
@@ -539,7 +546,27 @@
                   <div class="group-icon">{@html ICONS.PLAYLISTS}</div>
                   <div class="group-title">{group.playlist.name}</div>
                   <div class="group-count">{group.tracks.length}</div>
+
+                  <div class="group-actions">
+                    <button
+                      class="btn-icon small"
+                      title="Play matches"
+                      on:click|stopPropagation={() =>
+                        playFoundTracks(group.tracks, group.playlist.name)}
+                    >
+                      {@html ICONS.PLAY}
+                    </button>
+                    <button
+                      class="btn-icon small"
+                      title="Add matches to Queue"
+                      on:click|stopPropagation={() =>
+                        queueFoundTracks(group.tracks)}
+                    >
+                      {@html ICONS.ADD}
+                    </button>
+                  </div>
                 </div>
+
                 <div class="group-tracks">
                   {#each group.tracks as track (track._uid)}
                     <TrackRow
@@ -635,7 +662,6 @@
     height: 16px;
   }
 
-  /* Search Styles */
   .search-input-container {
     display: flex;
     align-items: center;
@@ -736,7 +762,6 @@
     background: transparent;
   }
 
-  /* Grouped Search Results Styles */
   .grouped-results {
     display: flex;
     flex-direction: column;
@@ -782,6 +807,15 @@
     font-size: 12px;
     color: var(--c-text-muted);
   }
+
+  .group-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-left: auto;
+    padding-left: 12px;
+  }
+
   .group-tracks {
     display: flex;
     flex-direction: column;

@@ -14,6 +14,7 @@
   overflow: hidden;
   display: flex;
   flex-direction: column;
+  background: var(--c-bg-main);
 }
 
 .view-container.scrollable,
@@ -36,16 +37,15 @@
 }
 
 /* =========================================
-   2. GRID & CARDS (New Design + Stability)
+   2. GRID & CARDS
    ========================================= */
 .music-grid {
   display: grid;
-  /* Используем размер 180px из нового дизайна, чтобы влезало больше */
-  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); 
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
   gap: 20px;
+  padding-bottom: 20px;
 }
 
-/* Поддержка горизонтального скролла из нового дизайна */
 .music-grid.horizontal {
   display: flex;
   flex-wrap: nowrap;
@@ -76,12 +76,16 @@
   flex-direction: column;
   padding: 12px;
   border-radius: var(--radius-lg);
-  transition: background 0.2s, transform 0.2s;
+  transition:
+    background 0.2s,
+    transform 0.2s;
+  margin: -10px;
 }
 
 .music-card:hover {
   background: var(--c-surface-hover);
   transform: translateY(-5px);
+  z-index: 2;
 }
 
 .music-card.is-active .card-img-container {
@@ -115,7 +119,6 @@
   margin-bottom: 4px;
 }
 
-/* Новые стили для подстрок из нового дизайна */
 .card-sub-row {
   display: flex;
   align-items: center;
@@ -132,7 +135,6 @@
   text-overflow: ellipsis;
 }
 
-/* Бейджи (Year, Quality) из нового дизайна */
 .card-badge {
   font-size: 10px;
   font-weight: 600;
@@ -170,7 +172,7 @@
 .overlay-icon {
   width: 48px;
   color: #fff;
-  filter: drop-shadow(0 2px 4px rgba(0,0,0,0.5));
+  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.5));
 }
 
 .icon-fallback {
@@ -184,7 +186,6 @@
   color: var(--c-icon-faint);
 }
 
-/* Dashed card for "New Playlist" */
 .dashed-cover {
   background: var(--c-border-dim) !important;
   border: 2px dashed var(--c-border-dashed);
@@ -197,7 +198,6 @@
   background: var(--c-surface-active) !important;
 }
 
-/* Icons within cards */
 .new-playlist-icon,
 .playlist-icon-bg {
   width: 40px;
@@ -235,7 +235,6 @@
    3. HEADERS
    ========================================= */
 
-/* --- A. STANDARD HEADER (Updated with New Design) --- */
 .view-header {
   display: flex;
   gap: 24px;
@@ -245,7 +244,7 @@
 }
 
 .header-art {
-  width: 200px; 
+  width: 200px;
   aspect-ratio: 1;
   border-radius: var(--radius-lg);
   overflow: hidden;
@@ -368,10 +367,8 @@
   margin-top: 0;
 }
 
-
 /* Responsive Styles */
 @media (max-width: 800px) {
-  /* Standard Header Mobile */
   .view-header {
     flex-direction: column;
     align-items: center;
@@ -404,10 +401,9 @@
 }
 
 @media (max-width: 600px) {
-  /* Simple Header Mobile Fixes (Restored) */
   .view-header-simple {
     display: flex !important;
-    flex-direction: row !important; 
+    flex-direction: row !important;
     justify-content: space-between !important;
     align-items: center !important;
     padding: 12px 16px !important;
@@ -423,7 +419,7 @@
   .view-header-simple .header-title {
     font-size: 18px !important;
   }
-  
+
   .view-header-simple .header-subtitle {
     font-size: 13px !important;
     display: block !important;
@@ -434,7 +430,7 @@
     margin: 0 !important;
     width: auto !important;
   }
-  
+
   .view-header-simple .btn-action {
     width: 36px !important;
     height: 36px !important;
@@ -445,8 +441,104 @@
    4. SPECIAL BUTTONS
    ========================================= */
 
-.btn-primary, .btn-secondary {
+.btn-primary,
+.btn-secondary,
+.btn-action {
   white-space: nowrap;
+  height: 40px;
+  border-radius: 20px;
+  border: none;
+  font-weight: 700;
+  font-size: 14px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 20px;
+  transition:
+    transform 0.1s,
+    background 0.2s,
+    opacity 0.2s;
+}
+
+.btn-primary:active,
+.btn-secondary:active,
+.btn-action:active {
+  transform: scale(0.97);
+}
+
+.btn-primary {
+  background: var(--c-accent);
+  color: var(--c-text-primary);
+  box-shadow: 0 4px 12px var(--c-shadow-glow-accent);
+}
+
+.btn-secondary {
+  background: var(--c-surface-button);
+  color: var(--c-text-primary);
+}
+.btn-secondary:hover {
+  background: var(--c-surface-button-hover);
+}
+
+.btn-action {
+  background: transparent;
+  border: 1px solid var(--c-border);
+  color: var(--c-text-primary);
+  padding: 0;
+  width: 40px;
+}
+
+.btn-action.active {
+  background: var(--c-accent);
+  border-color: var(--c-accent);
+  color: var(--c-text-primary);
+}
+
+.btn-action:hover {
+  background: var(--c-surface-hover);
+}
+
+/* Force icons in header actions to 18px */
+.btn-action :global(svg) {
+  width: 18px !important;
+  height: 18px !important;
+  stroke-width: 2;
+}
+
+/* Small icons in search/lists */
+.btn-icon.small {
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: none;
+  border-radius: 50%;
+  color: var(--c-text-secondary);
+  cursor: pointer;
+  transition:
+    background 0.2s,
+    color 0.2s;
+}
+
+.btn-icon.small:hover {
+  background: var(--c-surface-hover);
+  color: var(--c-text-primary);
+}
+
+/* Force icons in small buttons to 18px */
+.btn-icon.small :global(svg) {
+  width: 18px !important;
+  height: 18px !important;
+}
+
+/* Extra specificity for Group Header buttons in Playlists */
+.group-actions .btn-icon.small :global(svg) {
+  width: 18px !important;
+  height: 18px !important;
 }
 
 /* =========================================
@@ -462,7 +554,9 @@
   align-items: center;
   padding: 0 16px;
   margin-bottom: 24px;
-  transition: background var(--trans-fast), border-color var(--trans-fast);
+  transition:
+    background var(--trans-fast),
+    border-color var(--trans-fast);
   box-sizing: border-box;
 }
 
@@ -506,7 +600,7 @@
 }
 
 /* =========================================
-   6. DRAG AND DROP PHYSICS (Restored from Good file)
+   6. DRAG AND DROP PHYSICS
    ========================================= */
 
 .base-list-scroll-container img {
@@ -515,7 +609,6 @@
   pointer-events: none;
 }
 
-/* Phantom item being dragged */
 .floating-item {
   position: fixed;
   z-index: var(--z-drag-item);
@@ -525,39 +618,34 @@
   box-shadow: 0 20px 50px var(--c-shadow-phantom);
   transform: scale(1.02);
   opacity: 0.95;
-  transition: none; /* Important for instant follow */
+  transition: none;
 }
 
-/* Smooth drop animation */
 .floating-item.dropping {
-  transition: top 0.2s cubic-bezier(0.2, 0, 0, 1),
+  transition:
+    top 0.2s cubic-bezier(0.2, 0, 0, 1),
     left 0.2s cubic-bezier(0.2, 0, 0, 1) !important;
 }
 
-/* Row wrapper in list */
 .row-wrapper {
   display: block;
   position: relative;
-  /* Smooth shuffle animation */
   transition: transform 0.2s cubic-bezier(0.2, 0, 0, 1);
   will-change: transform;
   z-index: 1;
   touch-action: pan-y;
 }
 
-/* When reordering is active (JS driven) - kill transitions */
 .row-wrapper.no-transition {
   transition: none !important;
   transform: none !important;
 }
 
-/* The hole where the item was */
 .row-wrapper.ghost-placeholder {
   opacity: 0;
   transition: none;
 }
 
-/* Flash effect after drop */
 .row-wrapper.just-dropped {
   transition: none !important;
   animation: landDown 0.3s cubic-bezier(0.2, 0.8, 0.2, 1);
