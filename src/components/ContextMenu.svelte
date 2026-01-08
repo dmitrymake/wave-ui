@@ -403,7 +403,7 @@
   .menu-header {
     padding: 0;
     height: 50px;
-    background: rgba(255, 255, 255, 0.04);
+    background: var(--c-white-04);
     border-bottom: 1px solid var(--c-border);
     display: flex;
     align-items: center;
@@ -453,7 +453,7 @@
     margin-right: 4px;
   }
   .back-btn-area:active {
-    background: rgba(255, 255, 255, 0.1);
+    background: var(--c-white-10);
   }
   .back-icon {
     width: 20px;

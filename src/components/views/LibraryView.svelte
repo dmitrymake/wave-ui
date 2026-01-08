@@ -412,12 +412,21 @@
       {#if isLoading}
         <div class="music-grid">
           {#each Array(12) as _}
-            <div class="music-card">
-              <Skeleton
-                width="100%"
-                style="aspect-ratio:1; border-radius:12px; margin-bottom:12px;"
-              />
-              <Skeleton width="80%" height="16px" />
+            <div class="music-card skeleton-card">
+              <div class="card-img-container">
+                <Skeleton width="100%" height="100%" radius="8px" />
+              </div>
+              <div class="card-title" style="margin-top: 12px;">
+                <Skeleton width="80%" height="14px" radius="4px" />
+              </div>
+              <div class="card-sub-row" style="margin-top: 6px;">
+                <Skeleton
+                  width="50%"
+                  height="12px"
+                  radius="4px"
+                  style="opacity: 0.6"
+                />
+              </div>
             </div>
           {/each}
         </div>
@@ -486,6 +495,15 @@
 <style>
   @import "./MusicViews.css";
   @import "../../styles/SortMenu.css";
+
+  .music-card.skeleton-card .card-img-container {
+    aspect-ratio: 1;
+    background: transparent;
+    margin-bottom: 0;
+  }
+  .music-card.skeleton-card:hover {
+    background: transparent;
+  }
 
   .header-subtitle-row {
     display: flex;

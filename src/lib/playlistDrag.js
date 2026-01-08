@@ -205,10 +205,8 @@ export function createPlaylistDrag({ tracksStore, onMoveTrack }) {
       }
     }
 
-    // Ждем анимацию "доводки" призрака
     await new Promise((resolve) => setTimeout(resolve, 250));
 
-    // Блокируем CSS переходы для списка
     isReordering.set(true);
     await tick();
 
@@ -217,7 +215,6 @@ export function createPlaylistDrag({ tracksStore, onMoveTrack }) {
     let validIndex = Math.max(0, Math.min(finalHoverIndex, maxIndex));
     let insertAt = validIndex;
 
-    // --- ОБНОВЛЕНИЕ ДАННЫХ ---
     if (currentDragIdx !== null && currentDragIdx !== validIndex) {
       const tracks = [...get(tracksStore)];
       const [item] = tracks.splice(currentDragIdx, 1);
@@ -231,28 +228,21 @@ export function createPlaylistDrag({ tracksStore, onMoveTrack }) {
         onMoveTrack(currentDragIdx, insertAt);
       }
 
-      // ВАЖНО: Сразу обновляем index скрываемого элемента на новый!
-      // Это предотвращает появление реального элемента под призраком.
       draggingIndex.set(insertAt);
     }
 
-    // Даем Svelte время перестроить DOM с новыми данными
     await tick();
 
-    // --- ПЕРЕКЛЮЧЕНИЕ ВИДИМОСТИ ---
-    // Одновременно убираем призрака и показываем реальный элемент
     draggedItemData.set(null);
     draggingIndex.set(null);
     hoverIndex.set(null);
     isDropping.set(false);
 
-    // Подсветка "только что упавшего"
     const droppedAt = currentDragIdx !== validIndex ? insertAt : currentDragIdx;
     justDroppedIndex.set(droppedAt);
 
     await tick();
 
-    // Возвращаем анимации через двойной кадр
     requestAnimationFrame(() => {
       requestAnimationFrame(() => {
         isReordering.set(false);

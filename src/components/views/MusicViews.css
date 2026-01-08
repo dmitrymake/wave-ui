@@ -324,8 +324,6 @@
   font-weight: 500;
 }
 
-/* --- B. SIMPLE HEADER (Restored from "Good" File) --- */
-/* ВАЖНО: Это было удалено в "плохом" файле, из-за этого ломались плейлисты */
 .view-header-simple {
   display: flex;
   align-items: center;
@@ -446,7 +444,6 @@
 /* =========================================
    4. SPECIAL BUTTONS
    ========================================= */
-/* Эти стили берутся из shared.css, но здесь переопределения для специфичных размеров */
 
 .btn-primary, .btn-secondary {
   white-space: nowrap;

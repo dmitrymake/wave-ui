@@ -1,5 +1,4 @@
 import { get } from "svelte/store";
-import { CONFIG } from "../config";
 import { API_ENDPOINTS } from "./constants";
 import { isSyncingLibrary, showToast, isLoadingRadio, stations } from "./store";
 import SyncWorker from "./workers/sync.worker.js?worker";

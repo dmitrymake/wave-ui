@@ -140,9 +140,41 @@
 
     {#if isLoading}
       <div class="skeletons-wrapper">
-        {#each Array(6) as _}
-          <div style="padding: 10px 0;">
-            <Skeleton width="100%" height="50px" />
+        {#each Array(10) as _}
+          <div class="skeleton-row">
+            <div class="sk-left">
+              <Skeleton
+                width="24px"
+                height="24px"
+                radius="4px"
+                style="opacity: 0.3"
+              />
+              <Skeleton
+                width="40px"
+                height="40px"
+                radius="4px"
+                style="margin-left: 12px;"
+              />
+            </div>
+
+            <div class="sk-info">
+              <Skeleton
+                width="40%"
+                height="14px"
+                radius="4px"
+                style="margin-bottom: 6px;"
+              />
+              <Skeleton
+                width="25%"
+                height="12px"
+                radius="4px"
+                style="opacity: 0.6"
+              />
+            </div>
+
+            <div class="sk-right">
+              <Skeleton width="30px" height="12px" radius="4px" />
+            </div>
           </div>
         {/each}
       </div>
@@ -186,7 +218,33 @@
   @import "./MusicViews.css";
 
   .skeletons-wrapper {
-    padding: 0 32px;
+    padding: 0 16px;
+  }
+
+  .skeleton-row {
+    display: flex;
+    align-items: center;
+    height: 64px;
+    padding: 0 16px;
+    border-bottom: 1px solid var(--c-border-dim);
+  }
+
+  .sk-left {
+    display: flex;
+    align-items: center;
+    width: 80px;
+    min-width: 80px;
+  }
+
+  .sk-info {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+  }
+
+  .sk-right {
+    margin-left: auto;
   }
 
   .row-wrapper {

@@ -38,24 +38,26 @@
     currentView?.view === "queue" ||
     (currentView?.view === "root" && $activeMenuTab === "queue");
 
-  $: isExactActive = isQueueContext
-    ? Number(index) === playingIndex
-    : track.file === playingFile;
+  // Exact match in the Queue (Solid highlight + Icons)
+  $: isExactActive = isQueueContext ? Number(index) === playingIndex : false;
 
-  $: isDuplicate = isQueueContext
-    ? track.file === playingFile && !isExactActive
-    : false;
+  // Global file match
+  $: isPlayingFile = track.file === playingFile;
+
+  // Duplicate: File is playing, but this is not the active Queue row (Striped bg)
+  $: showStripes = isPlayingFile && !isExactActive;
 
   $: isRadio =
     track.file &&
     (track.file.startsWith("http") || track.file.includes("RADIO"));
 
+  // Icon Logic: Only show status icons for the exact active track in queue
   $: showPause = isExactActive && isPlaying && isHovering;
-  $: showPlay =
-    (isExactActive && !isPlaying && isHovering) ||
-    (!isExactActive && isHovering);
   $: showEq = isExactActive && isPlaying && !isHovering;
   $: showStatic = isExactActive && !isPlaying && !isHovering;
+
+  // Show Play button on hover for any track if not currently pausing active track
+  $: showPlay = isHovering && !showPause;
 
   $: title = track.title || track.file?.split("/").pop();
   $: artist = track.artist || "Unknown";
@@ -80,7 +82,8 @@
 
   function handleAction(e) {
     e.stopPropagation();
-    if (isExactActive) MPD.togglePlay();
+    // Toggle play/pause if this file is currently playing anywhere
+    if (isPlayingFile) MPD.togglePlay();
     else dispatch("play");
   }
 
@@ -116,7 +119,7 @@
 <div
   class="row"
   class:active={isExactActive}
-  class:duplicate={isDuplicate}
+  class:striped={showStripes}
   class:editable={isEditable}
   on:click={() => !isExactActive && dispatch("play")}
   on:mouseenter={() => (isHovering = true)}
@@ -238,11 +241,14 @@
   .row:hover {
     background: var(--c-surface-hover);
   }
+
+  /* Solid active background only for EXACT match (Queue) */
   .row.active {
     background: var(--c-surface-active);
   }
 
-  .row.duplicate::before {
+  /* Striped animation for duplicates */
+  .row.striped::before {
     content: "";
     position: absolute;
     inset: 0;
@@ -257,7 +263,7 @@
       var(--c-surface-active) 10px,
       var(--c-surface-active) 20px
     );
-    opacity: 0.2;
+    opacity: 0.4;
     background-size: 28.28px 28.28px;
     animation: moveStripes 2s linear infinite;
   }
@@ -318,8 +324,11 @@
     color: var(--c-text-muted);
     font-variant-numeric: tabular-nums;
   }
+
+  /* Only color number/text if solid active (Queue context) */
   .active .num {
     color: var(--c-accent);
+    font-weight: 700;
   }
 
   .icon-small {

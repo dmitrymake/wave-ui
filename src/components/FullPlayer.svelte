@@ -363,7 +363,7 @@
     z-index: 3;
     background: linear-gradient(
       to bottom,
-      rgba(0, 0, 0, 0.6) 0%,
+      var(--c-black-50) 0%,
       rgba(0, 0, 0, 0.95) 100%
     );
   }
@@ -375,7 +375,7 @@
   }
 
   .is-docked .bg-overlay {
-    background: rgba(0, 0, 0, 0.7);
+    background: var(--c-black-70);
   }
 
   .player-body {
@@ -413,13 +413,13 @@
     cursor: pointer;
   }
   .drag-handle-icon {
-    color: rgba(255, 255, 255, 0.3);
+    color: var(--c-white-30);
     transition: color 0.2s;
     width: 32px;
     height: 32px;
   }
   .drag-zone:active .drag-handle-icon {
-    color: rgba(255, 255, 255, 0.6);
+    color: var(--c-white-60);
   }
   .drag-handle-icon :global(svg) {
     width: 100%;
@@ -563,7 +563,7 @@
   .common-track {
     width: 100%;
     height: 4px;
-    background: rgba(255, 255, 255, 0.2);
+    background: var(--c-white-20);
     border-radius: 2px;
     position: relative;
   }
@@ -606,7 +606,7 @@
     justify-content: space-between;
     margin-top: -12px;
     font-size: 12px;
-    color: rgba(255, 255, 255, 0.9);
+    color: var(--c-white-90);
     font-weight: 600;
     font-variant-numeric: tabular-nums;
   }

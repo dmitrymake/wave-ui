@@ -1,4 +1,20 @@
 :root {
+  /* --- 0. ATOMIC TRANSPARENCIES (THE SOURCE OF TRUTH) --- */
+  --c-white-04: rgba(255, 255, 255, 0.04);
+  --c-white-05: rgba(255, 255, 255, 0.05);
+  --c-white-10: rgba(255, 255, 255, 0.1);
+  --c-white-20: rgba(255, 255, 255, 0.2);
+  --c-white-30: rgba(255, 255, 255, 0.3);
+  --c-white-50: rgba(255, 255, 255, 0.5);
+  --c-white-60: rgba(255, 255, 255, 0.6);
+  --c-white-90: rgba(255, 255, 255, 0.9);
+
+  --c-black-20: rgba(0, 0, 0, 0.2);
+  --c-black-50: rgba(0, 0, 0, 0.5);
+  --c-black-70: rgba(0, 0, 0, 0.7);
+  --c-black-80: rgba(0, 0, 0, 0.8);
+  --c-black-90: rgba(0, 0, 0, 0.9);
+
   /* =========================
      1. PALETTE: ACCENTS & BRAND
      ========================= */
@@ -9,7 +25,7 @@
      2. PALETTE: TEXT
      ========================= */
   --c-text-primary: #ffffff;
-  --c-text-secondary: rgba(255, 255, 255, 0.6);
+  --c-text-secondary: var(--c-white-60);
   --c-text-muted: #888888;
   --c-text-inverse: #000000;
 
@@ -20,45 +36,45 @@
   --c-bg-main: #121212;
   --c-bg-sidebar: #000000;
   --c-bg-card: #1a1a1a;
-  --c-bg-placeholder: #222222;
+  --c-bg-placeholder: var(--c-white-04);
   --c-bg-glass: rgba(18, 18, 18, 0.95); 
   --c-bg-toast: #333333;
 
   /* =========================
-     4. PALETTE: INTERACTIVE SURFACES (White Alphas)
+     4. PALETTE: INTERACTIVE SURFACES
      ========================= */
-  --c-surface-hover: rgba(255, 255, 255, 0.08);
-  --c-surface-active: rgba(255, 255, 255, 0.12);
+  --c-surface-hover: var(--c-white-10);
+  --c-surface-active: var(--c-white-20);
   --c-surface-input: #1a1a1a;
-  --c-surface-input-focus: rgba(255, 255, 255, 0.12);
-  --c-surface-button: rgba(255, 255, 255, 0.05);
-  --c-surface-button-hover: rgba(255, 255, 255, 0.1);
+  --c-surface-input-focus: var(--c-white-10);
+  --c-surface-button: var(--c-white-05);
+  --c-surface-button-hover: var(--c-white-10);
   
   /* Drag & Drop Surfaces */
   --c-surface-drag-phantom: #1a1a1a;
-  --c-surface-drag-land: rgba(255, 255, 255, 0.05);
+  --c-surface-drag-land: var(--c-white-05);
 
   /* Progress Bars */
-  --c-rail-bg: rgba(255, 255, 255, 0.15);
-  --c-rail-bg-hover: rgba(255, 255, 255, 0.3);
+  --c-rail-bg: var(--c-white-20);
+  --c-rail-bg-hover: var(--c-white-30);
 
   /* Skeletons */
-  --c-skeleton-base: rgba(255, 255, 255, 0.1);
+  --c-skeleton-base: var(--c-white-10);
 
   /* =========================
      5. BORDERS & SEPARATORS
      ========================= */
-  --c-border: rgba(255, 255, 255, 0.1);
-  --c-border-dim: rgba(255, 255, 255, 0.05);
-  --c-border-bright: rgba(255, 255, 255, 0.2);
-  --c-border-dashed: rgba(255, 255, 255, 0.2);
-  --c-border-dashed-hover: rgba(255, 255, 255, 0.5);
+  --c-border: var(--c-white-10);
+  --c-border-dim: var(--c-white-05);
+  --c-border-bright: var(--c-white-20);
+  --c-border-dashed: var(--c-white-20);
+  --c-border-dashed-hover: var(--c-white-50);
 
   /* =========================
      6. OVERLAYS & SHADOWS
      ========================= */
-  --c-overlay-dim: rgba(0, 0, 0, 0.4);
-  --c-overlay-backdrop: rgba(0, 0, 0, 0.8);
+  --c-overlay-dim: var(--c-black-50);
+  --c-overlay-backdrop: var(--c-black-80);
   
   --c-shadow-card: rgba(0, 0, 0, 0.3);
   --c-shadow-popover: rgba(0, 0, 0, 0.5);
@@ -71,7 +87,7 @@
      ========================= */
   --c-icon-idle: #9ca3af;
   --c-icon-hover: #ffffff;
-  --c-icon-faint: rgba(255, 255, 255, 0.4);
+  --c-icon-faint: var(--c-white-50); 
   --icon-stroke-width: 1.5px;
 
   /* =========================
@@ -179,8 +195,7 @@ input[type="range"] {
   width: 100%;
   height: 4px;
   border-radius: 2px;
-  background: #4d4d4d; /* Fallback */
-  background: var(--c-rail-bg-hover);
+  background: var(--c-rail-bg);
   -webkit-appearance: none;
   outline: none;
   cursor: pointer;
@@ -192,7 +207,7 @@ input[type="range"]::-webkit-slider-thumb {
   height: 12px;
   border-radius: 50%;
   background: var(--c-text-primary);
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.5);
+  box-shadow: 0 1px 3px var(--c-black-50);
   transition: transform 0.1s;
   border: none;
 }
@@ -218,8 +233,7 @@ input[type="range"]:hover::-webkit-slider-thumb {
 }
 
 /* =========================================
-   NEW ADDITIONS: UNIFIED BUTTONS & BADGES
-   (Using EXISTING Palette Variables)
+   UNIFIED BUTTONS & BADGES
    ========================================= */
 
 /* --- Action Buttons (Edit, Save, etc) --- */
@@ -228,8 +242,8 @@ input[type="range"]:hover::-webkit-slider-thumb {
   height: 40px;
   border-radius: 50%;
   background: transparent;
-  border: 1px solid var(--c-border); /* Using palette border */
-  color: var(--c-text-secondary);    /* Using palette text */
+  border: 1px solid var(--c-border); 
+  color: var(--c-text-secondary);    
   display: flex;
   align-items: center;
   justify-content: center;
@@ -254,10 +268,10 @@ input[type="range"]:hover::-webkit-slider-thumb {
 /* --- Primary Button (Filled) --- */
 .btn-primary {
   background: var(--c-accent);
-  color: #ffffff;
+  color: var(--c-text-primary);
   border: none;
   padding: 12px 32px;
-  border-radius: 30px; /* Capsule shape */
+  border-radius: 30px; 
   font-size: 14px;
   font-weight: 600;
   cursor: pointer;

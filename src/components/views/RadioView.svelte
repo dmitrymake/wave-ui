@@ -123,7 +123,6 @@
     border-radius: 8px;
     padding: 8px 12px;
     margin-bottom: 20px;
-    /* Removing fixed height/width issues */
     width: 100%;
     box-sizing: border-box;
   }

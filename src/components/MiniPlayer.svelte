@@ -351,7 +351,7 @@
     border-radius: 4px;
     transform: translateX(-50%);
     pointer-events: none;
-    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.3);
+    box-shadow: 0 2px 5px var(--c-shadow-card);
   }
 
   .grid {
@@ -442,7 +442,7 @@
   }
   .tiny-dots:hover {
     color: var(--c-text-primary);
-    background: rgba(255, 255, 255, 0.1);
+    background: var(--c-white-10);
     opacity: 1;
   }
 
