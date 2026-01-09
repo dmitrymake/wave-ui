@@ -45,14 +45,11 @@ class YandexMusic {
 
     public function getUserPlaylists() {
         $uid = $this->getUserId();
-        // Получаем плейлисты пользователя
         $data = $this->request("/users/{$uid}/playlists/list");
         $userPlaylists = $data['result'] ?? [];
 
-        // Получаем "Плейлист дня", "Дежавю" и т.д. из ленты
         $feed = $this->request("/landing3?blocks=personal-playlists");
         $smartPlaylists = [];
-        
         if (isset($feed['result']['blocks'][0]['entities'])) {
             $smartPlaylists = $feed['result']['blocks'][0]['entities'];
         }
@@ -60,8 +57,22 @@ class YandexMusic {
         return array_merge($smartPlaylists, $userPlaylists);
     }
 
+    public function getPlaylistTracks($uid, $kind) {
+        $data = $this->request("/users/{$uid}/playlists/{$kind}");
+        if (!isset($data['result']['tracks'])) return [];
+        
+        $tracks = [];
+        foreach ($data['result']['tracks'] as $item) {
+            // В плейлистах трек часто обернут в объект container, либо лежит напрямую
+            $track = $item['track'] ?? $item;
+            if (isset($track['id'])) {
+                $tracks[] = $track;
+            }
+        }
+        return $tracks;
+    }
+
     public function getStationTracks($stationId) {
-        // stationId например "user:onetwo" (моя волна) или "playlist:uid:kind"
         $data = $this->request("/info/stations/{$stationId}/tracks-from-queue");
         return $data['result']['sequence'] ?? [];
     }
@@ -85,7 +96,6 @@ class YandexMusic {
         $data = $this->request("/tracks/{$trackId}/download-info");
         if (empty($data['result'][0]['downloadInfoUrl'])) return null;
 
-        // Сортировка по качеству (битрейт по убыванию)
         usort($data['result'], function($a, $b) {
             return $b['bitrateInKbps'] - $a['bitrateInKbps'];
         });
@@ -100,27 +110,6 @@ class YandexMusic {
 
         $sign = md5($this->SALT . substr($path[1], 1) . $s[1]);
         return "https://{$host[1]}/get-mp3/{$sign}/{$ts[1]}{$path[1]}";
-    }
-    
-    public function getFavorites($page = 0) {
-        $uid = $this->getUserId();
-        $data = $this->request("/users/{$uid}/likes/tracks");
-        $ids = array_map(function($item) { return $item['id']; }, $data['result']['library']['tracks'] ?? []);
-        
-        if (empty($ids)) return [];
-
-        $offset = $page * 50;
-        $slice = array_slice($ids, $offset, 50);
-        
-        if (empty($slice)) return [];
-
-        return $this->getTracks(implode(',', $slice));
-    }
-
-    public function getTracks($trackIds) {
-        if (is_array($trackIds)) $trackIds = implode(',', $trackIds);
-        $data = $this->request("/tracks", ['track-ids' => $trackIds]);
-        return $data['result'] ?? [];
     }
 }
 ?>

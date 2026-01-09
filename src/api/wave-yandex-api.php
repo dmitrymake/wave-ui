@@ -22,6 +22,28 @@ function saveState($data) {
     file_put_contents(STATE_FILE, json_encode($data));
 }
 
+function mpdExec($cmd) {
+    $cmd = str_replace('"', '\"', $cmd);
+    exec("mpc " . $cmd);
+}
+
+// Хелпер для сохранения меты трека (чтобы фронт видел название)
+function cacheTrackMeta($url, $track) {
+    $cache = file_exists(META_CACHE_FILE) ? json_decode(file_get_contents(META_CACHE_FILE), true) : [];
+    if (count($cache) > 100) $cache = array_slice($cache, -100, 100, true);
+    
+    $key = md5($url);
+    $cache[$key] = [
+        'id' => $track['id'],
+        'title' => $track['title'],
+        'artist' => implode(', ', array_column($track['artists'], 'name')),
+        'album' => $track['albums'][0]['title'] ?? '',
+        'image' => isset($track['coverUri']) ? "https://" . str_replace('%%', '400x400', $track['coverUri']) : null,
+        'isYandex' => true
+    ];
+    file_put_contents(META_CACHE_FILE, json_encode($cache));
+}
+
 try {
     if ($action === 'status') {
         $token = getToken();
@@ -34,7 +56,7 @@ try {
         if (empty($input['token'])) throw new Exception("Empty token");
         
         $api = new YandexMusic($input['token']);
-        $api->getUserId(); // Упадет если токен плохой
+        $api->getUserId(); 
         
         if (!is_dir(dirname(TOKEN_FILE))) mkdir(dirname(TOKEN_FILE), 0755, true);
         file_put_contents(TOKEN_FILE, $input['token']);
@@ -51,10 +73,9 @@ try {
     switch ($action) {
         case 'get_playlists':
             $playlists = $api->getUserPlaylists();
-            // Нормализуем данные для фронта
             $result = [];
             foreach ($playlists as $pl) {
-                $cover = 'https://music.yandex.ru/blocks/playlist-cover/playlist-cover_like.png';
+                $cover = null;
                 if (isset($pl['cover']['uri'])) {
                     $cover = "https://" . str_replace('%%', '200x200', $pl['cover']['uri']);
                 }
@@ -64,25 +85,88 @@ try {
                     'kind' => $pl['kind'],
                     'uid' => $pl['owner']['uid'] ?? $pl['uid'] ?? null,
                     'cover' => $cover,
-                    'trackCount' => $pl['trackCount'] ?? 0,
-                    'isStation' => false
+                    'trackCount' => $pl['trackCount'] ?? 0
                 ];
             }
             echo json_encode($result);
             break;
 
+        case 'get_playlist_tracks':
+            $uid = $_GET['uid'];
+            $kind = $_GET['kind'];
+            $rawTracks = $api->getPlaylistTracks($uid, $kind);
+            
+            $tracks = [];
+            foreach ($rawTracks as $t) {
+                $tracks[] = [
+                    'title' => $t['title'],
+                    'artist' => implode(', ', array_column($t['artists'], 'name')),
+                    'album' => $t['albums'][0]['title'] ?? '',
+                    'id' => $t['id'],
+                    'image' => isset($t['coverUri']) ? "https://" . str_replace('%%', '200x200', $t['coverUri']) : null,
+                    'isYandex' => true
+                ];
+            }
+            echo json_encode(['tracks' => $tracks]);
+            break;
+
         case 'play_station':
-            // "user:onetwo" - это "Моя волна"
             $stationId = $_REQUEST['station'] ?? 'user:onetwo';
             
-            exec("mpc clear");
+            mpdExec("clear");
+            
+            $queueData = $api->getStationTracks($stationId);
+            $initialBuffer = [];
+            
+            $count = 0;
+            if ($queueData) {
+                foreach ($queueData as $item) {
+                    if ($count >= 3) break;
+                    $track = $item['track'];
+                    
+                    $url = $api->getDirectLink($track['id']);
+                    if ($url) {
+                        mpdExec("add \"$url\"");
+                        cacheTrackMeta($url, $track);
+                        $count++;
+                    }
+                    // Остальное оставим демону
+                    if ($count >= 3) {
+                       $initialBuffer[] = $item['track']; // Демон подхватит остатки
+                    }
+                }
+            }
+
+            mpdExec("play");
+
             saveState([
                 'active' => true,
                 'mode' => 'station',
                 'station_id' => $stationId,
                 'queue_buffer' => []
             ]);
-            echo json_encode(['status' => 'started']);
+            
+            echo json_encode(['status' => 'started', 'added' => $count]);
+            break;
+
+        case 'play_track':
+            $id = $_REQUEST['id'];
+            $trackInfo = $api->search($id, 'track')['result']['tracks']['results'][0] ?? null; // Хайп, ищем инфу чтобы закешировать
+            
+            $url = $api->getDirectLink($id);
+            
+            if ($url) {
+                mpdExec("clear");
+                mpdExec("add \"$url\"");
+                mpdExec("play");
+                
+                if ($trackInfo) cacheTrackMeta($url, $trackInfo);
+                
+                saveState(['active' => false]);
+                echo json_encode(['status' => 'playing']);
+            } else {
+                throw new Exception("Link generation failed");
+            }
             break;
 
         case 'search':
@@ -120,7 +204,7 @@ try {
             echo json_encode([
                 'tracks' => $tracks, 
                 'albums' => $albums, 
-                'artists' => [] // Пока не используем
+                'artists' => []
             ]);
             break;
             
@@ -138,7 +222,7 @@ try {
 
         case 'dislike':
             $api->toggleLike($_REQUEST['track_id'], false);
-            exec("mpc next"); // Пропускаем дизлайкнутое
+            mpdExec("next");
             echo json_encode(['status' => 'disliked']);
             break;
 
