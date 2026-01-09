@@ -1,4 +1,6 @@
 <?php
+// /var/www/bin/yandex-daemon.php
+
 define('INC', '/var/www/inc');
 require_once INC . '/yandex-music.php';
 
@@ -7,16 +9,21 @@ define('META_CACHE_FILE', '/dev/shm/yandex_meta_cache.json');
 define('TOKEN_FILE', '/var/local/www/yandex_token.dat');
 define('LOG_FILE', '/tmp/wave_daemon.log');
 
-$minQueueSize = 2; 
+$minQueueSize = 3; 
+$pollInterval = 5; 
 
 function logMsg($msg) {
-    file_put_contents(LOG_FILE, "[" . date('H:i:s') . "] $msg\n", FILE_APPEND);
+    $str = "[" . date('H:i:s') . "] $msg\n";
+    // Пишем в лог так, чтобы все могли читать
+    file_put_contents(LOG_FILE, $str, FILE_APPEND);
+    chmod(LOG_FILE, 0666); 
+    echo $str;
 }
 
 function mpdSend($cmd) {
-    $fp = fsockopen("localhost", 6600, $errno, $errstr, 5);
+    $fp = @fsockopen("localhost", 6600, $errno, $errstr, 5);
     if (!$fp) {
-        logMsg("MPD Connect Error: $errstr");
+        logMsg("ERROR: MPD Connection Failed: $errstr");
         return false;
     }
     fgets($fp);
@@ -39,6 +46,22 @@ function getQueueLength() {
     return 0;
 }
 
+function getMpdState() {
+    $resp = mpdSend("status");
+    if (preg_match('/state: (\w+)/', $resp, $matches)) {
+        return $matches[1];
+    }
+    return 'unknown';
+}
+
+function getCurrentSongPos() {
+    $resp = mpdSend("status");
+    if (preg_match('/song: (\d+)/', $resp, $matches)) {
+        return intval($matches[1]);
+    }
+    return 0;
+}
+
 function getState() {
     if (!file_exists(STATE_FILE)) return null;
     return json_decode(file_get_contents(STATE_FILE), true);
@@ -50,19 +73,16 @@ function saveState($state) {
 
 function updateMetaCache($url, $track) {
     $cache = file_exists(META_CACHE_FILE) ? json_decode(file_get_contents(META_CACHE_FILE), true) : [];
-    if (count($cache) > 50) $cache = array_slice($cache, -50, 50, true);
-    
+    if (count($cache) > 100) $cache = array_slice($cache, -100, 100, true);
     $key = md5($url);
     
     $cover = null;
     if (isset($track['coverUri'])) {
         $cover = "https://" . str_replace('%%', '400x400', $track['coverUri']);
-    } elseif (isset($track['ogImage'])) {
-        $cover = "https://" . str_replace('%%', '200x200', $track['ogImage']);
     }
 
     $artistName = 'Unknown';
-    if (isset($track['artists']) && is_array($track['artists'])) {
+    if (isset($track['artists'])) {
         $artistName = implode(', ', array_column($track['artists'], 'name'));
     }
 
@@ -75,11 +95,10 @@ function updateMetaCache($url, $track) {
         'isYandex' => true,
         'time' => ($track['durationMs'] ?? 0) / 1000
     ];
-    
     file_put_contents(META_CACHE_FILE, json_encode($cache));
 }
 
-logMsg("Daemon Started");
+logMsg("Daemon Started (Robust Polling)");
 
 $lastTokenTime = 0;
 $api = null;
@@ -94,7 +113,7 @@ while (true) {
                     $api = new YandexMusic($token);
                     $api->getUserId(); 
                     $lastTokenTime = $fileTime;
-                    logMsg("API Initialized");
+                    logMsg("API Initialized.");
                 } catch (Exception $e) {
                     logMsg("Token Error: " . $e->getMessage());
                     $api = null;
@@ -106,51 +125,53 @@ while (true) {
     $state = getState();
 
     if ($api && $state && !empty($state['active'])) {
-        
-        $queueCount = getQueueLength();
-        
-        if ($queueCount < $minQueueSize) {
-            
-            // Если буфер пуст, качаем пачку
+        $totalQueue = getQueueLength();
+        $currentPos = getCurrentSongPos();
+        $tracksAhead = $totalQueue - ($currentPos + 1);
+
+        if ($tracksAhead < $minQueueSize) {
+            logMsg("Status: Queue has $tracksAhead ahead. Minimum is $minQueueSize.");
+
             if (empty($state['queue_buffer'])) {
-                logMsg("Buffer empty. Fetching more...");
+                logMsg("Fetching more tracks from Yandex...");
                 try {
                     $stationId = $state['station_id'] ?? 'user:onetwo';
-                    // false = не начинать новую сессию, продолжить старую
                     $tracksData = $api->getStationTracks($stationId, false);
                     
-                    if ($tracksData) {
+                    if ($tracksData && is_array($tracksData)) {
                         $cleanTracks = [];
                         foreach ($tracksData as $item) {
                             $cleanTracks[] = $item['track'];
                         }
                         $state['queue_buffer'] = $cleanTracks;
                         saveState($state);
-                        logMsg("Fetched " . count($cleanTracks) . " tracks");
+                        logMsg("Got " . count($cleanTracks) . " tracks from Yandex.");
                     } else {
-                        logMsg("No tracks received from rotor.");
+                        logMsg("Yandex returned no tracks. Waiting 10s.");
+                        sleep(10);
+                        continue;
                     }
                 } catch (Exception $e) {
                     logMsg("Fetch Error: " . $e->getMessage());
-                    sleep(5);
+                    sleep(10);
+                    continue;
                 }
             }
 
-            // Добавляем трек из буфера в MPD
             if (!empty($state['queue_buffer'])) {
                 $nextTrack = array_shift($state['queue_buffer']);
-                saveState($state); 
+                saveState($state);
 
                 try {
                     $url = $api->getDirectLink($nextTrack['id']);
                     if ($url) {
                         mpdSend("add \"$url\"");
                         updateMetaCache($url, $nextTrack);
-                        logMsg("Queueing: " . $nextTrack['title']);
+                        logMsg(">>> Added to MPD: " . $nextTrack['title']);
                         
-                        if ($queueCount == 0) mpdSend("play");
+                        if (getMpdState() !== 'play') mpdSend("play");
                     } else {
-                        logMsg("Failed to get URL for track " . $nextTrack['id']);
+                        logMsg("Skipping track (no URL): " . $nextTrack['title']);
                     }
                 } catch (Exception $e) {
                     logMsg("Add Error: " . $e->getMessage());
@@ -159,14 +180,5 @@ while (true) {
         }
     }
 
-    $socket = fsockopen("localhost", 6600);
-    if ($socket) {
-        fwrite($socket, "idle player playlist\n");
-        stream_set_timeout($socket, 2); 
-        fgets($socket);
-        fclose($socket);
-    } else {
-        sleep(2);
-    }
+    sleep($pollInterval);
 }
-?>

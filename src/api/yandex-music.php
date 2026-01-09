@@ -100,7 +100,6 @@ class YandexMusic {
         return $data['result']['tracks'] ?? [];
     }
 
-    // ИСПРАВЛЕНО: параметр newQueue
     public function getStationTracks($stationId, $newQueue = false) {
         $param = $newQueue ? 'true' : 'false';
         $data = $this->request("/rotor/station/{$stationId}/tracks?new-queue={$param}");

@@ -34,23 +34,33 @@ git clone "$REPO_URL" "$TEMP_DIR"
 # 3. Setup Backend Files (PHP)
 echo ">>> [3/7] Installing API & Backend Logic..."
 
+# Copy API endpoints
 sudo cp "$TEMP_DIR/src/api/wave-api.php" "$WEB_ROOT/"
 sudo cp "$TEMP_DIR/src/api/wave-yandex-api.php" "$WEB_ROOT/"
 
+# Setup Include directory
 if [ ! -d "$INC_DIR" ]; then sudo mkdir -p "$INC_DIR"; fi
 sudo cp "$TEMP_DIR/src/api/yandex-music.php" "$INC_DIR/"
 
+# Setup Binary directory for Daemon
 if [ ! -d "$BIN_DIR" ]; then sudo mkdir -p "$BIN_DIR"; fi
 sudo cp "$TEMP_DIR/src/api/yandex-daemon.php" "$BIN_DIR/"
 
+# Set Permissions
 sudo chown root:root "$WEB_ROOT/wave-api.php" "$WEB_ROOT/wave-yandex-api.php"
 sudo chmod 755 "$WEB_ROOT/wave-api.php" "$WEB_ROOT/wave-yandex-api.php"
 sudo chown -R www-data:www-data "$INC_DIR" "$BIN_DIR"
 sudo chmod +x "$BIN_DIR/yandex-daemon.php"
 
+# Setup Persistent Token Store
 sudo mkdir -p /var/local/www
 sudo chown www-data:www-data /var/local/www
 sudo chmod 755 /var/local/www
+
+# Setup Logging for Daemon (ensuring it's writable)
+sudo touch /tmp/wave_daemon.log
+sudo chown www-data:www-data /tmp/wave_daemon.log
+sudo chmod 666 /tmp/wave_daemon.log
 
 # 4. Prepare Web Directory (Frontend)
 echo ">>> [4/7] Moving frontend files to $FINAL_WEB_DIR..."
@@ -86,7 +96,7 @@ EOF
 sudo systemctl daemon-reload
 sudo systemctl enable --now websockify-mpd.service
 
-# 6. Create Systemd Service for Yandex Daemon (NEW!)
+# 6. Create Systemd Service for Yandex Daemon
 echo ">>> [6/7] Setting up Yandex Background Daemon..."
 sudo bash -c "cat > /etc/systemd/system/wave-yandex.service" <<EOF
 [Unit]
@@ -99,13 +109,16 @@ User=www-data
 ExecStart=/usr/bin/php $BIN_DIR/yandex-daemon.php
 Restart=always
 RestartSec=5
+StandardOutput=append:/tmp/wave_daemon.log
+StandardError=append:/tmp/wave_daemon.log
 
 [Install]
 WantedBy=multi-user.target
 EOF
 
 sudo systemctl daemon-reload
-sudo systemctl enable --now wave-yandex.service
+sudo systemctl enable wave-yandex.service
+sudo systemctl restart wave-yandex.service
 
 # 7. Configure Nginx for Port 3000
 echo ">>> [7/7] Configuring Nginx..."
@@ -129,7 +142,7 @@ server {
         fastcgi_param SCRIPT_FILENAME \$document_root\$fastcgi_script_name;
     }
 
-    # Proxy covers from main Moode
+    # Proxy covers and assets from main Moode
     location /imagesw/ {
         proxy_pass http://127.0.0.1/imagesw/;
     }
@@ -150,4 +163,5 @@ echo "SUCCESSFULLY DEPLOYED!"
 echo "-------------------------------------------------------"
 echo "Access the new UI at: http://moode.local:$PORT"
 echo "Or via IP: http://$(hostname -I | awk '{print $1}'):$PORT"
+echo "To monitor daemon: tail -f /tmp/wave_daemon.log"
 echo "-------------------------------------------------------"
