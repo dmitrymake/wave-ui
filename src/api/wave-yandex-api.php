@@ -1,31 +1,21 @@
 <?php
-// /var/www/wave-yandex-api.php
-
 ini_set('display_errors', 0);
 header('Content-Type: application/json');
 header('Access-Control-Allow-Origin: *');
-header('Access-Control-Allow-Methods: GET, POST, OPTIONS');
-header('Access-Control-Allow-Headers: Authorization, Content-Type');
-
-if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') exit(0);
+header('Access-Control-Allow-Methods: GET, POST');
+header('Access-Control-Allow-Headers: *');
 
 define('INC', '/var/www/inc');
-require_once INC . '/common.php';
 require_once INC . '/yandex-music.php';
 
-// Файлы
-define('TOKEN_FILE', '/var/local/www/yandex_token.dat');
 define('STATE_FILE', '/dev/shm/yandex_state.json');
 define('META_CACHE_FILE', '/dev/shm/yandex_meta_cache.json');
+define('TOKEN_FILE', '/var/local/www/yandex_token.dat');
 
 $action = $_REQUEST['action'] ?? '';
 
-// --- Хелперы ---
 function getToken() {
-    if (file_exists(TOKEN_FILE)) {
-        return trim(file_get_contents(TOKEN_FILE));
-    }
-    return null;
+    return file_exists(TOKEN_FILE) ? trim(file_get_contents(TOKEN_FILE)) : null;
 }
 
 function saveState($data) {
@@ -33,61 +23,58 @@ function saveState($data) {
 }
 
 try {
-    // --- 1. ПРОВЕРКА СТАТУСА (Без токена) ---
     if ($action === 'status') {
         $token = getToken();
-        if (!$token) {
-            echo json_encode(['authorized' => false, 'message' => 'No token']);
-            exit;
-        }
-        
-        // Проверяем валидность токена запросом к Яндексу
-        try {
-            $api = new YandexMusic($token);
-            $uid = $api->getUserId();
-            echo json_encode(['authorized' => true, 'uid' => $uid]);
-        } catch (Exception $e) {
-            // Токен есть, но он протух
-            echo json_encode(['authorized' => false, 'message' => 'Invalid token']);
-        }
+        echo json_encode(['authorized' => !!$token]);
         exit;
     }
 
-    // --- 2. СОХРАНЕНИЕ ТОКЕНА (С клиента) ---
     if ($action === 'save_token') {
         $input = json_decode(file_get_contents('php://input'), true);
-        $newToken = $input['token'] ?? null;
-
-        if (!$newToken) throw new Exception("Token is empty");
-
-        // Проверяем токен перед сохранением
-        try {
-            $api = new YandexMusic($newToken);
-            $uid = $api->getUserId(); // Если упадет - токен плохой
-            
-            // Сохраняем
-            if (!is_dir(dirname(TOKEN_FILE))) mkdir(dirname(TOKEN_FILE), 0755, true);
-            file_put_contents(TOKEN_FILE, $newToken);
-            chmod(TOKEN_FILE, 0600); // Безопасность: читать может только владелец (www-data)
-            
-            echo json_encode(['status' => 'ok', 'uid' => $uid]);
-        } catch (Exception $e) {
-            http_response_code(401);
-            echo json_encode(['error' => 'Invalid token provided']);
-        }
+        if (empty($input['token'])) throw new Exception("Empty token");
+        
+        $api = new YandexMusic($input['token']);
+        $api->getUserId(); // Упадет если токен плохой
+        
+        if (!is_dir(dirname(TOKEN_FILE))) mkdir(dirname(TOKEN_FILE), 0755, true);
+        file_put_contents(TOKEN_FILE, $input['token']);
+        chmod(TOKEN_FILE, 0600);
+        
+        echo json_encode(['status' => 'ok']);
         exit;
     }
 
-    // --- 3. ОСТАЛЬНЫЕ ДЕЙСТВИЯ (Требуют токен) ---
-    
     $token = getToken();
-    if (!$token) throw new Exception("Server not authorized via Yandex");
-    
+    if (!$token) throw new Exception("Token not found");
     $api = new YandexMusic($token);
 
     switch ($action) {
+        case 'get_playlists':
+            $playlists = $api->getUserPlaylists();
+            // Нормализуем данные для фронта
+            $result = [];
+            foreach ($playlists as $pl) {
+                $cover = 'https://music.yandex.ru/blocks/playlist-cover/playlist-cover_like.png';
+                if (isset($pl['cover']['uri'])) {
+                    $cover = "https://" . str_replace('%%', '200x200', $pl['cover']['uri']);
+                }
+                
+                $result[] = [
+                    'title' => $pl['title'],
+                    'kind' => $pl['kind'],
+                    'uid' => $pl['owner']['uid'] ?? $pl['uid'] ?? null,
+                    'cover' => $cover,
+                    'trackCount' => $pl['trackCount'] ?? 0,
+                    'isStation' => false
+                ];
+            }
+            echo json_encode($result);
+            break;
+
         case 'play_station':
+            // "user:onetwo" - это "Моя волна"
             $stationId = $_REQUEST['station'] ?? 'user:onetwo';
+            
             exec("mpc clear");
             saveState([
                 'active' => true,
@@ -95,28 +82,46 @@ try {
                 'station_id' => $stationId,
                 'queue_buffer' => []
             ]);
-            // Пингуем демона (через файл или просто ждем крон/цикл)
-            // Демон сам увидит обновление STATE_FILE и начнет играть
             echo json_encode(['status' => 'started']);
-            break;
-
-        case 'like':
-            $trackId = $_REQUEST['track_id'];
-            $api->toggleLike($trackId, true);
-            echo json_encode(['status' => 'liked']);
-            break;
-
-        case 'dislike':
-            $trackId = $_REQUEST['track_id'];
-            $api->toggleLike($trackId, false);
-            exec("mpc next");
-            echo json_encode(['status' => 'disliked']);
             break;
 
         case 'search':
             $q = $_GET['query'];
-            $res = $api->search($q);
-            echo json_encode($res['result']);
+            $raw = $api->search($q);
+            $res = $raw['result'] ?? [];
+            
+            $tracks = [];
+            if (isset($res['tracks']['results'])) {
+                foreach ($res['tracks']['results'] as $t) {
+                    $tracks[] = [
+                        'title' => $t['title'],
+                        'artist' => implode(', ', array_column($t['artists'], 'name')),
+                        'album' => $t['albums'][0]['title'] ?? 'Single',
+                        'id' => $t['id'],
+                        'image' => isset($t['coverUri']) ? "https://" . str_replace('%%', '200x200', $t['coverUri']) : null,
+                        'isYandex' => true
+                    ];
+                }
+            }
+            
+            $albums = [];
+            if (isset($res['albums']['results'])) {
+                foreach ($res['albums']['results'] as $a) {
+                    $albums[] = [
+                        'title' => $a['title'],
+                        'artist' => $a['artists'][0]['name'] ?? 'Unknown',
+                        'id' => $a['id'],
+                        'image' => isset($a['coverUri']) ? "https://" . str_replace('%%', '200x200', $a['coverUri']) : null,
+                        'kind' => 'album'
+                    ];
+                }
+            }
+            
+            echo json_encode([
+                'tracks' => $tracks, 
+                'albums' => $albums, 
+                'artists' => [] // Пока не используем
+            ]);
             break;
             
         case 'get_meta':
@@ -124,6 +129,17 @@ try {
             $urlHash = md5($url);
             $cache = file_exists(META_CACHE_FILE) ? json_decode(file_get_contents(META_CACHE_FILE), true) : [];
             echo json_encode($cache[$urlHash] ?? null);
+            break;
+
+        case 'like':
+            $api->toggleLike($_REQUEST['track_id'], true);
+            echo json_encode(['status' => 'liked']);
+            break;
+
+        case 'dislike':
+            $api->toggleLike($_REQUEST['track_id'], false);
+            exec("mpc next"); // Пропускаем дизлайкнутое
+            echo json_encode(['status' => 'disliked']);
             break;
 
         default:

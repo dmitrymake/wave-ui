@@ -14,7 +14,6 @@
   let playlists = [];
   let isLoading = false;
   let viewMode = "dashboard";
-  let activePlaylistName = "";
 
   let searchQuery = "";
   let searchType = "all";
@@ -32,20 +31,43 @@
   async function loadDashboard() {
     isLoading = true;
     try {
-      playlists = [{ kind: "favorites", title: "My Vibe", isStation: true }];
+      // Загружаем реальные плейлисты с сервера
+      const userPls = await YandexApi.getUserPlaylists();
+
+      playlists = [
+        // Добавляем "Мою Волну" вручную первым пунктом
+        {
+          title: "My Vibe",
+          kind: "my_vibe",
+          cover: null,
+          isStation: true,
+          stationId: "user:onetwo",
+        },
+        ...userPls,
+      ];
+    } catch (e) {
+      console.error(e);
+      showToast("Failed to load playlists", "error");
     } finally {
       isLoading = false;
     }
   }
 
   async function openPlaylist(pl) {
-    if (pl.isStation) {
+    if (pl.isStation || pl.kind === "my_vibe") {
       showToast("Starting My Vibe...", "info");
       try {
-        await YandexApi.playRadio("user:onetwo");
+        await YandexApi.playStation(pl.stationId || "user:onetwo");
       } catch (e) {
-        showToast("Failed to start radio", "error");
+        showToast("Failed to start station", "error");
       }
+    } else {
+      // Для обычных плейлистов пока нет реализации треков в этом примере
+      // Можно просто запустить их как радио (похожие) или допилить get_playlist_tracks в PHP
+      showToast("Playing playlist as radio...", "info");
+      // Например: station = "playlist:owner:kind"
+      // Но пока запустим просто Vibe, т.к. API getStationTracks гибкое
+      await YandexApi.playStation(`playlist:${pl.uid}:${pl.kind}`);
     }
   }
 
@@ -70,17 +92,23 @@
   async function performSearch() {
     isLoading = true;
     viewMode = "search";
+    // Сбрасываем результаты, чтобы старые не висели
     searchResults = { tracks: [], albums: [], artists: [] };
 
     try {
+      // Теперь PHP возвращает нормализованный JSON {tracks: [], albums: []}
       const res = await YandexApi.search(searchQuery);
-      searchResults = res;
-      if (searchType === "track" || searchType === "all") {
-        tracksStore.set(res.tracks || []);
-      } else {
-        tracksStore.set([]);
+
+      if (res) {
+        searchResults = res;
+        if (searchType === "track" || searchType === "all") {
+          tracksStore.set(res.tracks || []);
+        } else {
+          tracksStore.set([]);
+        }
       }
     } catch (e) {
+      console.error(e);
       showToast("Search failed", "error");
     } finally {
       isLoading = false;
@@ -94,14 +122,12 @@
   }
 
   async function handlePlay(track) {
+    // Проигрывание трека из поиска
+    // В текущей архитектуре "Сервер всё решает", мы можем попросить сервер запустить радио по треку
     if (track.id) {
-      // ИСПРАВЛЕНО: Теперь вызываем через API, а не через удаленную функцию MPD
-      showToast("Starting radio based on track...", "info");
-      try {
-        await YandexApi.playRadio(track.id);
-      } catch (e) {
-        showToast("Error starting radio", "error");
-      }
+      showToast("Starting radio by track...", "info");
+      // Формат станции для трека: track:ID
+      await YandexApi.playStation(`track:${track.id}`);
     }
   }
 </script>
@@ -171,13 +197,28 @@
           <div class="music-grid">
             {#each playlists as pl}
               <div class="music-card" on:click={() => openPlaylist(pl)}>
-                <div class="card-img-container is-fav">
-                  <div class="icon-wrap">{@html ICONS.RADIO}</div>
+                <div
+                  class="card-img-container"
+                  class:is-vibe={pl.kind === "my_vibe"}
+                >
+                  {#if pl.kind === "my_vibe"}
+                    <div class="icon-wrap">{@html ICONS.RADIO}</div>
+                  {:else}
+                    <ImageLoader src={pl.cover} alt={pl.title} radius="8px">
+                      <div slot="fallback" class="icon-fallback">
+                        {@html ICONS.PLAYLISTS}
+                      </div>
+                    </ImageLoader>
+                  {/if}
+
                   <div class="play-overlay">
                     <span class="overlay-icon">{@html ICONS.PLAY}</span>
                   </div>
                 </div>
                 <div class="card-title">{pl.title}</div>
+                {#if pl.trackCount}<div class="card-sub">
+                    {pl.trackCount} tracks
+                  </div>{/if}
               </div>
             {/each}
           </div>
@@ -323,8 +364,8 @@
     color: var(--c-text-primary);
   }
 
-  .card-img-container.is-fav {
-    background: linear-gradient(135deg, var(--c-heart), #9e1a1a);
+  .card-img-container.is-vibe {
+    background: linear-gradient(135deg, #a4508b, #5f0a87);
   }
 
   .icon-wrap {

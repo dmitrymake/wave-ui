@@ -18,16 +18,25 @@ export const YandexApi = {
     return await this.request("search", { query });
   },
 
+  async getUserPlaylists() {
+    return await this.request("get_playlists");
+  },
+
+  async playRadio(trackId) {
+    return await this.request("play_station", { station: "user:onetwo" });
+  },
+
+  async playStation(stationId) {
+    return await this.request("play_station", { station: stationId });
+  },
+
   async getFavorites(page = 0) {
-    return await this.request("get_favorites", { page });
+    // Пока заглушка или реализация через прокси, если нужно
+    return { tracks: [], total: 0 };
   },
 
   async toggleLike(trackId, isLiked) {
     const action = isLiked ? "dislike" : "like";
     return await this.request(action, { track_id: trackId });
-  },
-
-  async playRadio(trackId) {
-    return await this.request("play_station", { station: "track:" + trackId });
   },
 };
