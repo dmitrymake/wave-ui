@@ -7,7 +7,7 @@ export const YandexApi = {
     const token = get(yandexToken);
     if (!token) throw new Error("No token provided");
 
-    const proxyUrl = `/wave-api.php?action=yandex_proxy&path=${encodeURIComponent(path)}`;
+    const proxyUrl = `/wave-api.php?action=yandex_proxy&path=${encodeURIComponent(path)}&token=${encodeURIComponent(token)}`;
 
     const headers = {
       Authorization: `OAuth ${token}`,
@@ -22,7 +22,13 @@ export const YandexApi = {
     });
 
     if (!res.ok) {
-      throw new Error(`Yandex API Error: ${res.status}`);
+      // Попытка прочитать текст ошибки от PHP
+      let errorMsg = `Yandex API Error: ${res.status}`;
+      try {
+        const errJson = await res.json();
+        if (errJson.error) errorMsg = errJson.error;
+      } catch (e) {}
+      throw new Error(errorMsg);
     }
 
     if (options.isXml) {
@@ -34,6 +40,10 @@ export const YandexApi = {
 
   async getUserId() {
     const data = await this.request("/account/status");
+    // Проверка структуры ответа
+    if (!data.result || !data.result.account) {
+      throw new Error("Invalid response from Yandex: " + JSON.stringify(data));
+    }
     return data.result.account.uid;
   },
 
@@ -118,7 +128,6 @@ export const YandexApi = {
       time: t.durationMs / 1000,
       genre: "Yandex Music",
       isYandex: true,
-      // Сохраняем оригинальный image URL, чтобы getTrackThumbUrl его подхватил
       stationName: null,
     }));
   },
