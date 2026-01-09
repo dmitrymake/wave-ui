@@ -3,16 +3,19 @@
   import { fade } from "svelte/transition";
   import ImageLoader from "./ImageLoader.svelte";
   import * as MPD from "../lib/mpd";
+  import { YandexApi } from "../lib/yandex"; // Импортируем API
   import { ICONS } from "../lib/icons";
   import {
     activeMenuTab,
     favorites,
+    yandexFavorites, // Импортируем store яндекс лайков
     stations,
     getTrackThumbUrl,
     getTrackCoverUrl,
     openContextMenu,
     navigationStack,
     navigateTo,
+    showToast,
   } from "../lib/store.js";
   import { longpress } from "../lib/actions";
 
@@ -30,7 +33,12 @@
 
   $: if (track) imgError = false;
 
-  $: isLiked = $favorites.has(track.file);
+  // --- ЛОГИКА ЛАЙКА ---
+  // Если трек Яндекса - смотрим в yandexFavorites (по ID)
+  // Если локальный - смотрим в favorites (по file path)
+  $: isLiked = track.isYandex
+    ? $yandexFavorites.has(String(track.id))
+    : $favorites.has(track.file);
 
   $: currentView = $navigationStack[$navigationStack.length - 1];
 
@@ -109,6 +117,24 @@
       navigateTo("albums_by_artist", { name: track.artist });
     }
   }
+
+  // --- ОБРАБОТЧИК ЛАЙКА ---
+  async function handleToggleLike(e) {
+    e.stopPropagation();
+    if (track.isYandex) {
+      try {
+        await YandexApi.toggleLike(track.id, isLiked);
+        showToast(
+          isLiked ? "Removed from Yandex Likes" : "Added to Yandex Likes",
+          "success",
+        );
+      } catch (err) {
+        showToast("Failed to update Yandex like", "error");
+      }
+    } else {
+      MPD.toggleFavorite(track);
+    }
+  }
 </script>
 
 <div
@@ -179,8 +205,8 @@
 
     <div
       class="artist text-ellipsis"
-      class:link={!isRadio}
-      on:click={handleArtistClick}
+      class:link={!isRadio && !track.isYandex}
+      on:click={!track.isYandex ? handleArtistClick : undefined}
     >
       {artist}
     </div>
@@ -198,7 +224,7 @@
     <button
       class="btn-icon small"
       class:liked={isLiked}
-      on:click|stopPropagation={() => MPD.toggleFavorite(track)}
+      on:click|stopPropagation={handleToggleLike}
     >
       {@html isLiked ? ICONS.HEART_FILLED : ICONS.HEART}
     </button>

@@ -2,6 +2,7 @@ import { get } from "svelte/store";
 import { mpdClient } from "./client";
 import { PlayerActions, startStatusPoller } from "./player";
 import { LibraryActions } from "./library";
+import { MpdParser } from "./parser";
 import {
   currentSong,
   stations,
@@ -9,8 +10,10 @@ import {
   status,
   yandexContext,
   showToast,
+  queue,
 } from "../store";
 import { YandexApi } from "../yandex";
+import { ApiActions } from "../api"; // Импортируем ApiActions
 
 export function connect() {
   mpdClient.connect();
@@ -56,20 +59,47 @@ export function nav(cmd) {
   const selStation = get(selectedStationName);
   const isRadioMode = song.file && song.file.startsWith("http");
   const yCtx = get(yandexContext);
+  const playerStatus = get(status);
 
-  // YANDEX NEXT LOGIC
   if (
     yCtx.active &&
     yCtx.tracks.length > 0 &&
     (song.isYandex || (song.file && song.file === yCtx.currentTrackFile))
   ) {
     let nextIndex;
+
     if (cmd === "next") {
-      nextIndex = yCtx.currentIndex + 1;
-      if (nextIndex >= yCtx.tracks.length) nextIndex = 0; // Loop or stop
+      if (playerStatus.random) {
+        let attempts = 0;
+        do {
+          nextIndex = Math.floor(Math.random() * yCtx.tracks.length);
+          attempts++;
+        } while (
+          nextIndex === yCtx.currentIndex &&
+          attempts < 5 &&
+          yCtx.tracks.length > 1
+        );
+      } else {
+        nextIndex = yCtx.currentIndex + 1;
+      }
+
+      if (nextIndex >= yCtx.tracks.length) {
+        const lastTrack = yCtx.tracks[yCtx.tracks.length - 1];
+        if (lastTrack && lastTrack.id) {
+          showToast("Playlist ended. Starting My Vibe...", "info");
+          startYandexRadio(lastTrack.id);
+        } else {
+          resolveAndQueueYandexTrack(yCtx.tracks[0], 0, true);
+        }
+        return;
+      }
     } else {
-      nextIndex = yCtx.currentIndex - 1;
-      if (nextIndex < 0) nextIndex = yCtx.tracks.length - 1;
+      if (playerStatus.random) {
+        nextIndex = Math.floor(Math.random() * yCtx.tracks.length);
+      } else {
+        nextIndex = yCtx.currentIndex - 1;
+        if (nextIndex < 0) nextIndex = yCtx.tracks.length - 1;
+      }
     }
 
     const nextTrack = yCtx.tracks[nextIndex];
@@ -79,7 +109,6 @@ export function nav(cmd) {
     }
   }
 
-  // RADIO NEXT LOGIC
   if (
     isRadioMode &&
     stationList.length > 0 &&
@@ -99,7 +128,6 @@ export function nav(cmd) {
     }
     playStation(stationList[nextIndex]);
   } else {
-    // STANDARD MPD NEXT
     if (cmd === "next") PlayerActions.next();
     if (cmd === "previous") PlayerActions.previous();
   }
@@ -107,7 +135,6 @@ export function nav(cmd) {
 
 export function playStation(station) {
   if (!station) return;
-  // Disable Yandex context on radio play
   yandexContext.update((ctx) => ({ ...ctx, active: false }));
 
   selectedStationName.set(station.name);
@@ -134,7 +161,6 @@ export function playTrackOptimistic(track) {
   });
 }
 
-// HELPER FOR YANDEX PLAYBACK
 async function resolveAndQueueYandexTrack(
   track,
   index,
@@ -142,37 +168,86 @@ async function resolveAndQueueYandexTrack(
 ) {
   if (!track.id) return;
 
-  if (playImmediately) {
-    showToast(`Resolving ${track.title}...`, "info");
-  }
-
   try {
-    const streamUrl = await YandexApi.getStreamUrl(track.id);
+    let streamUrl = null;
+    const yCtx = get(yandexContext);
+    const existingCacheItem = Object.values(yCtx.streamCache).find(
+      (item) => String(item.id) === String(track.id),
+    );
+
+    if (existingCacheItem && existingCacheItem.file) {
+      streamUrl = existingCacheItem.file;
+    } else {
+      streamUrl = await YandexApi.getStreamUrl(track.id);
+    }
+
     if (!streamUrl) throw new Error("No Stream");
 
-    // Update Context
-    yandexContext.update((ctx) => ({
-      ...ctx,
-      active: true,
-      currentIndex: index,
-      currentTrackId: track.id,
-      currentTrackFile: streamUrl,
-    }));
+    // SAVE TO SERVER RAM (Background)
+    const meta = {
+      title: track.title,
+      artist: track.artist,
+      album: track.album,
+      image: track.image,
+      id: track.id,
+      time: track.time,
+    };
+    ApiActions.saveYandexMeta(streamUrl, meta);
+
+    yandexContext.update((ctx) => {
+      const newCache = { ...ctx.streamCache };
+      newCache[streamUrl] = {
+        ...track,
+        isYandex: true,
+        file: streamUrl,
+      };
+
+      return {
+        ...ctx,
+        active: true,
+        currentIndex: index,
+        currentTrackId: track.id,
+        currentTrackFile: streamUrl,
+        streamCache: newCache,
+      };
+    });
 
     if (playImmediately) {
-      await PlayerActions.playUri(streamUrl, {
-        title: track.title,
-        artist: track.artist,
-        album: track.album,
-      });
+      try {
+        const safeUrl = streamUrl.replace(/"/g, '\\"');
+        const findRes = await mpdClient.send(`playlistfind file "${safeUrl}"`);
+        const findData = MpdParser.parseKeyValue(findRes);
 
-      // Prefetch next tracks to ensure continuous playback
-      prefetchNextYandexTracks(index + 1);
+        if (findData && findData.id) {
+          await mpdClient.send(`playid ${findData.id}`);
+        } else {
+          await PlayerActions.playUri(streamUrl, {
+            title: track.title,
+            artist: track.artist,
+            album: track.album,
+          });
+        }
+
+        prefetchNextYandexTracks(index + 1);
+      } catch (err) {
+        console.error("Play error, falling back to playUri", err);
+        await PlayerActions.playUri(streamUrl, {
+          title: track.title,
+          artist: track.artist,
+          album: track.album,
+        });
+      }
     } else {
-      await PlayerActions.addToQueue(streamUrl);
+      const currentQueue = get(queue);
+      const isAlreadyInQueue = currentQueue.some((q) => q.file === streamUrl);
+
+      if (!isAlreadyInQueue) {
+        await PlayerActions.addToQueue(streamUrl);
+      }
     }
   } catch (e) {
     showToast("Failed to play Yandex track", "error");
+    console.error(e);
   }
 }
 
@@ -180,24 +255,56 @@ async function prefetchNextYandexTracks(startIndex) {
   const yCtx = get(yandexContext);
   if (!yCtx.active || !yCtx.tracks) return;
 
-  const BATCH_SIZE = 3; // Number of tracks to buffer ahead
-  const tracksToQueue = [];
+  const BATCH_SIZE = 3;
+  const tracksToProcess = [];
 
   for (let i = 0; i < BATCH_SIZE; i++) {
     const idx = startIndex + i;
     if (idx < yCtx.tracks.length) {
-      tracksToQueue.push(yCtx.tracks[idx]);
+      tracksToProcess.push(yCtx.tracks[idx]);
     }
   }
 
-  if (tracksToQueue.length === 0) return;
+  if (tracksToProcess.length === 0) return;
 
-  // Add tracks to MPD queue without playing them
-  for (const track of tracksToQueue) {
+  const currentQueue = get(queue);
+  const queueFiles = new Set(currentQueue.map((t) => t.file));
+
+  for (const track of tracksToProcess) {
     try {
-      const url = await YandexApi.getStreamUrl(track.id);
+      let url = null;
+
+      const cachedKey = Object.keys(yCtx.streamCache).find(
+        (key) => String(yCtx.streamCache[key].id) === String(track.id),
+      );
+
+      if (cachedKey) {
+        url = cachedKey;
+      } else {
+        url = await YandexApi.getStreamUrl(track.id);
+      }
+
       if (url) {
-        await mpdClient.send(`add "${url}"`);
+        // SAVE PREFETCH TO SERVER RAM
+        ApiActions.saveYandexMeta(url, {
+          title: track.title,
+          artist: track.artist,
+          album: track.album,
+          image: track.image,
+          id: track.id,
+          time: track.time,
+        });
+
+        yandexContext.update((ctx) => {
+          const newCache = { ...ctx.streamCache };
+          newCache[url] = { ...track, isYandex: true, file: url };
+          return { ...ctx, streamCache: newCache };
+        });
+
+        if (!queueFiles.has(url)) {
+          await mpdClient.send(`add "${url}"`);
+          queueFiles.add(url);
+        }
       }
     } catch (e) {
       console.warn("Failed to prefetch", track.title);
@@ -208,16 +315,15 @@ async function prefetchNextYandexTracks(startIndex) {
 export async function playYandexContext(tracks, startIndex = 0) {
   if (!tracks || tracks.length === 0) return;
 
-  // Initialize context
   yandexContext.set({
     active: true,
     tracks: tracks,
     currentIndex: startIndex,
     currentTrackFile: null,
     currentTrackId: tracks[startIndex].id,
+    streamCache: {},
   });
 
-  // Clear current queue to start fresh
   await mpdClient.send("stop");
   await mpdClient.send("clear");
 

@@ -5,7 +5,6 @@ error_reporting(E_ALL);
 
 header('Access-Control-Allow-Origin: *');
 header('Access-Control-Allow-Methods: GET, POST, OPTIONS');
-// Разрешаем нужные заголовки для CORS
 header('Access-Control-Allow-Headers: Authorization, Content-Type, Accept-Language');
 
 if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') exit(0);
@@ -16,6 +15,10 @@ require_once INC . '/sql.php';
 require_once INC . '/mpd.php';
 require_once INC . '/music-library.php';
 
+// Файл будет храниться в оперативной памяти (/dev/shm)
+// Это предотвращает износ SD-карты. Данные исчезают при перезагрузке.
+define('RAM_STORE_FILE', '/dev/shm/wave_yandex_state.json');
+
 session_start();
 
 if (!isset($_SESSION['xss_detect'])) $_SESSION['xss_detect'] = 'off';
@@ -25,12 +28,75 @@ if (!isset($_SESSION['library_misc_options'])) $_SESSION['library_misc_options']
 
 $action = isset($_REQUEST['action']) ? $_REQUEST['action'] : 'library';
 
-// Устанавливаем JSON заголовок по умолчанию для всех действий КРОМЕ прокси
 if ($action !== 'yandex_proxy') {
     header('Content-Type: application/json');
 }
 
 try {
+    // --- YANDEX STATE SHARING (RAM) START ---
+    
+    // Сохранить метаданные трека в RAM
+    if ($action === 'set_yandex_meta') {
+        $input = json_decode(file_get_contents('php://input'), true);
+        $fileUrl = $input['url'] ?? '';
+        $meta = $input['meta'] ?? null;
+
+        if (!$fileUrl || !$meta) {
+            throw new Exception("URL and Meta are required");
+        }
+
+        // Читаем текущее состояние из RAM
+        $data = [];
+        if (file_exists(RAM_STORE_FILE)) {
+            $content = file_get_contents(RAM_STORE_FILE);
+            if ($content) {
+                $data = json_decode($content, true) ?: [];
+            }
+        }
+
+        // Используем MD5 от URL как ключ, чтобы избежать проблем со спецсимволами
+        $key = md5($fileUrl);
+        $data[$key] = $meta;
+
+        // Ограничиваем размер кэша (храним последние 100 треков), чтобы не забить RAM
+        if (count($data) > 100) {
+            // Удаляем старые (из начала массива)
+            $data = array_slice($data, -100, 100, true);
+        }
+
+        file_put_contents(RAM_STORE_FILE, json_encode($data));
+        echo json_encode(['status' => 'saved']);
+        exit;
+    }
+
+    // Получить метаданные трека из RAM
+    if ($action === 'get_yandex_meta') {
+        $fileUrl = $_GET['url'] ?? '';
+        
+        if (!$fileUrl) {
+            echo json_encode(null);
+            exit;
+        }
+
+        if (!file_exists(RAM_STORE_FILE)) {
+            echo json_encode(null);
+            exit;
+        }
+
+        $content = file_get_contents(RAM_STORE_FILE);
+        $data = json_decode($content, true) ?: [];
+        $key = md5($fileUrl);
+
+        if (isset($data[$key])) {
+            echo json_encode($data[$key]);
+        } else {
+            echo json_encode(null);
+        }
+        exit;
+    }
+    // --- YANDEX STATE SHARING END ---
+
+
     // --- YANDEX PROXY START ---
     if ($action === 'yandex_proxy') {
         $path = $_GET['path'] ?? '';

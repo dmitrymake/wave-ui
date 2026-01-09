@@ -148,4 +148,32 @@ export const ApiActions = {
     }
     return null;
   },
+
+  async saveYandexMeta(url, meta) {
+    try {
+      await fetch(API_ENDPOINTS.SYNC + "?action=set_yandex_meta", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ url, meta }),
+      });
+    } catch (e) {
+      console.warn("Failed to save meta to RAM", e);
+    }
+  },
+
+  async getYandexMeta(url) {
+    try {
+      const res = await fetch(
+        API_ENDPOINTS.SYNC +
+          "?action=get_yandex_meta&url=" +
+          encodeURIComponent(url),
+      );
+      if (res.ok) {
+        return await res.json();
+      }
+    } catch (e) {
+      console.warn("Failed to get meta from RAM", e);
+    }
+    return null;
+  },
 };

@@ -1,12 +1,8 @@
 import { get } from "svelte/store";
-import { yandexToken } from "./store";
+import { yandexToken, yandexFavorites } from "./store";
 import md5 from "md5";
 
 export const YandexApi = {
-  /**
-
-* General request helper for Yandex API via local proxy
-*/
   async request(path, options = {}) {
     const token = get(yandexToken);
     if (!token) throw new Error("No token provided");
@@ -60,21 +56,12 @@ export const YandexApi = {
     }
   },
 
-  /**
-
-* Get tracks from a specific playlist with pagination support
-* @param {string} kind - Playlist kind (ID)
-* @param {string|null} uid - User ID (optional)
-* @param {number} page - Page index (0-based)
-*/
   async getPlaylistTracks(kind, uid = null, page = 0) {
     try {
       if (!uid) uid = await this.getUserId();
       const data = await this.request(`/users/${uid}/playlists/${kind}`);
       const res = data.result;
       if (!res || !res.tracks) return { tracks: [], total: 0 };
-      // Yandex returns the full list of track IDs in the playlist object.
-      // We must slice the IDs locally and then fetch details in batches.
       const ids = res.tracks.map((t) => t.id);
       const PAGE_SIZE = 50;
       const start = page * PAGE_SIZE;
@@ -90,10 +77,6 @@ export const YandexApi = {
     }
   },
 
-  /**
-
-* Get user favorites (Likes) with pagination
-*/
   async getFavorites(page = 0) {
     try {
       const uid = await this.getUserId();
@@ -101,7 +84,7 @@ export const YandexApi = {
       let ids = [];
       const res = data.result;
       if (!res) return { tracks: [], total: 0 };
-      // Handle different API response structures for favorites
+
       if (res.ids && Array.isArray(res.ids)) {
         ids = res.ids;
       } else if (res.library && Array.isArray(res.library)) {
@@ -116,6 +99,11 @@ export const YandexApi = {
         ids = res.map((t) => t.id);
       }
       ids = ids.filter((id) => id);
+
+      if (page === 0) {
+        yandexFavorites.set(new Set(ids.map(String)));
+      }
+
       if (ids.length === 0) return { tracks: [], total: 0 };
       const PAGE_SIZE = 50;
       const start = page * PAGE_SIZE;
@@ -131,18 +119,38 @@ export const YandexApi = {
     }
   },
 
-  /**
+  async toggleLike(trackId, isLiked) {
+    const uid = await this.getUserId();
+    const action = isLiked ? "remove" : "add";
 
-* Unified search for Tracks, Albums, and Artists
-* @param {string} query
-* @param {string} type - 'all', 'track', 'album', 'artist'
-* @param {number} page
-*/
+    yandexFavorites.update((s) => {
+      const n = new Set(s);
+      if (isLiked) n.delete(String(trackId));
+      else n.add(String(trackId));
+      return n;
+    });
+
+    try {
+      await this.request(`/users/${uid}/likes/tracks/${action}`, {
+        method: "POST",
+        body: `track-id=${trackId}`,
+      });
+    } catch (e) {
+      console.error("Failed to toggle like", e);
+      yandexFavorites.update((s) => {
+        const n = new Set(s);
+        if (isLiked) n.add(String(trackId));
+        else n.delete(String(trackId));
+        return n;
+      });
+      throw e;
+    }
+  },
+
   async search(query, type = "all", page = 0) {
     if (!query) return { tracks: [], albums: [], artists: [] };
     try {
       const p = page;
-      // type can be: 'all', 'track', 'album', 'artist', 'playlist'
       const data = await this.request(
         `/search?text=${encodeURIComponent(query)}&type=${type}&page=${p}&nocorrect=false`,
       );
@@ -188,7 +196,6 @@ export const YandexApi = {
       if (!data.result || !data.result.volumes) return [];
 
       const rawTracks = [];
-      // Volumes usually represent discs. Flatten them.
       data.result.volumes.forEach((vol) => {
         if (Array.isArray(vol)) {
           rawTracks.push(...vol);
@@ -214,10 +221,6 @@ export const YandexApi = {
     }
   },
 
-  /**
-
-* "My Vibe" / Radio based on track
-*/
   async getSimilarTracks(trackId) {
     try {
       const data = await this.request(`/tracks/${trackId}/similar`);
@@ -243,11 +246,12 @@ export const YandexApi = {
       const data = await this.request(`/tracks/${trackId}/download-info`);
       if (!data.result || !data.result[0]) throw new Error("No download info");
 
-      // Sort by bitrate descending to get best quality
       const sorted = data.result.sort(
         (a, b) => b.bitrate_in_kbps - a.bitrate_in_kbps,
       );
-      const target = sorted[0]; // Best quality
+      const target = sorted[0];
+
+      if (!target) throw new Error("No valid stream found");
 
       const srcUrl = target.downloadInfoUrl;
       const xmlText = await this.request(srcUrl, { isXml: true });

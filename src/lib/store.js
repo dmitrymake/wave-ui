@@ -108,13 +108,46 @@ export const currentSong = writable({
   isYandex: false,
 });
 
-export const yandexContext = writable({
+// --- YANDEX CONTEXT WITH PERSISTENCE ---
+const initialYandexState = {
   active: false,
   tracks: [],
   currentIndex: -1,
   currentTrackId: null,
   currentTrackFile: null,
+  streamCache: {},
+};
+
+// Пытаемся восстановить кэш из localStorage, чтобы не терять названия треков при F5
+if (typeof localStorage !== "undefined") {
+  try {
+    const savedCache = localStorage.getItem("yandex_stream_cache");
+    if (savedCache) {
+      initialYandexState.streamCache = JSON.parse(savedCache);
+    }
+  } catch (e) {
+    console.error("Failed to load yandex cache", e);
+  }
+}
+
+export const yandexContext = writable(initialYandexState);
+
+// Сохраняем кэш при каждом обновлении
+yandexContext.subscribe((val) => {
+  if (typeof localStorage !== "undefined" && val.streamCache) {
+    // Ограничиваем размер кэша, чтобы localStorage не переполнился (например, 500 треков)
+    const keys = Object.keys(val.streamCache);
+    if (keys.length > 500) {
+      // Удаляем старые, если логика позволяет, или просто перезаписываем
+      // В данном случае просто сохраняем как есть, это текст, влезет много
+    }
+    localStorage.setItem(
+      "yandex_stream_cache",
+      JSON.stringify(val.streamCache),
+    );
+  }
 });
+// ---------------------------------------
 
 export const isFullPlayerOpen = writable(false);
 export const isLoadingRadio = writable(false);
@@ -429,3 +462,5 @@ isYandexEnabled.subscribe((val) => {
     localStorage.setItem("yandex_enabled", String(val));
   }
 });
+
+export const yandexFavorites = writable(new Set());

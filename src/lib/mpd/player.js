@@ -12,6 +12,7 @@ import {
   yandexContext,
 } from "../store";
 import { db } from "../db";
+import { ApiActions } from "../api"; // Импорт API для восстановления данных
 
 const POLLER_INTERVAL = 1000;
 const TICKER_INTERVAL = 250;
@@ -89,6 +90,7 @@ async function syncQueue(newVersion) {
     if (get(isQueueLocked)) return;
 
     const rawTracks = MpdParser.parseTracks(text);
+    const yCtx = get(yandexContext);
 
     const filesToLookup = rawTracks
       .map((t) => t.file)
@@ -104,7 +106,32 @@ async function syncQueue(newVersion) {
     }
 
     const tracks = rawTracks.map((t) => {
-      const lookupKey = (t.file || "").normalize("NFC");
+      const fileUrl = t.file || "";
+
+      // 1. Из кэша браузера
+      if (yCtx.streamCache && yCtx.streamCache[fileUrl]) {
+        const yMeta = yCtx.streamCache[fileUrl];
+        return {
+          ...t,
+          title: yMeta.title,
+          artist: yMeta.artist,
+          album: yMeta.album,
+          image: yMeta.image,
+          isYandex: true,
+          id: yMeta.id,
+          mpdId: t.id,
+          mpdPos: t.pos,
+          _uid: String(t.id || t.pos) + "y",
+        };
+      }
+
+      // 2. Если это Яндекс, но нет в кэше -> пробуем загрузить из RAM сервера асинхронно
+      if (fileUrl.includes("yandex.net") || fileUrl.includes("get-mp3")) {
+        fetchYandexMetaForTrack(fileUrl); // Асинхронный вызов
+      }
+
+      // 3. Из локальной БД
+      const lookupKey = fileUrl.normalize("NFC");
       const cached = cachedMap.get(lookupKey);
 
       if (cached) {
@@ -118,6 +145,7 @@ async function syncQueue(newVersion) {
           _uid: String(t.id || t.pos + t.file),
         };
       }
+
       return {
         ...t,
         _uid: String(t.id || t.pos + t.file),
@@ -131,42 +159,61 @@ async function syncQueue(newVersion) {
   }
 }
 
+// Хелпер для асинхронной подгрузки метаданных
+async function fetchYandexMetaForTrack(url) {
+  const meta = await ApiActions.getYandexMeta(url);
+  if (meta) {
+    yandexContext.update((ctx) => {
+      const newCache = { ...ctx.streamCache };
+      newCache[url] = { ...meta, isYandex: true, file: url };
+      return { ...ctx, streamCache: newCache };
+    });
+    // Триггерим обновление текущей песни, если это она
+    const song = get(currentSong);
+    if (song.file === url) {
+      currentSong.update((s) => ({ ...s, ...meta, isYandex: true }));
+    }
+    // Триггерим обновление очереди (реактивность сработает)
+    queue.update((q) =>
+      q.map((t) => {
+        if (t.file === url) return { ...t, ...meta, isYandex: true };
+        return t;
+      }),
+    );
+  }
+}
+
 function updateStores(serverStatus, serverSong) {
   const oldSong = get(currentSong);
   const allStations = get(stations);
   const yCtx = get(yandexContext);
 
-  // YANDEX OVERRIDE LOGIC
-  // If the playing URL matches what we expect from Yandex, override metadata
-  // Also check if the title looks like a raw hash (common issue with streams)
-  const isHashTitle =
-    serverSong.title && /^[a-f0-9]{32,128}$/i.test(serverSong.title);
+  if (
+    serverSong.file &&
+    yCtx.streamCache &&
+    yCtx.streamCache[serverSong.file]
+  ) {
+    const yMeta = yCtx.streamCache[serverSong.file];
+    serverSong.title = yMeta.title;
+    serverSong.artist = yMeta.artist;
+    serverSong.album = yMeta.album;
+    serverSong.image = yMeta.image;
+    serverSong.isYandex = true;
+    serverSong.id = yMeta.id;
 
-  if (yCtx.active && yCtx.tracks.length > 0) {
-    // Try to match by file URL or if we just have a broken title and context is active
-    let yTrack = null;
-
-    if (serverSong.file === yCtx.currentTrackFile) {
-      yTrack =
-        yCtx.tracks.find((t) => t.id === yCtx.currentTrackId) ||
-        yCtx.tracks[yCtx.currentIndex];
-    } else if (isHashTitle) {
-      // Fallback: if title is broken, assume it's the current context track
-      yTrack = yCtx.tracks[yCtx.currentIndex];
+    if (
+      yMeta.time > 0 &&
+      (serverStatus.duration === 0 || isNaN(serverStatus.duration))
+    ) {
+      serverStatus.duration = yMeta.time;
     }
-
-    if (yTrack) {
-      serverSong.title = yTrack.title;
-      serverSong.artist = yTrack.artist;
-      serverSong.album = yTrack.album;
-      serverSong.image = yTrack.image; // Pass image for cover logic
-      serverSong.isYandex = true;
-
-      // Fix Duration if MPD says 0 or infinity
-      if (yTrack.time > 0) {
-        serverStatus.duration = yTrack.time;
-      }
-    }
+  } else if (
+    serverSong.file &&
+    (serverSong.file.includes("yandex.net") ||
+      serverSong.file.includes("get-mp3"))
+  ) {
+    // Если играет Яндекс, но мы не знаем метаданных (например, после F5)
+    fetchYandexMetaForTrack(serverSong.file);
   }
 
   const isRadio = serverSong.file && serverSong.file.startsWith("http");
