@@ -10,6 +10,8 @@
     isAlarmEnabled,
     alarmPlaylist,
     playlists,
+    yandexToken,
+    isYandexEnabled,
   } from "../../lib/store";
   import { ApiActions } from "../../lib/api";
   import { THEMES } from "../../lib/theme";
@@ -81,6 +83,10 @@
   function toggleAlarm() {
     isAlarmEnabled.update((v) => !v);
     handleSaveAlarm();
+  }
+
+  function toggleYandex() {
+    isYandexEnabled.update((v) => !v);
   }
 
   $: activeThemeLabel =
@@ -164,6 +170,49 @@
             <span class="chevron">{@html ICONS.NEXT}</span>
           </div>
         </div>
+      </div>
+    </div>
+
+    <div class="section">
+      <div class="section-header">
+        <span>Services</span>
+      </div>
+      <div class="card">
+        <div class="row space-between">
+          <label>Enable Yandex Music (Beta)</label>
+          <button
+            class="toggle-btn"
+            class:active={$isYandexEnabled}
+            on:click={toggleYandex}
+          >
+            <div class="toggle-circle"></div>
+          </button>
+        </div>
+
+        {#if $isYandexEnabled}
+          <div class="separator" in:fade></div>
+
+          <div class="row" in:fade>
+            <label for="yandex-token">OAuth Token</label>
+            <div class="input-group">
+              <input
+                id="yandex-token"
+                type="password"
+                bind:value={$yandexToken}
+                placeholder="Enter token..."
+              />
+            </div>
+          </div>
+
+          <p class="hint" in:fade>
+            Required to access your library and stream music.
+            <a
+              href="https://github.com/MarshalX/yandex-music-api/discussions/513"
+              target="_blank"
+              style="color: var(--c-accent);">How to get token</a
+            >
+          </p>
+        {/if}
       </div>
     </div>
 
@@ -284,7 +333,8 @@
     flex: 1;
   }
 
-  input[type="text"] {
+  input[type="text"],
+  input[type="password"] {
     background: var(--c-surface-input);
     border: 1px solid var(--c-border);
     color: var(--c-text-primary);
@@ -369,7 +419,6 @@
     margin: 4px 0;
   }
 
-  /* TOGGLE SWITCH */
   .toggle-btn {
     width: 44px;
     height: 24px;
@@ -405,7 +454,6 @@
     transform: translateX(20px);
   }
 
-  /* SELECT */
   .select-wrapper {
     position: relative;
     max-width: 150px;

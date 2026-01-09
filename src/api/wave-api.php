@@ -5,7 +5,6 @@ error_reporting(E_ALL);
 
 header('Access-Control-Allow-Origin: *');
 header('Access-Control-Allow-Methods: GET, POST, OPTIONS');
-header('Content-Type: application/json');
 
 if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') exit(0);
 
@@ -24,7 +23,76 @@ if (!isset($_SESSION['library_misc_options'])) $_SESSION['library_misc_options']
 
 $action = isset($_REQUEST['action']) ? $_REQUEST['action'] : 'library';
 
+// Устанавливаем JSON заголовок по умолчанию для всех действий КРОМЕ прокси
+if ($action !== 'yandex_proxy') {
+    header('Content-Type: application/json');
+}
+
 try {
+    // --- YANDEX PROXY START ---
+    if ($action === 'yandex_proxy') {
+        $path = $_GET['path'] ?? '';
+        if (!$path) {
+            header('Content-Type: application/json');
+            throw new Exception("No path provided for proxy");
+        }
+
+        $is_storage = strpos($path, 'http') === 0;
+        $url = $is_storage ? $path : "https://api.music.yandex.net" . $path;
+
+        $ch = curl_init($url);
+        
+        $requestHeaders = [];
+        if (function_exists('getallheaders')) {
+            $headers = getallheaders();
+            foreach ($headers as $key => $value) {
+                if (strtolower($key) === 'authorization') {
+                    $requestHeaders[] = "Authorization: $value";
+                }
+                if (strtolower($key) === 'accept-language') {
+                    $requestHeaders[] = "Accept-Language: $value";
+                }
+            }
+        }
+        
+        if (empty($requestHeaders) && isset($_GET['token'])) {
+            $requestHeaders[] = "Authorization: OAuth " . $_GET['token'];
+        }
+
+        if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+            curl_setopt($ch, CURLOPT_POST, 1);
+            $postBody = file_get_contents('php://input');
+            curl_setopt($ch, CURLOPT_POSTFIELDS, $postBody);
+            $requestHeaders[] = 'Content-Type: application/x-www-form-urlencoded';
+        }
+
+        curl_setopt($ch, CURLOPT_HTTPHEADER, $requestHeaders);
+        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+        curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false); // Игнорируем проблемы с SSL локально
+        curl_setopt($ch, CURLOPT_FOLLOWLOCATION, true);
+        curl_setopt($ch, CURLOPT_USERAGENT, 'Mozilla/5.0 (compatible; MoodeAudio/1.0)');
+
+        $response = curl_exec($ch);
+        $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        $contentType = curl_getinfo($ch, CURLINFO_CONTENT_TYPE);
+        $curlError = curl_error($ch);
+        
+        curl_close($ch);
+
+        if ($curlError) {
+            header('Content-Type: application/json');
+            throw new Exception("Proxy Error: " . $curlError);
+        }
+
+        if ($contentType) {
+            header("Content-Type: $contentType");
+        }
+        
+        http_response_code($httpCode);
+        echo $response;
+        exit;
+    }
+
     if ($action === 'stations') {
         $dbh = sqlConnect();
         if (!$dbh) throw new Exception("Moode DB Error");
@@ -114,7 +182,10 @@ try {
     }
 
 } catch (Throwable $e) {
-    http_response_code(500);
+    if (!headers_sent()) {
+        header('Content-Type: application/json');
+        http_response_code(500);
+    }
     echo json_encode(["error" => $e->getMessage()]);
 }
 ?>

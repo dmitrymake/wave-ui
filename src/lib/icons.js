@@ -38,6 +38,7 @@ import circleCheck from "./svg/circle-check.svg?raw";
 import dots from "./svg/dots.svg?raw";
 import sortDescending from "./svg/sort-descending.svg?raw";
 import sortAscending from "./svg/sort-ascending.svg?raw";
+import brandYandex from "./svg/yandex.svg?raw";
 
 export const ICONS = {
   ARTISTS: music,
@@ -85,4 +86,6 @@ export const ICONS = {
 
   SORT_DESC: sortDescending,
   SORT_ASC: sortAscending,
+
+  YANDEX: brandYandex,
 };

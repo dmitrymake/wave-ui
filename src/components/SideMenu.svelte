@@ -7,6 +7,7 @@
     activeMenuTab,
     isSyncingLibrary,
     isSidebarCollapsed,
+    isYandexEnabled,
   } from "../lib/store";
   import { ApiActions } from "../lib/api";
 
@@ -17,14 +18,20 @@
   let touchCurrentX = 0;
   let isSwiping = false;
 
-  const MENU_ITEMS = [
+  const ALL_MENU_ITEMS = [
     { id: "queue", label: "Queue", icon: ICONS.MENU },
     { id: "favorites", label: "Favorites", icon: ICONS.HEART },
     { id: "artists", label: "Artists", icon: ICONS.ARTISTS },
     { id: "albums", label: "Albums", icon: ICONS.ALBUMS },
     { id: "playlists", label: "Playlists", icon: ICONS.PLAYLISTS },
     { id: "radio", label: "Radio", icon: ICONS.RADIO },
+    { id: "yandex", label: "Yandex Music", icon: ICONS.YANDEX },
   ];
+
+  $: visibleMenuItems = ALL_MENU_ITEMS.filter((item) => {
+    if (item.id === "yandex") return $isYandexEnabled;
+    return true;
+  });
 
   function switchTab(id) {
     window.location.hash = `/${id}`;
@@ -113,7 +120,7 @@
 
   <div class="scroll-area custom-scrollbar">
     <nav>
-      {#each MENU_ITEMS as item}
+      {#each visibleMenuItems as item (item.id)}
         <button
           class="nav-item"
           class:active={$activeMenuTab === item.id}
@@ -442,7 +449,6 @@
       backdrop-filter: blur(4px);
     }
 
-    /* Force FULL View elements visible */
     .collapse-btn {
       display: none;
     }

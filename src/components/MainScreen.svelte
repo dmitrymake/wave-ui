@@ -22,6 +22,8 @@
   import FullPlayer from "./FullPlayer.svelte";
   import SideMenu from "./SideMenu.svelte";
 
+  import YandexView from "./views/YandexView.svelte";
+
   let isMobileMenuOpen = false;
 
   onMount(() => {
@@ -65,6 +67,8 @@
             {#if $activeMenuTab === "radio"}Radio
             {:else if $activeMenuTab === "playlists"}Playlists
             {:else if $activeMenuTab === "search"}Search
+            {:else if $activeMenuTab === "yandex"}
+              <YandexView />
             {:else if $activeMenuTab === "queue"}Queue
             {:else if $activeMenuTab === "favorites"}Favorites
             {:else if $activeMenuTab === "settings"}Settings

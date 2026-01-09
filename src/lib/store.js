@@ -43,7 +43,7 @@ export const modal = writable({
   confirmLabel: "Confirm",
   cancelLabel: "Cancel",
   onConfirm: null,
-  type: "confirm", // 'confirm' | 'alert' | 'prompt' | 'select'
+  type: "confirm",
   inputValue: "",
   placeholder: "",
   options: [],
@@ -112,7 +112,6 @@ export const currentSong = writable({
   pos: null,
 });
 
-// UI
 export const isFullPlayerOpen = writable(false);
 export const isLoadingRadio = writable(false);
 export const isLoadingPlaylists = writable(false);
@@ -168,9 +167,7 @@ function vibrate() {
   if (typeof navigator !== "undefined" && navigator.vibrate) {
     try {
       navigator.vibrate(70);
-    } catch (e) {
-      // ignore
-    }
+    } catch (e) {}
   }
 }
 
@@ -274,6 +271,10 @@ export function getTrackCoverUrl(
 ) {
   if (!track || !track.file) return "/images/default_cover.png";
 
+  if (track.image && track.image.startsWith("http")) {
+    return track.image;
+  }
+
   if (isRadioTrack(track.file) || track.genre === "Radio") {
     if (track.image) {
       return getStationImageUrl(track);
@@ -308,6 +309,10 @@ export function getTrackThumbUrl(
       resolveRadioImage(track, stationList, selectedRadioName) ||
       "/images/radio_icon.png"
     );
+  }
+
+  if (track.image && track.image.startsWith("http")) {
+    return track.image;
   }
 
   if (!track.file) return "/images/default_icon.png";
@@ -399,3 +404,21 @@ isAlarmEnabled.subscribe((val) =>
   localStorage.setItem("alarmEnabled", String(val)),
 );
 alarmPlaylist.subscribe((val) => localStorage.setItem("alarmPlaylist", val));
+
+const savedYandexToken = localStorage.getItem("yandex_token") || "";
+export const yandexToken = writable(savedYandexToken);
+
+yandexToken.subscribe((val) => {
+  if (typeof localStorage !== "undefined") {
+    localStorage.setItem("yandex_token", val);
+  }
+});
+
+const savedYandexEnabled = localStorage.getItem("yandex_enabled") === "true";
+export const isYandexEnabled = writable(savedYandexEnabled);
+
+isYandexEnabled.subscribe((val) => {
+  if (typeof localStorage !== "undefined") {
+    localStorage.setItem("yandex_enabled", String(val));
+  }
+});

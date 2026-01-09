@@ -102,6 +102,11 @@ export const Router = {
         ]);
         break;
 
+      case "yandex":
+        activeMenuTab.set("yandex");
+        navigationStack.set([{ view: "root" }]);
+        break;
+
       default:
         this.setRootTab("artists");
         break;
