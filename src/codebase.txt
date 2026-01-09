@@ -1655,30 +1655,56 @@ export function nav(cmd) {
   const selStation = get(selectedStationName);
   const isRadioMode = song.file && song.file.startsWith("http");
   const yCtx = get(yandexContext);
+  const playerStatus = get(status);
 
-  // YANDEX NEXT LOGIC
   if (
     yCtx.active &&
     yCtx.tracks.length > 0 &&
     (song.isYandex || (song.file && song.file === yCtx.currentTrackFile))
   ) {
     let nextIndex;
+
     if (cmd === "next") {
-      nextIndex = yCtx.currentIndex + 1;
-      if (nextIndex >= yCtx.tracks.length) nextIndex = 0; // Loop or stop
+      if (playerStatus.random) {
+        let attempts = 0;
+        do {
+          nextIndex = Math.floor(Math.random() * yCtx.tracks.length);
+          attempts++;
+        } while (
+          nextIndex === yCtx.currentIndex &&
+          attempts < 5 &&
+          yCtx.tracks.length > 1
+        );
+      } else {
+        nextIndex = yCtx.currentIndex + 1;
+      }
+
+      if (nextIndex >= yCtx.tracks.length) {
+        const lastTrack = yCtx.tracks[yCtx.tracks.length - 1];
+        if (lastTrack && lastTrack.id) {
+          showToast("Playlist ended. Starting My Vibe...", "info");
+          startYandexRadio(lastTrack.id);
+        } else {
+          resolveAndQueueYandexTrack(yCtx.tracks[0], 0, true);
+        }
+        return;
+      }
     } else {
-      nextIndex = yCtx.currentIndex - 1;
-      if (nextIndex < 0) nextIndex = yCtx.tracks.length - 1;
+      if (playerStatus.random) {
+        nextIndex = Math.floor(Math.random() * yCtx.tracks.length);
+      } else {
+        nextIndex = yCtx.currentIndex - 1;
+        if (nextIndex < 0) nextIndex = yCtx.tracks.length - 1;
+      }
     }
 
     const nextTrack = yCtx.tracks[nextIndex];
     if (nextTrack) {
-      playYandexTrack(nextTrack, nextIndex);
+      resolveAndQueueYandexTrack(nextTrack, nextIndex, true);
       return;
     }
   }
 
-  // RADIO NEXT LOGIC
   if (
     isRadioMode &&
     stationList.length > 0 &&
@@ -1698,7 +1724,6 @@ export function nav(cmd) {
     }
     playStation(stationList[nextIndex]);
   } else {
-    // STANDARD MPD NEXT
     if (cmd === "next") PlayerActions.next();
     if (cmd === "previous") PlayerActions.previous();
   }
@@ -1706,7 +1731,6 @@ export function nav(cmd) {
 
 export function playStation(station) {
   if (!station) return;
-  // Disable Yandex context on radio play
   yandexContext.update((ctx) => ({ ...ctx, active: false }));
 
   selectedStationName.set(station.name);
@@ -1733,31 +1757,104 @@ export function playTrackOptimistic(track) {
   });
 }
 
-// HELPER FOR YANDEX PLAYBACK
-export async function playYandexTrack(track, index) {
+async function resolveAndQueueYandexTrack(
+  track,
+  index,
+  playImmediately = true,
+) {
   if (!track.id) return;
-  showToast(`Resolving ${track.title}...`, "info");
 
   try {
     const streamUrl = await YandexApi.getStreamUrl(track.id);
     if (!streamUrl) throw new Error("No Stream");
 
-    // Update Context
-    yandexContext.update((ctx) => ({
-      ...ctx,
-      active: true,
-      currentIndex: index,
-      currentTrackFile: streamUrl,
-    }));
+    yandexContext.update((ctx) => {
+      const newCache = { ...ctx.streamCache };
+      newCache[streamUrl] = {
+        ...track,
+        isYandex: true,
+        file: streamUrl,
+      };
 
-    PlayerActions.playUri(streamUrl, {
-      title: track.title,
-      artist: track.artist,
-      album: track.album,
+      return {
+        ...ctx,
+        active: true,
+        currentIndex: index,
+        currentTrackId: track.id,
+        currentTrackFile: streamUrl,
+        streamCache: newCache,
+      };
     });
+
+    if (playImmediately) {
+      await PlayerActions.playUri(streamUrl, {
+        title: track.title,
+        artist: track.artist,
+        album: track.album,
+      });
+
+      prefetchNextYandexTracks(index + 1);
+    } else {
+      await PlayerActions.addToQueue(streamUrl);
+    }
   } catch (e) {
     showToast("Failed to play Yandex track", "error");
+    console.error(e);
   }
+}
+
+async function prefetchNextYandexTracks(startIndex) {
+  const yCtx = get(yandexContext);
+  if (!yCtx.active || !yCtx.tracks) return;
+
+  const BATCH_SIZE = 3;
+  const tracksToQueue = [];
+
+  for (let i = 0; i < BATCH_SIZE; i++) {
+    const idx = startIndex + i;
+    if (idx < yCtx.tracks.length) {
+      tracksToQueue.push(yCtx.tracks[idx]);
+    }
+  }
+
+  if (tracksToQueue.length === 0) return;
+
+  for (const track of tracksToQueue) {
+    try {
+      const url = await YandexApi.getStreamUrl(track.id);
+
+      if (url) {
+        yandexContext.update((ctx) => {
+          const newCache = { ...ctx.streamCache };
+          newCache[url] = { ...track, isYandex: true, file: url };
+          return { ...ctx, streamCache: newCache };
+        });
+
+        await mpdClient.send(`add "${url}"`);
+      }
+    } catch (e) {
+      console.warn("Failed to prefetch", track.title);
+    }
+  }
+}
+
+export async function playYandexContext(tracks, startIndex = 0) {
+  if (!tracks || tracks.length === 0) return;
+
+  yandexContext.set({
+    active: true,
+    tracks: tracks,
+    currentIndex: startIndex,
+    currentTrackFile: null,
+    currentTrackId: tracks[startIndex].id,
+    streamCache: {},
+  });
+
+  await mpdClient.send("stop");
+  await mpdClient.send("clear");
+
+  const startTrack = tracks[startIndex];
+  resolveAndQueueYandexTrack(startTrack, startIndex, true);
 }
 
 export async function playPlaylistContext(playlistName, index = 0) {
@@ -1775,6 +1872,20 @@ export async function playPlaylistContext(playlistName, index = 0) {
   }
 }
 
+export async function startYandexRadio(trackId) {
+  showToast("Starting My Vibe...", "info");
+  try {
+    const tracks = await YandexApi.getSimilarTracks(trackId);
+    if (tracks.length > 0) {
+      playYandexContext(tracks, 0);
+    } else {
+      showToast("No similar tracks found", "error");
+    }
+  } catch (e) {
+    showToast("Radio error", "error");
+  }
+}
+
 === ./lib/mpd/player.js ===
 import { get } from "svelte/store";
 import { mpdClient } from "./client";
@@ -1787,7 +1898,7 @@ import {
   queueVersion,
   queue,
   isQueueLocked,
-  yandexContext, // IMPORTED
+  yandexContext,
 } from "../store";
 import { db } from "../db";
 
@@ -1867,6 +1978,7 @@ async function syncQueue(newVersion) {
     if (get(isQueueLocked)) return;
 
     const rawTracks = MpdParser.parseTracks(text);
+    const yCtx = get(yandexContext); // Получаем контекст
 
     const filesToLookup = rawTracks
       .map((t) => t.file)
@@ -1882,7 +1994,25 @@ async function syncQueue(newVersion) {
     }
 
     const tracks = rawTracks.map((t) => {
-      const lookupKey = (t.file || "").normalize("NFC");
+      const fileUrl = t.file || "";
+
+      if (yCtx.streamCache && yCtx.streamCache[fileUrl]) {
+        const yMeta = yCtx.streamCache[fileUrl];
+        return {
+          ...t,
+          title: yMeta.title,
+          artist: yMeta.artist,
+          album: yMeta.album,
+          image: yMeta.image,
+          isYandex: true,
+          id: yMeta.id,
+          mpdId: t.id,
+          mpdPos: t.pos,
+          _uid: String(t.id || t.pos) + "y",
+        };
+      }
+
+      const lookupKey = fileUrl.normalize("NFC");
       const cached = cachedMap.get(lookupKey);
 
       if (cached) {
@@ -1896,6 +2026,8 @@ async function syncQueue(newVersion) {
           _uid: String(t.id || t.pos + t.file),
         };
       }
+
+      // 3. ФОЛЛБЭК
       return {
         ...t,
         _uid: String(t.id || t.pos + t.file),
@@ -1914,26 +2046,40 @@ function updateStores(serverStatus, serverSong) {
   const allStations = get(stations);
   const yCtx = get(yandexContext);
 
-  // YANDEX OVERRIDE LOGIC
-  // If the playing URL matches what we expect from Yandex, override metadata
   if (
-    yCtx.active &&
-    yCtx.tracks.length > 0 &&
-    yCtx.currentIndex >= 0 &&
-    yCtx.currentTrackFile &&
-    serverSong.file === yCtx.currentTrackFile
+    serverSong.file &&
+    yCtx.streamCache &&
+    yCtx.streamCache[serverSong.file]
   ) {
-    const yTrack = yCtx.tracks[yCtx.currentIndex];
-    if (yTrack) {
-      serverSong.title = yTrack.title;
-      serverSong.artist = yTrack.artist;
-      serverSong.album = yTrack.album;
-      serverSong.image = yTrack.image; // Pass image for cover logic
-      serverSong.isYandex = true;
+    const yMeta = yCtx.streamCache[serverSong.file];
 
-      // Fix Duration if MPD says 0 or infinity
-      if (yTrack.time > 0) {
-        serverStatus.duration = yTrack.time;
+    serverSong.title = yMeta.title;
+    serverSong.artist = yMeta.artist;
+    serverSong.album = yMeta.album;
+    serverSong.image = yMeta.image;
+    serverSong.isYandex = true;
+    serverSong.id = yMeta.id; // Yandex ID
+
+    if (
+      yMeta.time > 0 &&
+      (serverStatus.duration === 0 || isNaN(serverStatus.duration))
+    ) {
+      serverStatus.duration = yMeta.time;
+    }
+  } else if (yCtx.active && yCtx.tracks.length > 0) {
+    const isHashTitle =
+      serverSong.title && /^[a-f0-9]{32,128}$/i.test(serverSong.title);
+
+    if (serverSong.file === yCtx.currentTrackFile || isHashTitle) {
+      // Пытаемся угадать по текущему индексу (менее надежно, но лучше чем хэш)
+      const yTrack = yCtx.tracks[yCtx.currentIndex];
+      if (yTrack) {
+        serverSong.title = yTrack.title;
+        serverSong.artist = yTrack.artist;
+        serverSong.album = yTrack.album;
+        serverSong.image = yTrack.image;
+        serverSong.isYandex = true;
+        serverSong.id = yTrack.id;
       }
     }
   }
@@ -1982,7 +2128,7 @@ function updateStores(serverStatus, serverSong) {
       forceHardSync = false;
       timeDriftSpeed = 1.0;
       if (isRadio && !serverSong.isYandex) serverStatus.elapsed = 0;
-      manageTicker(isPlaying && !isRadio);
+      manageTicker(isPlaying && (!isRadio || serverSong.isYandex));
       return serverStatus;
     }
 
@@ -1991,11 +2137,11 @@ function updateStores(serverStatus, serverSong) {
     if (forceHardSync) {
       forceHardSync = false;
       timeDriftSpeed = 1.0;
-      manageTicker(isPlaying && !isRadio);
+      manageTicker(isPlaying && (!isRadio || serverSong.isYandex));
       return serverStatus;
     }
 
-    if (isPlaying && !isRadio) {
+    if (isPlaying && (!isRadio || serverSong.isYandex)) {
       const diff = serverStatus.elapsed - localStatus.elapsed;
       if (Math.abs(diff) > 2.0) {
         timeDriftSpeed = 1.0;
@@ -2596,7 +2742,7 @@ export const MpdParser = {
 
 === ./lib/yandex.js ===
 import { get } from "svelte/store";
-import { yandexToken } from "./store";
+import { yandexToken, yandexFavorites } from "./store"; // Импортируем новый store
 import md5 from "md5";
 
 export const YandexApi = {
@@ -2608,7 +2754,7 @@ export const YandexApi = {
 
     const headers = {
       Authorization: `OAuth ${token}`,
-      "Accept-Language": "ru",
+      "Accept-Language": "en",
       ...(options.headers || {}),
     };
 
@@ -2653,32 +2799,34 @@ export const YandexApi = {
     }
   },
 
-  async getPlaylistTracks(kind, uid = null) {
+  async getPlaylistTracks(kind, uid = null, page = 0) {
     try {
       if (!uid) uid = await this.getUserId();
       const data = await this.request(`/users/${uid}/playlists/${kind}`);
-
       const res = data.result;
-      if (!res || !res.tracks) return [];
-
+      if (!res || !res.tracks) return { tracks: [], total: 0 };
       const ids = res.tracks.map((t) => t.id);
-      const slice = ids.slice(0, 100);
-      return await this.getTracksByIds(slice);
+      const PAGE_SIZE = 50;
+      const start = page * PAGE_SIZE;
+      const slice = ids.slice(start, start + PAGE_SIZE);
+      const tracks = await this.getTracksByIds(slice);
+      return {
+        tracks,
+        total: ids.length,
+      };
     } catch (e) {
       console.error("Yandex Playlist Tracks Error:", e);
-      return [];
+      return { tracks: [], total: 0 };
     }
   },
 
-  async getFavorites() {
+  async getFavorites(page = 0) {
     try {
       const uid = await this.getUserId();
       const data = await this.request(`/users/${uid}/likes/tracks`);
-
       let ids = [];
       const res = data.result;
-
-      if (!res) return [];
+      if (!res) return { tracks: [], total: 0 };
 
       if (res.ids && Array.isArray(res.ids)) {
         ids = res.ids;
@@ -2693,30 +2841,141 @@ export const YandexApi = {
       } else if (Array.isArray(res)) {
         ids = res.map((t) => t.id);
       }
-
       ids = ids.filter((id) => id);
 
-      if (ids.length === 0) return [];
+      if (page === 0) {
+        yandexFavorites.set(new Set(ids.map(String)));
+      }
+      // ------------------------------------------------------------------
 
-      const slice = ids.slice(0, 100);
-      return await this.getTracksByIds(slice);
+      if (ids.length === 0) return { tracks: [], total: 0 };
+      const PAGE_SIZE = 50;
+      const start = page * PAGE_SIZE;
+      const slice = ids.slice(start, start + PAGE_SIZE);
+      const tracks = await this.getTracksByIds(slice);
+      return {
+        tracks,
+        total: ids.length,
+      };
     } catch (e) {
       console.error("Yandex Favorites Error:", e);
+      return { tracks: [], total: 0 };
+    }
+  },
+
+  async toggleLike(trackId, isLiked) {
+    const uid = await this.getUserId();
+    const action = isLiked ? "remove" : "add";
+
+    // Оптимистичное обновление UI
+    yandexFavorites.update((s) => {
+      const n = new Set(s);
+      if (isLiked) n.delete(String(trackId));
+      else n.add(String(trackId));
+      return n;
+    });
+
+    try {
+      await this.request(`/users/${uid}/likes/tracks/${action}`, {
+        method: "POST",
+        body: `track-id=${trackId}`,
+      });
+    } catch (e) {
+      console.error("Failed to toggle like", e);
+      // Откат при ошибке
+      yandexFavorites.update((s) => {
+        const n = new Set(s);
+        if (isLiked) n.add(String(trackId));
+        else n.delete(String(trackId));
+        return n;
+      });
+      throw e;
+    }
+  },
+  // ------------------------------------
+
+  // ... (остальные методы search, getAlbumTracks, getArtistTracks, getSimilarTracks, getTracksByIds, getStreamUrl, normalizeTracks оставляем как есть)
+  async search(query, type = "all", page = 0) {
+    if (!query) return { tracks: [], albums: [], artists: [] };
+    try {
+      const p = page;
+      const data = await this.request(
+        `/search?text=${encodeURIComponent(query)}&type=${type}&page=${p}&nocorrect=false`,
+      );
+      const res = data.result;
+      let tracks = [];
+      let albums = [];
+      let artists = [];
+      if (res.tracks && res.tracks.results) {
+        tracks = this.normalizeTracks(res.tracks.results);
+      }
+      if (res.albums && res.albums.results) {
+        albums = res.albums.results.map((a) => ({
+          ...a,
+          isAlbum: true,
+          image: a.coverUri
+            ? `https://${a.coverUri.replace("%%", "200x200")}`
+            : null,
+          artist:
+            a.artists && a.artists.length > 0 ? a.artists[0].name : "Unknown",
+        }));
+      }
+      if (res.artists && res.artists.results) {
+        artists = res.artists.results.map((a) => ({
+          ...a,
+          isArtist: true,
+          name: a.name,
+          image:
+            a.cover && a.cover.uri
+              ? `https://${a.cover.uri.replace("%%", "200x200")}`
+              : null,
+        }));
+      }
+      return { tracks, albums, artists };
+    } catch (e) {
+      console.error("Yandex Search Error:", e);
+      return { tracks: [], albums: [], artists: [] };
+    }
+  },
+
+  async getAlbumTracks(albumId) {
+    try {
+      const data = await this.request(`/albums/${albumId}/with-tracks`);
+      if (!data.result || !data.result.volumes) return [];
+
+      const rawTracks = [];
+      data.result.volumes.forEach((vol) => {
+        if (Array.isArray(vol)) {
+          rawTracks.push(...vol);
+        }
+      });
+      return this.normalizeTracks(rawTracks);
+    } catch (e) {
+      console.error("Yandex Album Error:", e);
       return [];
     }
   },
 
-  async search(query) {
-    if (!query) return [];
+  async getArtistTracks(artistId) {
     try {
       const data = await this.request(
-        `/search?text=${encodeURIComponent(query)}&type=track&page=0`,
+        `/artists/${artistId}/tracks?page=0&page-size=50`,
       );
-      const tracks =
-        data.result && data.result.tracks ? data.result.tracks.results : [];
-      return this.normalizeTracks(tracks);
+      if (!data.result || !data.result.tracks) return [];
+      return this.normalizeTracks(data.result.tracks);
     } catch (e) {
-      console.error("Yandex Search Error:", e);
+      console.error("Yandex Artist Error:", e);
+      return [];
+    }
+  },
+
+  async getSimilarTracks(trackId) {
+    try {
+      const data = await this.request(`/tracks/${trackId}/similar`);
+      if (!data.result || !data.result.similarTracks) return [];
+      return this.normalizeTracks(data.result.similarTracks);
+    } catch (e) {
+      console.error("Yandex Similar Tracks Error:", e);
       return [];
     }
   },
@@ -2735,11 +2994,10 @@ export const YandexApi = {
       const data = await this.request(`/tracks/${trackId}/download-info`);
       if (!data.result || !data.result[0]) throw new Error("No download info");
 
-      // Sort by bitrate descending to get best quality
       const sorted = data.result.sort(
         (a, b) => b.bitrate_in_kbps - a.bitrate_in_kbps,
       );
-      const target = sorted[0]; // Best quality
+      const target = sorted[0];
 
       const srcUrl = target.downloadInfoUrl;
       const xmlText = await this.request(srcUrl, { isXml: true });
@@ -2769,7 +3027,10 @@ export const YandexApi = {
 
     return rawTracks.map((t) => ({
       title: t.title,
-      artist: t.artists ? t.artists.map((a) => a.name).join(", ") : "Unknown",
+      artist:
+        t.artists && t.artists.length > 0
+          ? t.artists.map((a) => a.name).join(", ")
+          : "Unknown",
       album: t.albums && t.albums.length > 0 ? t.albums[0].title : "Single",
       file: `https://music.yandex.ru/album/${t.albums && t.albums[0] ? t.albums[0].id : 0}/track/${t.id}`,
       id: t.id,
@@ -3221,13 +3482,16 @@ export const currentSong = writable({
   stationName: null,
   id: null,
   pos: null,
+  isYandex: false,
 });
 
 export const yandexContext = writable({
   active: false,
   tracks: [],
   currentIndex: -1,
+  currentTrackId: null,
   currentTrackFile: null,
+  streamCache: {},
 });
 
 export const isFullPlayerOpen = writable(false);
@@ -3457,6 +3721,9 @@ export function getTrackThumbUrl(
 
 function isRadioTrack(file) {
   if (!file) return false;
+  // If it's explicitly marked as Yandex (which uses http stream), don't treat as generic radio
+  if (file.includes("yandex.ru") || file.includes("get-mp3")) return false;
+
   return (
     file.startsWith("http") || file.includes("://") || file.includes("RADIO")
   );
@@ -3540,6 +3807,8 @@ isYandexEnabled.subscribe((val) => {
     localStorage.setItem("yandex_enabled", String(val));
   }
 });
+
+export const yandexFavorites = writable(new Set());
 
 === ./sw.js ===
 const CACHE_NAME = "covers-v1";
@@ -3975,6 +4244,7 @@ self.addEventListener("fetch", (event) => {
   import { PlayerActions } from "../lib/mpd/player";
   import { LibraryActions } from "../lib/mpd/library";
   import { mpdClient } from "../lib/mpd/client";
+  import { startYandexRadio } from "../lib/mpd/index";
 
   let innerWidth;
   let innerHeight;
@@ -4012,7 +4282,6 @@ self.addEventListener("fetch", (event) => {
     closeContextMenu();
   }
 
-  // --- ACTIONS ---
   function handlePlayNext() {
     if ($contextMenu.track) PlayerActions.playNext($contextMenu.track.file);
     closeContextMenu();
@@ -4068,9 +4337,6 @@ self.addEventListener("fetch", (event) => {
   function handlePlaylistPlay() {
     const pl = $contextMenu.context.playlist;
     if (pl) {
-      // Play context clears queue and plays
-      // import { playPlaylistContext } from "../lib/mpd"; // Need this or call via client
-      // Or reuse runMpdRequest
       mpdClient
         .send("stop")
         .then(() => mpdClient.send("clear"))
@@ -4116,6 +4382,14 @@ self.addEventListener("fetch", (event) => {
     });
   }
 
+  function handleMyVibe() {
+    const t = $contextMenu.track;
+    if (t && t.isYandex && t.id) {
+      startYandexRadio(t.id);
+    }
+    closeContextMenu();
+  }
+
   function showPlaylists() {
     view = "playlists";
   }
@@ -4145,9 +4419,11 @@ self.addEventListener("fetch", (event) => {
     ($contextMenu.track.file.includes("http") ||
       $contextMenu.track.file.includes("://"));
 
+  $: isYandexTrack = $contextMenu.track && $contextMenu.track.isYandex;
+
   $: isPlaylistContext = $contextMenu.context?.type === "playlist";
   $: isQueueContext = $contextMenu.context?.type === "queue";
-  $: isPlaylistCard = $contextMenu.context?.type === "playlist-card"; // NEW
+  $: isPlaylistCard = $contextMenu.context?.type === "playlist-card";
   $: isMiniPlayerSource = $contextMenu.context?.source === "miniplayer";
 
   $: stylePosition = (() => {
@@ -4296,6 +4572,13 @@ self.addEventListener("fetch", (event) => {
             <span class="icon">{@html ICONS.ADD_TO_PLAYLIST || ICONS.ADD}</span>
             <span>Add to Playlist...</span>
           </button>
+
+          {#if isYandexTrack}
+            <button class="menu-row" on:click={handleMyVibe}>
+              <span class="icon">{@html ICONS.RADIO}</span>
+              <span>My Vibe</span>
+            </button>
+          {/if}
 
           {#if !isRadio}
             <button class="menu-row" on:click={handleGoToAlbum}>
@@ -4655,7 +4938,9 @@ self.addEventListener("fetch", (event) => {
 
   $: duration = $status.duration || 1;
   $: elapsed = $status.elapsed || 0;
-  $: isRadio = $currentSong.file?.startsWith("http");
+
+  $: isRadio = $currentSong.file?.startsWith("http") && !$currentSong.isYandex;
+
   $: isPlaying = $status.state === "play";
   $: isSmooth = isPlaying && !isDraggingBar && !isRadio;
 
@@ -5329,7 +5614,6 @@ self.addEventListener("fetch", (event) => {
     padding: 0 4px;
   }
 
-  /* NEW STYLES FOR VOLUME CONTROLS */
   .vol-btn {
     background: transparent;
     border: none;
@@ -6887,6 +7171,8 @@ self.addEventListener("fetch", (event) => {
           {emptyText}
         </div>
       {/if}
+
+      <slot name="footer"></slot>
     {/if}
   </div>
 </div>
@@ -6943,24 +7229,34 @@ self.addEventListener("fetch", (event) => {
 === ./components/views/YandexView.svelte ===
 <script>
   import { onMount } from "svelte";
-  import { fade } from "svelte/transition";
+  import { fade, fly } from "svelte/transition";
   import { YandexApi } from "../../lib/yandex";
   import { yandexToken, showToast, yandexContext } from "../../lib/store";
   import { ICONS } from "../../lib/icons";
-  import * as MPD from "../../lib/mpd";
-  import { playYandexTrack } from "../../lib/mpd/index"; // Import new helper
+  import { playYandexContext } from "../../lib/mpd/index";
   import TrackRow from "../TrackRow.svelte";
   import BaseList from "./BaseList.svelte";
   import Skeleton from "../Skeleton.svelte";
+  import ImageLoader from "../ImageLoader.svelte";
   import { writable } from "svelte/store";
 
   const tracksStore = writable([]);
   let playlists = [];
   let isLoading = false;
-  let viewMode = "dashboard"; // 'dashboard' | 'playlist' | 'search'
+  let viewMode = "dashboard";
   let activePlaylistName = "";
+  let activePlaylistData = null;
+
   let searchQuery = "";
+  let searchType = "all";
+  let searchResults = { tracks: [], albums: [], artists: [] };
   let searchTimer;
+
+  let page = 0;
+  let hasMore = true;
+  let showLoadMoreButton = false;
+  let observer;
+  let sentinel;
 
   $: isTokenSet = !!$yandexToken;
 
@@ -6968,7 +7264,37 @@ self.addEventListener("fetch", (event) => {
     if (isTokenSet) {
       loadDashboard();
     }
+    return () => {
+      if (observer) observer.disconnect();
+    };
   });
+
+  // Setup observer for the sentinel element
+  function setupObserver(node) {
+    sentinel = node;
+    if (observer) observer.disconnect();
+
+    observer = new IntersectionObserver(
+      (entries) => {
+        const entry = entries[0];
+        // If sentinel is visible, user is at bottom
+        showLoadMoreButton = entry.isIntersecting && hasMore && !isLoading;
+      },
+      {
+        root: null, // viewport
+        rootMargin: "0px",
+        threshold: 0.1,
+      },
+    );
+
+    observer.observe(sentinel);
+
+    return {
+      destroy() {
+        if (observer) observer.disconnect();
+      },
+    };
+  }
 
   async function loadDashboard() {
     isLoading = true;
@@ -6994,18 +7320,56 @@ self.addEventListener("fetch", (event) => {
     isLoading = true;
     viewMode = "playlist";
     activePlaylistName = pl.title;
+    activePlaylistData = pl;
     tracksStore.set([]);
+    page = 0;
+    hasMore = true;
+    showLoadMoreButton = false;
+
+    await loadMoreTracks();
+  }
+
+  async function loadMoreTracks() {
+    if (!hasMore && page > 0) return;
+    isLoading = true;
+    showLoadMoreButton = false;
 
     try {
-      let tracks;
-      if (pl.kind === "favorites") {
-        tracks = await YandexApi.getFavorites();
+      let res;
+      if (activePlaylistData.kind === "favorites") {
+        res = await YandexApi.getFavorites(page);
+      } else if (activePlaylistData.kind === "album") {
+        if (page === 0) {
+          const tracks = await YandexApi.getAlbumTracks(activePlaylistData.id);
+          res = { tracks, total: tracks.length };
+        } else {
+          res = { tracks: [], total: 0 };
+        }
+      } else if (activePlaylistData.kind === "artist") {
+        if (page === 0) {
+          const tracks = await YandexApi.getArtistTracks(activePlaylistData.id);
+          res = { tracks, total: tracks.length };
+        } else {
+          res = { tracks: [], total: 0 };
+        }
       } else {
-        tracks = await YandexApi.getPlaylistTracks(pl.kind, pl.uid);
+        res = await YandexApi.getPlaylistTracks(
+          activePlaylistData.kind,
+          activePlaylistData.uid,
+          page,
+        );
       }
-      tracksStore.set(tracks);
+
+      if (res.tracks.length === 0) {
+        hasMore = false;
+      } else {
+        tracksStore.update((curr) => [...curr, ...res.tracks]);
+        page++;
+        if (res.tracks.length < 50) hasMore = false;
+      }
     } catch (e) {
       showToast("Failed to load tracks", "error");
+      hasMore = false;
     } finally {
       isLoading = false;
     }
@@ -7024,20 +7388,55 @@ self.addEventListener("fetch", (event) => {
     }
   }
 
+  function setSearchType(type) {
+    searchType = type;
+    if (searchQuery.length > 2) performSearch();
+  }
+
   async function performSearch() {
     isLoading = true;
     viewMode = "search";
-    activePlaylistName = `Search: ${searchQuery}`;
-    tracksStore.set([]);
+    searchResults = { tracks: [], albums: [], artists: [] };
 
     try {
-      const tracks = await YandexApi.search(searchQuery);
-      tracksStore.set(tracks);
+      const res = await YandexApi.search(
+        searchQuery,
+        searchType === "all" ? "all" : searchType,
+        0,
+      );
+      searchResults = res;
+      if (searchType === "track" || searchType === "all") {
+        tracksStore.set(res.tracks);
+      } else {
+        tracksStore.set([]);
+      }
     } catch (e) {
       showToast("Search failed", "error");
     } finally {
       isLoading = false;
     }
+  }
+
+  async function openAlbum(album) {
+    isLoading = true;
+    viewMode = "playlist";
+    activePlaylistName = album.title;
+    activePlaylistData = { kind: "album", id: album.id };
+    tracksStore.set([]);
+    page = 0;
+    hasMore = true;
+    await loadMoreTracks();
+  }
+
+  async function openArtist(artist) {
+    isLoading = true;
+    viewMode = "playlist";
+    activePlaylistName = artist.name;
+    activePlaylistData = { kind: "artist", id: artist.id };
+    tracksStore.set([]);
+    page = 0;
+    hasMore = true;
+    await loadMoreTracks();
   }
 
   function goBack() {
@@ -7046,17 +7445,8 @@ self.addEventListener("fetch", (event) => {
     tracksStore.set([]);
   }
 
-  // UPDATED PLAY FUNCTION
-  async function handlePlay(track, index) {
-    // Set the full list context so "Next" works
-    yandexContext.set({
-      active: true,
-      tracks: $tracksStore,
-      currentIndex: index,
-      currentTrackFile: null, // Will be set in playYandexTrack
-    });
-
-    playYandexTrack(track, index);
+  async function handlePlay(index) {
+    playYandexContext($tracksStore, index);
   }
 
   function getCover(pl) {
@@ -7068,7 +7458,7 @@ self.addEventListener("fetch", (event) => {
   }
 </script>
 
-<div class="view-container scrollable">
+<div class="view-container scrollable relative-parent">
   {#if !isTokenSet}
     <div class="token-alert content-padded">
       <h3>Yandex Music Token Required</h3>
@@ -7098,6 +7488,27 @@ self.addEventListener("fetch", (event) => {
           </button>
         {/if}
       </div>
+
+      {#if viewMode === "search"}
+        <div class="filter-tabs">
+          <button
+            class:active={searchType === "all"}
+            on:click={() => setSearchType("all")}>All</button
+          >
+          <button
+            class:active={searchType === "track"}
+            on:click={() => setSearchType("track")}>Tracks</button
+          >
+          <button
+            class:active={searchType === "album"}
+            on:click={() => setSearchType("album")}>Albums</button
+          >
+          <button
+            class:active={searchType === "artist"}
+            on:click={() => setSearchType("artist")}>Artists</button
+          >
+        </div>
+      {/if}
     </div>
 
     {#if viewMode === "dashboard"}
@@ -7144,18 +7555,63 @@ self.addEventListener("fetch", (event) => {
       </div>
     {/if}
 
-    {#if viewMode === "playlist" || viewMode === "search"}
+    {#if viewMode === "search"}
+      <div class="content-padded">
+        {#if searchResults.albums.length > 0 && (searchType === "all" || searchType === "album")}
+          <h3 class="header-label">Albums</h3>
+          <div class="music-grid horizontal section-mb">
+            {#each searchResults.albums as album}
+              <div class="music-card" on:click={() => openAlbum(album)}>
+                <div class="card-img-container">
+                  <ImageLoader src={album.image} alt={album.title} radius="8px">
+                    <div slot="fallback" class="icon-fallback">
+                      {@html ICONS.ALBUMS}
+                    </div>
+                  </ImageLoader>
+                </div>
+                <div class="card-title">{album.title}</div>
+                <div class="card-sub">{album.artist}</div>
+              </div>
+            {/each}
+          </div>
+        {/if}
+
+        {#if searchResults.artists.length > 0 && (searchType === "all" || searchType === "artist")}
+          <h3 class="header-label">Artists</h3>
+          <div class="music-grid horizontal section-mb">
+            {#each searchResults.artists as artist}
+              <div class="music-card" on:click={() => openArtist(artist)}>
+                <div class="card-img-container rounded">
+                  <ImageLoader
+                    src={artist.image}
+                    alt={artist.name}
+                    radius="50%"
+                  >
+                    <div slot="fallback" class="icon-fallback">
+                      {@html ICONS.ARTISTS}
+                    </div>
+                  </ImageLoader>
+                </div>
+                <div class="card-title center">{artist.name}</div>
+              </div>
+            {/each}
+          </div>
+        {/if}
+      </div>
+    {/if}
+
+    {#if viewMode === "playlist" || (viewMode === "search" && (searchType === "all" || searchType === "track"))}
       <BaseList
         itemsStore={tracksStore}
         {isLoading}
-        emptyText={viewMode === "search"
-          ? "No results found"
-          : "Playlist is empty"}
+        emptyText={viewMode === "search" ? "No results" : "Playlist is empty"}
       >
         <div slot="header" class="content-padded">
           <div class="playlist-header">
             <h1 class="header-title">{activePlaylistName}</h1>
-            <div class="meta-tag">{$tracksStore.length} tracks</div>
+            <div class="meta-tag">
+              {$tracksStore.length}{hasMore ? "+" : ""} tracks
+            </div>
           </div>
         </div>
 
@@ -7164,16 +7620,37 @@ self.addEventListener("fetch", (event) => {
             track={item}
             {index}
             isEditable={false}
-            on:play={() => handlePlay(item, index)}
+            on:play={() => handlePlay(index)}
           />
         </div>
+
+        <div slot="footer">
+          {#if hasMore && !isLoading}
+            <div
+              use:setupObserver
+              style="height: 20px; width: 100%; margin-top: 20px;"
+            ></div>
+          {/if}
+        </div>
       </BaseList>
+
+      {#if showLoadMoreButton}
+        <div class="floating-fab-container" transition:fly={{ y: 20 }}>
+          <button class="fab-load-more" on:click={loadMoreTracks}>
+            Load More
+          </button>
+        </div>
+      {/if}
     {/if}
   {/if}
 </div>
 
 <style>
   @import "./MusicViews.css";
+
+  .relative-parent {
+    position: relative; /* Needed for absolute positioning of FAB */
+  }
 
   .token-alert {
     display: flex;
@@ -7192,7 +7669,7 @@ self.addEventListener("fetch", (event) => {
     border: 1px solid var(--c-border);
     border-radius: 8px;
     padding: 8px 12px;
-    margin-bottom: 20px;
+    margin-bottom: 10px;
     gap: 10px;
   }
 
@@ -7235,6 +7712,28 @@ self.addEventListener("fetch", (event) => {
     height: 100%;
   }
 
+  .filter-tabs {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 20px;
+    overflow-x: auto;
+  }
+  .filter-tabs button {
+    background: var(--c-surface-button);
+    border: 1px solid var(--c-border);
+    color: var(--c-text-secondary);
+    padding: 6px 12px;
+    border-radius: 16px;
+    font-size: 13px;
+    cursor: pointer;
+    white-space: nowrap;
+  }
+  .filter-tabs button.active {
+    background: var(--c-accent);
+    color: #fff;
+    border-color: var(--c-accent);
+  }
+
   .header-label {
     font-size: 18px;
     font-weight: 700;
@@ -7244,6 +7743,10 @@ self.addEventListener("fetch", (event) => {
 
   .card-img-container.is-fav {
     background: linear-gradient(135deg, var(--c-heart), #9e1a1a);
+  }
+
+  .card-img-container.rounded {
+    border-radius: 50%;
   }
 
   .icon-wrap {
@@ -7259,8 +7762,61 @@ self.addEventListener("fetch", (event) => {
     height: 100%;
   }
 
+  .icon-fallback {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    height: 100%;
+    color: var(--c-icon-faint);
+    background: var(--c-bg-placeholder);
+  }
+  .icon-fallback :global(svg) {
+    width: 40px;
+    height: 40px;
+    opacity: 0.5;
+  }
+
   .playlist-header {
     margin-bottom: 10px;
+  }
+
+  .section-mb {
+    margin-bottom: 24px;
+  }
+
+  .card-title.center {
+    text-align: center;
+  }
+
+  /* Floating Action Button for Load More */
+  .floating-fab-container {
+    position: absolute;
+    bottom: 20px;
+    left: 0;
+    width: 100%;
+    display: flex;
+    justify-content: center;
+    pointer-events: none; /* Let clicks pass through empty space */
+    z-index: 100;
+  }
+
+  .fab-load-more {
+    pointer-events: auto;
+    background: var(--c-accent);
+    color: white;
+    border: none;
+    padding: 10px 24px;
+    border-radius: 30px;
+    font-weight: 600;
+    font-size: 14px;
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
+    cursor: pointer;
+    transition: transform 0.2s;
+  }
+
+  .fab-load-more:active {
+    transform: scale(0.95);
   }
 </style>
 
@@ -9493,7 +10049,8 @@ self.addEventListener("fetch", (event) => {
   $: duration = $status.duration > 0 ? $status.duration : 1;
   $: elapsed = $status.elapsed || 0;
   $: isPlaying = $status.state === "play";
-  $: isRadio = $currentSong.file?.startsWith("http");
+
+  $: isRadio = $currentSong.file?.startsWith("http") && !$currentSong.isYandex;
 
   $: displayTitle = $currentSong.title || "Not Playing";
   $: displayArtist = $currentSong.stationName || $currentSong.artist || "Moode";
@@ -9965,7 +10522,6 @@ self.addEventListener("fetch", (event) => {
     color: var(--c-accent);
   }
 
-  /* NEW COLOR LOGIC */
   .btn-icon.liked {
     color: var(--c-heart);
   }
@@ -10080,16 +10636,19 @@ self.addEventListener("fetch", (event) => {
   import { fade } from "svelte/transition";
   import ImageLoader from "./ImageLoader.svelte";
   import * as MPD from "../lib/mpd";
+  import { YandexApi } from "../lib/yandex"; // Импортируем API
   import { ICONS } from "../lib/icons";
   import {
     activeMenuTab,
     favorites,
+    yandexFavorites, // Импортируем store яндекс лайков
     stations,
     getTrackThumbUrl,
     getTrackCoverUrl,
     openContextMenu,
     navigationStack,
     navigateTo,
+    showToast,
   } from "../lib/store.js";
   import { longpress } from "../lib/actions";
 
@@ -10107,7 +10666,12 @@ self.addEventListener("fetch", (event) => {
 
   $: if (track) imgError = false;
 
-  $: isLiked = $favorites.has(track.file);
+  // --- ЛОГИКА ЛАЙКА ---
+  // Если трек Яндекса - смотрим в yandexFavorites (по ID)
+  // Если локальный - смотрим в favorites (по file path)
+  $: isLiked = track.isYandex
+    ? $yandexFavorites.has(String(track.id))
+    : $favorites.has(track.file);
 
   $: currentView = $navigationStack[$navigationStack.length - 1];
 
@@ -10115,25 +10679,21 @@ self.addEventListener("fetch", (event) => {
     currentView?.view === "queue" ||
     (currentView?.view === "root" && $activeMenuTab === "queue");
 
-  // Exact match in the Queue (Solid highlight + Icons)
   $: isExactActive = isQueueContext ? Number(index) === playingIndex : false;
 
-  // Global file match
   $: isPlayingFile = track.file === playingFile;
 
-  // Duplicate: File is playing, but this is not the active Queue row (Striped bg)
   $: showStripes = isPlayingFile && !isExactActive;
 
   $: isRadio =
     track.file &&
-    (track.file.startsWith("http") || track.file.includes("RADIO"));
+    (track.file.startsWith("http") || track.file.includes("RADIO")) &&
+    !track.isYandex;
 
-  // Icon Logic: Only show status icons for the exact active track in queue
   $: showPause = isExactActive && isPlaying && isHovering;
   $: showEq = isExactActive && isPlaying && !isHovering;
   $: showStatic = isExactActive && !isPlaying && !isHovering;
 
-  // Show Play button on hover for any track if not currently pausing active track
   $: showPlay = isHovering && !showPause;
 
   $: title = track.title || track.file?.split("/").pop();
@@ -10159,7 +10719,6 @@ self.addEventListener("fetch", (event) => {
 
   function handleAction(e) {
     e.stopPropagation();
-    // Toggle play/pause if this file is currently playing anywhere
     if (isPlayingFile) MPD.togglePlay();
     else dispatch("play");
   }
@@ -10189,6 +10748,24 @@ self.addEventListener("fetch", (event) => {
     if (!isRadio && track.artist) {
       activeMenuTab.set("artists");
       navigateTo("albums_by_artist", { name: track.artist });
+    }
+  }
+
+  // --- ОБРАБОТЧИК ЛАЙКА ---
+  async function handleToggleLike(e) {
+    e.stopPropagation();
+    if (track.isYandex) {
+      try {
+        await YandexApi.toggleLike(track.id, isLiked);
+        showToast(
+          isLiked ? "Removed from Yandex Likes" : "Added to Yandex Likes",
+          "success",
+        );
+      } catch (err) {
+        showToast("Failed to update Yandex like", "error");
+      }
+    } else {
+      MPD.toggleFavorite(track);
     }
   }
 </script>
@@ -10261,8 +10838,8 @@ self.addEventListener("fetch", (event) => {
 
     <div
       class="artist text-ellipsis"
-      class:link={!isRadio}
-      on:click={handleArtistClick}
+      class:link={!isRadio && !track.isYandex}
+      on:click={!track.isYandex ? handleArtistClick : undefined}
     >
       {artist}
     </div>
@@ -10280,7 +10857,7 @@ self.addEventListener("fetch", (event) => {
     <button
       class="btn-icon small"
       class:liked={isLiked}
-      on:click|stopPropagation={() => MPD.toggleFavorite(track)}
+      on:click|stopPropagation={handleToggleLike}
     >
       {@html isLiked ? ICONS.HEART_FILLED : ICONS.HEART}
     </button>
@@ -10323,7 +10900,6 @@ self.addEventListener("fetch", (event) => {
     background: var(--c-surface-active);
   }
 
-  /* Striped animation for duplicates */
   .row.striped::before {
     content: "";
     position: absolute;
@@ -12285,30 +12861,56 @@ export function nav(cmd) {
   const selStation = get(selectedStationName);
   const isRadioMode = song.file && song.file.startsWith("http");
   const yCtx = get(yandexContext);
+  const playerStatus = get(status);
 
-  // YANDEX NEXT LOGIC
   if (
     yCtx.active &&
     yCtx.tracks.length > 0 &&
     (song.isYandex || (song.file && song.file === yCtx.currentTrackFile))
   ) {
     let nextIndex;
+
     if (cmd === "next") {
-      nextIndex = yCtx.currentIndex + 1;
-      if (nextIndex >= yCtx.tracks.length) nextIndex = 0; // Loop or stop
+      if (playerStatus.random) {
+        let attempts = 0;
+        do {
+          nextIndex = Math.floor(Math.random() * yCtx.tracks.length);
+          attempts++;
+        } while (
+          nextIndex === yCtx.currentIndex &&
+          attempts < 5 &&
+          yCtx.tracks.length > 1
+        );
+      } else {
+        nextIndex = yCtx.currentIndex + 1;
+      }
+
+      if (nextIndex >= yCtx.tracks.length) {
+        const lastTrack = yCtx.tracks[yCtx.tracks.length - 1];
+        if (lastTrack && lastTrack.id) {
+          showToast("Playlist ended. Starting My Vibe...", "info");
+          startYandexRadio(lastTrack.id);
+        } else {
+          resolveAndQueueYandexTrack(yCtx.tracks[0], 0, true);
+        }
+        return;
+      }
     } else {
-      nextIndex = yCtx.currentIndex - 1;
-      if (nextIndex < 0) nextIndex = yCtx.tracks.length - 1;
+      if (playerStatus.random) {
+        nextIndex = Math.floor(Math.random() * yCtx.tracks.length);
+      } else {
+        nextIndex = yCtx.currentIndex - 1;
+        if (nextIndex < 0) nextIndex = yCtx.tracks.length - 1;
+      }
     }
 
     const nextTrack = yCtx.tracks[nextIndex];
     if (nextTrack) {
-      playYandexTrack(nextTrack, nextIndex);
+      resolveAndQueueYandexTrack(nextTrack, nextIndex, true);
       return;
     }
   }
 
-  // RADIO NEXT LOGIC
   if (
     isRadioMode &&
     stationList.length > 0 &&
@@ -12328,7 +12930,6 @@ export function nav(cmd) {
     }
     playStation(stationList[nextIndex]);
   } else {
-    // STANDARD MPD NEXT
     if (cmd === "next") PlayerActions.next();
     if (cmd === "previous") PlayerActions.previous();
   }
@@ -12336,7 +12937,6 @@ export function nav(cmd) {
 
 export function playStation(station) {
   if (!station) return;
-  // Disable Yandex context on radio play
   yandexContext.update((ctx) => ({ ...ctx, active: false }));
 
   selectedStationName.set(station.name);
@@ -12363,31 +12963,104 @@ export function playTrackOptimistic(track) {
   });
 }
 
-// HELPER FOR YANDEX PLAYBACK
-export async function playYandexTrack(track, index) {
+async function resolveAndQueueYandexTrack(
+  track,
+  index,
+  playImmediately = true,
+) {
   if (!track.id) return;
-  showToast(`Resolving ${track.title}...`, "info");
 
   try {
     const streamUrl = await YandexApi.getStreamUrl(track.id);
     if (!streamUrl) throw new Error("No Stream");
 
-    // Update Context
-    yandexContext.update((ctx) => ({
-      ...ctx,
-      active: true,
-      currentIndex: index,
-      currentTrackFile: streamUrl,
-    }));
+    yandexContext.update((ctx) => {
+      const newCache = { ...ctx.streamCache };
+      newCache[streamUrl] = {
+        ...track,
+        isYandex: true,
+        file: streamUrl,
+      };
 
-    PlayerActions.playUri(streamUrl, {
-      title: track.title,
-      artist: track.artist,
-      album: track.album,
+      return {
+        ...ctx,
+        active: true,
+        currentIndex: index,
+        currentTrackId: track.id,
+        currentTrackFile: streamUrl,
+        streamCache: newCache,
+      };
     });
+
+    if (playImmediately) {
+      await PlayerActions.playUri(streamUrl, {
+        title: track.title,
+        artist: track.artist,
+        album: track.album,
+      });
+
+      prefetchNextYandexTracks(index + 1);
+    } else {
+      await PlayerActions.addToQueue(streamUrl);
+    }
   } catch (e) {
     showToast("Failed to play Yandex track", "error");
+    console.error(e);
   }
+}
+
+async function prefetchNextYandexTracks(startIndex) {
+  const yCtx = get(yandexContext);
+  if (!yCtx.active || !yCtx.tracks) return;
+
+  const BATCH_SIZE = 3;
+  const tracksToQueue = [];
+
+  for (let i = 0; i < BATCH_SIZE; i++) {
+    const idx = startIndex + i;
+    if (idx < yCtx.tracks.length) {
+      tracksToQueue.push(yCtx.tracks[idx]);
+    }
+  }
+
+  if (tracksToQueue.length === 0) return;
+
+  for (const track of tracksToQueue) {
+    try {
+      const url = await YandexApi.getStreamUrl(track.id);
+
+      if (url) {
+        yandexContext.update((ctx) => {
+          const newCache = { ...ctx.streamCache };
+          newCache[url] = { ...track, isYandex: true, file: url };
+          return { ...ctx, streamCache: newCache };
+        });
+
+        await mpdClient.send(`add "${url}"`);
+      }
+    } catch (e) {
+      console.warn("Failed to prefetch", track.title);
+    }
+  }
+}
+
+export async function playYandexContext(tracks, startIndex = 0) {
+  if (!tracks || tracks.length === 0) return;
+
+  yandexContext.set({
+    active: true,
+    tracks: tracks,
+    currentIndex: startIndex,
+    currentTrackFile: null,
+    currentTrackId: tracks[startIndex].id,
+    streamCache: {},
+  });
+
+  await mpdClient.send("stop");
+  await mpdClient.send("clear");
+
+  const startTrack = tracks[startIndex];
+  resolveAndQueueYandexTrack(startTrack, startIndex, true);
 }
 
 export async function playPlaylistContext(playlistName, index = 0) {
@@ -12405,6 +13078,20 @@ export async function playPlaylistContext(playlistName, index = 0) {
   }
 }
 
+export async function startYandexRadio(trackId) {
+  showToast("Starting My Vibe...", "info");
+  try {
+    const tracks = await YandexApi.getSimilarTracks(trackId);
+    if (tracks.length > 0) {
+      playYandexContext(tracks, 0);
+    } else {
+      showToast("No similar tracks found", "error");
+    }
+  } catch (e) {
+    showToast("Radio error", "error");
+  }
+}
+
 === lib/mpd/player.js ===
 import { get } from "svelte/store";
 import { mpdClient } from "./client";
@@ -12417,7 +13104,7 @@ import {
   queueVersion,
   queue,
   isQueueLocked,
-  yandexContext, // IMPORTED
+  yandexContext,
 } from "../store";
 import { db } from "../db";
 
@@ -12497,6 +13184,7 @@ async function syncQueue(newVersion) {
     if (get(isQueueLocked)) return;
 
     const rawTracks = MpdParser.parseTracks(text);
+    const yCtx = get(yandexContext); // Получаем контекст
 
     const filesToLookup = rawTracks
       .map((t) => t.file)
@@ -12512,7 +13200,25 @@ async function syncQueue(newVersion) {
     }
 
     const tracks = rawTracks.map((t) => {
-      const lookupKey = (t.file || "").normalize("NFC");
+      const fileUrl = t.file || "";
+
+      if (yCtx.streamCache && yCtx.streamCache[fileUrl]) {
+        const yMeta = yCtx.streamCache[fileUrl];
+        return {
+          ...t,
+          title: yMeta.title,
+          artist: yMeta.artist,
+          album: yMeta.album,
+          image: yMeta.image,
+          isYandex: true,
+          id: yMeta.id,
+          mpdId: t.id,
+          mpdPos: t.pos,
+          _uid: String(t.id || t.pos) + "y",
+        };
+      }
+
+      const lookupKey = fileUrl.normalize("NFC");
       const cached = cachedMap.get(lookupKey);
 
       if (cached) {
@@ -12526,6 +13232,8 @@ async function syncQueue(newVersion) {
           _uid: String(t.id || t.pos + t.file),
         };
       }
+
+      // 3. ФОЛЛБЭК
       return {
         ...t,
         _uid: String(t.id || t.pos + t.file),
@@ -12544,26 +13252,40 @@ function updateStores(serverStatus, serverSong) {
   const allStations = get(stations);
   const yCtx = get(yandexContext);
 
-  // YANDEX OVERRIDE LOGIC
-  // If the playing URL matches what we expect from Yandex, override metadata
   if (
-    yCtx.active &&
-    yCtx.tracks.length > 0 &&
-    yCtx.currentIndex >= 0 &&
-    yCtx.currentTrackFile &&
-    serverSong.file === yCtx.currentTrackFile
+    serverSong.file &&
+    yCtx.streamCache &&
+    yCtx.streamCache[serverSong.file]
   ) {
-    const yTrack = yCtx.tracks[yCtx.currentIndex];
-    if (yTrack) {
-      serverSong.title = yTrack.title;
-      serverSong.artist = yTrack.artist;
-      serverSong.album = yTrack.album;
-      serverSong.image = yTrack.image; // Pass image for cover logic
-      serverSong.isYandex = true;
+    const yMeta = yCtx.streamCache[serverSong.file];
 
-      // Fix Duration if MPD says 0 or infinity
-      if (yTrack.time > 0) {
-        serverStatus.duration = yTrack.time;
+    serverSong.title = yMeta.title;
+    serverSong.artist = yMeta.artist;
+    serverSong.album = yMeta.album;
+    serverSong.image = yMeta.image;
+    serverSong.isYandex = true;
+    serverSong.id = yMeta.id; // Yandex ID
+
+    if (
+      yMeta.time > 0 &&
+      (serverStatus.duration === 0 || isNaN(serverStatus.duration))
+    ) {
+      serverStatus.duration = yMeta.time;
+    }
+  } else if (yCtx.active && yCtx.tracks.length > 0) {
+    const isHashTitle =
+      serverSong.title && /^[a-f0-9]{32,128}$/i.test(serverSong.title);
+
+    if (serverSong.file === yCtx.currentTrackFile || isHashTitle) {
+      // Пытаемся угадать по текущему индексу (менее надежно, но лучше чем хэш)
+      const yTrack = yCtx.tracks[yCtx.currentIndex];
+      if (yTrack) {
+        serverSong.title = yTrack.title;
+        serverSong.artist = yTrack.artist;
+        serverSong.album = yTrack.album;
+        serverSong.image = yTrack.image;
+        serverSong.isYandex = true;
+        serverSong.id = yTrack.id;
       }
     }
   }
@@ -12612,7 +13334,7 @@ function updateStores(serverStatus, serverSong) {
       forceHardSync = false;
       timeDriftSpeed = 1.0;
       if (isRadio && !serverSong.isYandex) serverStatus.elapsed = 0;
-      manageTicker(isPlaying && !isRadio);
+      manageTicker(isPlaying && (!isRadio || serverSong.isYandex));
       return serverStatus;
     }
 
@@ -12621,11 +13343,11 @@ function updateStores(serverStatus, serverSong) {
     if (forceHardSync) {
       forceHardSync = false;
       timeDriftSpeed = 1.0;
-      manageTicker(isPlaying && !isRadio);
+      manageTicker(isPlaying && (!isRadio || serverSong.isYandex));
       return serverStatus;
     }
 
-    if (isPlaying && !isRadio) {
+    if (isPlaying && (!isRadio || serverSong.isYandex)) {
       const diff = serverStatus.elapsed - localStatus.elapsed;
       if (Math.abs(diff) > 2.0) {
         timeDriftSpeed = 1.0;
@@ -13226,7 +13948,7 @@ export const MpdParser = {
 
 === lib/yandex.js ===
 import { get } from "svelte/store";
-import { yandexToken } from "./store";
+import { yandexToken, yandexFavorites } from "./store"; // Импортируем новый store
 import md5 from "md5";
 
 export const YandexApi = {
@@ -13238,7 +13960,7 @@ export const YandexApi = {
 
     const headers = {
       Authorization: `OAuth ${token}`,
-      "Accept-Language": "ru",
+      "Accept-Language": "en",
       ...(options.headers || {}),
     };
 
@@ -13283,32 +14005,34 @@ export const YandexApi = {
     }
   },
 
-  async getPlaylistTracks(kind, uid = null) {
+  async getPlaylistTracks(kind, uid = null, page = 0) {
     try {
       if (!uid) uid = await this.getUserId();
       const data = await this.request(`/users/${uid}/playlists/${kind}`);
-
       const res = data.result;
-      if (!res || !res.tracks) return [];
-
+      if (!res || !res.tracks) return { tracks: [], total: 0 };
       const ids = res.tracks.map((t) => t.id);
-      const slice = ids.slice(0, 100);
-      return await this.getTracksByIds(slice);
+      const PAGE_SIZE = 50;
+      const start = page * PAGE_SIZE;
+      const slice = ids.slice(start, start + PAGE_SIZE);
+      const tracks = await this.getTracksByIds(slice);
+      return {
+        tracks,
+        total: ids.length,
+      };
     } catch (e) {
       console.error("Yandex Playlist Tracks Error:", e);
-      return [];
+      return { tracks: [], total: 0 };
     }
   },
 
-  async getFavorites() {
+  async getFavorites(page = 0) {
     try {
       const uid = await this.getUserId();
       const data = await this.request(`/users/${uid}/likes/tracks`);
-
       let ids = [];
       const res = data.result;
-
-      if (!res) return [];
+      if (!res) return { tracks: [], total: 0 };
 
       if (res.ids && Array.isArray(res.ids)) {
         ids = res.ids;
@@ -13323,30 +14047,141 @@ export const YandexApi = {
       } else if (Array.isArray(res)) {
         ids = res.map((t) => t.id);
       }
-
       ids = ids.filter((id) => id);
 
-      if (ids.length === 0) return [];
+      if (page === 0) {
+        yandexFavorites.set(new Set(ids.map(String)));
+      }
+      // ------------------------------------------------------------------
 
-      const slice = ids.slice(0, 100);
-      return await this.getTracksByIds(slice);
+      if (ids.length === 0) return { tracks: [], total: 0 };
+      const PAGE_SIZE = 50;
+      const start = page * PAGE_SIZE;
+      const slice = ids.slice(start, start + PAGE_SIZE);
+      const tracks = await this.getTracksByIds(slice);
+      return {
+        tracks,
+        total: ids.length,
+      };
     } catch (e) {
       console.error("Yandex Favorites Error:", e);
+      return { tracks: [], total: 0 };
+    }
+  },
+
+  async toggleLike(trackId, isLiked) {
+    const uid = await this.getUserId();
+    const action = isLiked ? "remove" : "add";
+
+    // Оптимистичное обновление UI
+    yandexFavorites.update((s) => {
+      const n = new Set(s);
+      if (isLiked) n.delete(String(trackId));
+      else n.add(String(trackId));
+      return n;
+    });
+
+    try {
+      await this.request(`/users/${uid}/likes/tracks/${action}`, {
+        method: "POST",
+        body: `track-id=${trackId}`,
+      });
+    } catch (e) {
+      console.error("Failed to toggle like", e);
+      // Откат при ошибке
+      yandexFavorites.update((s) => {
+        const n = new Set(s);
+        if (isLiked) n.add(String(trackId));
+        else n.delete(String(trackId));
+        return n;
+      });
+      throw e;
+    }
+  },
+  // ------------------------------------
+
+  // ... (остальные методы search, getAlbumTracks, getArtistTracks, getSimilarTracks, getTracksByIds, getStreamUrl, normalizeTracks оставляем как есть)
+  async search(query, type = "all", page = 0) {
+    if (!query) return { tracks: [], albums: [], artists: [] };
+    try {
+      const p = page;
+      const data = await this.request(
+        `/search?text=${encodeURIComponent(query)}&type=${type}&page=${p}&nocorrect=false`,
+      );
+      const res = data.result;
+      let tracks = [];
+      let albums = [];
+      let artists = [];
+      if (res.tracks && res.tracks.results) {
+        tracks = this.normalizeTracks(res.tracks.results);
+      }
+      if (res.albums && res.albums.results) {
+        albums = res.albums.results.map((a) => ({
+          ...a,
+          isAlbum: true,
+          image: a.coverUri
+            ? `https://${a.coverUri.replace("%%", "200x200")}`
+            : null,
+          artist:
+            a.artists && a.artists.length > 0 ? a.artists[0].name : "Unknown",
+        }));
+      }
+      if (res.artists && res.artists.results) {
+        artists = res.artists.results.map((a) => ({
+          ...a,
+          isArtist: true,
+          name: a.name,
+          image:
+            a.cover && a.cover.uri
+              ? `https://${a.cover.uri.replace("%%", "200x200")}`
+              : null,
+        }));
+      }
+      return { tracks, albums, artists };
+    } catch (e) {
+      console.error("Yandex Search Error:", e);
+      return { tracks: [], albums: [], artists: [] };
+    }
+  },
+
+  async getAlbumTracks(albumId) {
+    try {
+      const data = await this.request(`/albums/${albumId}/with-tracks`);
+      if (!data.result || !data.result.volumes) return [];
+
+      const rawTracks = [];
+      data.result.volumes.forEach((vol) => {
+        if (Array.isArray(vol)) {
+          rawTracks.push(...vol);
+        }
+      });
+      return this.normalizeTracks(rawTracks);
+    } catch (e) {
+      console.error("Yandex Album Error:", e);
       return [];
     }
   },
 
-  async search(query) {
-    if (!query) return [];
+  async getArtistTracks(artistId) {
     try {
       const data = await this.request(
-        `/search?text=${encodeURIComponent(query)}&type=track&page=0`,
+        `/artists/${artistId}/tracks?page=0&page-size=50`,
       );
-      const tracks =
-        data.result && data.result.tracks ? data.result.tracks.results : [];
-      return this.normalizeTracks(tracks);
+      if (!data.result || !data.result.tracks) return [];
+      return this.normalizeTracks(data.result.tracks);
     } catch (e) {
-      console.error("Yandex Search Error:", e);
+      console.error("Yandex Artist Error:", e);
+      return [];
+    }
+  },
+
+  async getSimilarTracks(trackId) {
+    try {
+      const data = await this.request(`/tracks/${trackId}/similar`);
+      if (!data.result || !data.result.similarTracks) return [];
+      return this.normalizeTracks(data.result.similarTracks);
+    } catch (e) {
+      console.error("Yandex Similar Tracks Error:", e);
       return [];
     }
   },
@@ -13365,11 +14200,10 @@ export const YandexApi = {
       const data = await this.request(`/tracks/${trackId}/download-info`);
       if (!data.result || !data.result[0]) throw new Error("No download info");
 
-      // Sort by bitrate descending to get best quality
       const sorted = data.result.sort(
         (a, b) => b.bitrate_in_kbps - a.bitrate_in_kbps,
       );
-      const target = sorted[0]; // Best quality
+      const target = sorted[0];
 
       const srcUrl = target.downloadInfoUrl;
       const xmlText = await this.request(srcUrl, { isXml: true });
@@ -13399,7 +14233,10 @@ export const YandexApi = {
 
     return rawTracks.map((t) => ({
       title: t.title,
-      artist: t.artists ? t.artists.map((a) => a.name).join(", ") : "Unknown",
+      artist:
+        t.artists && t.artists.length > 0
+          ? t.artists.map((a) => a.name).join(", ")
+          : "Unknown",
       album: t.albums && t.albums.length > 0 ? t.albums[0].title : "Single",
       file: `https://music.yandex.ru/album/${t.albums && t.albums[0] ? t.albums[0].id : 0}/track/${t.id}`,
       id: t.id,
@@ -13851,13 +14688,16 @@ export const currentSong = writable({
   stationName: null,
   id: null,
   pos: null,
+  isYandex: false,
 });
 
 export const yandexContext = writable({
   active: false,
   tracks: [],
   currentIndex: -1,
+  currentTrackId: null,
   currentTrackFile: null,
+  streamCache: {},
 });
 
 export const isFullPlayerOpen = writable(false);
@@ -14087,6 +14927,9 @@ export function getTrackThumbUrl(
 
 function isRadioTrack(file) {
   if (!file) return false;
+  // If it's explicitly marked as Yandex (which uses http stream), don't treat as generic radio
+  if (file.includes("yandex.ru") || file.includes("get-mp3")) return false;
+
   return (
     file.startsWith("http") || file.includes("://") || file.includes("RADIO")
   );
@@ -14170,4 +15013,6 @@ isYandexEnabled.subscribe((val) => {
     localStorage.setItem("yandex_enabled", String(val));
   }
 });
+
+export const yandexFavorites = writable(new Set());
 

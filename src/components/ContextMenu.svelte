@@ -14,7 +14,7 @@
   import { PlayerActions } from "../lib/mpd/player";
   import { LibraryActions } from "../lib/mpd/library";
   import { mpdClient } from "../lib/mpd/client";
-  import { startYandexRadio } from "../lib/mpd/index";
+  import { YandexApi } from "../lib/yandex"; // Импорт API вместо старой функции
 
   let innerWidth;
   let innerHeight;
@@ -152,10 +152,15 @@
     });
   }
 
-  function handleMyVibe() {
+  async function handleMyVibe() {
     const t = $contextMenu.track;
     if (t && t.isYandex && t.id) {
-      startYandexRadio(t.id);
+      showToast("Starting My Vibe...", "info");
+      try {
+        await YandexApi.playRadio(t.id);
+      } catch (e) {
+        showToast("Failed to start radio", "error");
+      }
     }
     closeContextMenu();
   }

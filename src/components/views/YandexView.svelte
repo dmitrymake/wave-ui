@@ -1,10 +1,9 @@
 <script>
   import { onMount } from "svelte";
-  import { fade, fly } from "svelte/transition";
+  import { fade } from "svelte/transition";
   import { YandexApi } from "../../lib/yandex";
   import { yandexAuthStatus, showToast } from "../../lib/store";
   import { ICONS } from "../../lib/icons";
-  import { startYandexRadio } from "../../lib/mpd/index";
   import TrackRow from "../TrackRow.svelte";
   import BaseList from "./BaseList.svelte";
   import Skeleton from "../Skeleton.svelte";
@@ -42,7 +41,11 @@
   async function openPlaylist(pl) {
     if (pl.isStation) {
       showToast("Starting My Vibe...", "info");
-      YandexApi.playRadio("user:onetwo");
+      try {
+        await YandexApi.playRadio("user:onetwo");
+      } catch (e) {
+        showToast("Failed to start radio", "error");
+      }
     }
   }
 
@@ -92,7 +95,13 @@
 
   async function handlePlay(track) {
     if (track.id) {
-      startYandexRadio(track.id);
+      // ИСПРАВЛЕНО: Теперь вызываем через API, а не через удаленную функцию MPD
+      showToast("Starting radio based on track...", "info");
+      try {
+        await YandexApi.playRadio(track.id);
+      } catch (e) {
+        showToast("Error starting radio", "error");
+      }
     }
   }
 </script>

@@ -345,6 +345,7 @@ export function getTrackThumbUrl(
 
 function isRadioTrack(file) {
   if (!file) return false;
+  // If it's explicitly marked as Yandex (which uses http stream), don't treat as generic radio
   if (file.includes("yandex.net") || file.includes("get-mp3")) return false;
 
   return (
@@ -412,5 +413,14 @@ isAlarmEnabled.subscribe((val) =>
   localStorage.setItem("alarmEnabled", String(val)),
 );
 alarmPlaylist.subscribe((val) => localStorage.setItem("alarmPlaylist", val));
+
+const savedYandexEnabled = localStorage.getItem("yandex_enabled") === "true";
+export const isYandexEnabled = writable(savedYandexEnabled);
+
+isYandexEnabled.subscribe((val) => {
+  if (typeof localStorage !== "undefined") {
+    localStorage.setItem("yandex_enabled", String(val));
+  }
+});
 
 export const yandexFavorites = writable(new Set());
