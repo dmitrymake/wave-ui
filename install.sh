@@ -1,6 +1,4 @@
 #!/bin/bash
-
-# Exit on error
 set -e
 
 # --- CONFIGURATION ---
@@ -14,75 +12,61 @@ NGINX_CONF="/etc/nginx/sites-available/wave-ui"
 PHP_FPM_SOCK=$(ls /run/php/php*-fpm.sock | head -n 1)
 PORT=3000
 
-echo "-------------------------------------------------------"
-echo "Deploying WaveUI (Server Edition) to Port $PORT"
-echo "-------------------------------------------------------"
-
-# 1. Install Runtime Dependencies
 echo ">>> [1/7] Installing dependencies..."
 sudo apt-get update -qq
 sudo apt-get install -y -qq websockify git mpc php-curl curl
 
-echo ">>> Reloading PHP Service..."
-sudo systemctl restart php*-fpm
+# Остановка старых сервисов
+sudo systemctl stop wave-yandex.service || true
+sudo systemctl stop websockify-mpd.service || true
 
 # 2. Clone Repository
 echo ">>> [2/7] Fetching code..."
 if [ -d "$TEMP_DIR" ]; then sudo rm -rf "$TEMP_DIR"; fi
 git clone "$REPO_URL" "$TEMP_DIR"
 
-# 3. Setup Backend Files (PHP)
-echo ">>> [3/7] Installing API & Backend Logic..."
-
-sudo systemctl stop wave-yandex.service || true
-
-echo ">>> Cleaning up old state files..."
-sudo rm -f /tmp/wave_daemon.log
-sudo rm -f /dev/shm/yandex_state.json
-sudo rm -f /dev/shm/yandex_meta_cache.json
-
-# Copy API endpoints
+# 3. Setup Backend Files
+echo ">>> [3/7] Installing API & Backend..."
 sudo cp "$TEMP_DIR/src/api/wave-api.php" "$WEB_ROOT/"
 sudo cp "$TEMP_DIR/src/api/wave-yandex-api.php" "$WEB_ROOT/"
-
-# Setup Include directory
 if [ ! -d "$INC_DIR" ]; then sudo mkdir -p "$INC_DIR"; fi
 sudo cp "$TEMP_DIR/src/api/yandex-music.php" "$INC_DIR/"
-
-# Setup Binary directory for Daemon
 if [ ! -d "$BIN_DIR" ]; then sudo mkdir -p "$BIN_DIR"; fi
 sudo cp "$TEMP_DIR/src/api/yandex-daemon.php" "$BIN_DIR/"
 
-# Set Permissions
+# Права на PHP файлы
 sudo chown root:root "$WEB_ROOT/wave-api.php" "$WEB_ROOT/wave-yandex-api.php"
 sudo chmod 755 "$WEB_ROOT/wave-api.php" "$WEB_ROOT/wave-yandex-api.php"
 sudo chown -R www-data:www-data "$INC_DIR" "$BIN_DIR"
 sudo chmod +x "$BIN_DIR/yandex-daemon.php"
 
-# Setup Persistent Token Store
+# Хранилище токена
 sudo mkdir -p /var/local/www
 sudo chown www-data:www-data /var/local/www
 sudo chmod 755 /var/local/www
 
-# Setup Logging for Daemon
-sudo touch /tmp/wave_daemon.log
-sudo chown www-data:www-data /tmp/wave_daemon.log
-sudo chmod 666 /tmp/wave_daemon.log
+# ОЧИСТКА И СОЗДАНИЕ ФАЙЛОВ СОСТОЯНИЯ (Критично)
+sudo rm -f /tmp/wave_daemon.log
+sudo rm -f /dev/shm/yandex_state.json
+sudo rm -f /dev/shm/yandex_meta_cache.json
 
-# 4. Prepare Web Directory (Frontend)
-echo ">>> [4/7] Moving frontend files to $FINAL_WEB_DIR..."
+sudo touch /tmp/wave_daemon.log
+sudo touch /dev/shm/yandex_state.json
+sudo touch /dev/shm/yandex_meta_cache.json
+
+sudo chown www-data:www-data /tmp/wave_daemon.log /dev/shm/yandex_state.json /dev/shm/yandex_meta_cache.json
+sudo chmod 666 /tmp/wave_daemon.log
+sudo chmod 777 /dev/shm/yandex_state.json
+sudo chmod 777 /dev/shm/yandex_meta_cache.json
+
+# 4. Frontend
 sudo mkdir -p "$FINAL_WEB_DIR"
 if [ -d "$TEMP_DIR/dist" ]; then
   sudo cp -r "$TEMP_DIR/dist/." "$FINAL_WEB_DIR/"
-else
-  echo "ERROR: /dist folder not found in repository!"
-  exit 1
 fi
 sudo chown -R www-data:www-data "$FINAL_WEB_DIR"
-sudo chmod -R 755 "$FINAL_WEB_DIR"
 
-# 5. Create Systemd Service for Websockify
-echo ">>> [5/7] Setting up Websockify Bridge..."
+# 5. Websockify Service
 WEBSOCK_PATH=$(which websockify)
 sudo bash -c "cat > /etc/systemd/system/websockify-mpd.service" <<EOF
 [Unit]
@@ -99,11 +83,7 @@ Restart=always
 WantedBy=multi-user.target
 EOF
 
-sudo systemctl daemon-reload
-sudo systemctl enable --now websockify-mpd.service
-
-# 6. Create Systemd Service for Yandex Daemon
-echo ">>> [6/7] Setting up Yandex Background Daemon..."
+# 6. Yandex Daemon Service
 sudo bash -c "cat > /etc/systemd/system/wave-yandex.service" <<EOF
 [Unit]
 Description=WaveUI Yandex Music Daemon
@@ -113,67 +93,43 @@ After=network.target mpd.service
 Type=simple
 User=www-data
 Group=www-data
-ExecStart=/usr/bin/php $BIN_DIR/yandex-daemon.php
+ExecStart=/usr/bin/php /var/www/bin/yandex-daemon.php
 Restart=always
 RestartSec=5
-StandardOutput=append:/tmp/wave_daemon.log
-StandardError=append:/tmp/wave_daemon.log
+# Упрощенный логгинг
+StandardOutput=null
+StandardError=journal
 
 [Install]
 WantedBy=multi-user.target
 EOF
 
 sudo systemctl daemon-reload
+sudo systemctl enable websockify-mpd.service
+sudo systemctl start websockify-mpd.service
 sudo systemctl enable wave-yandex.service
 sudo systemctl start wave-yandex.service
 
-sudo -u www-data touch /dev/shm/yandex_state.json
-sudo -u www-data touch /dev/shm/yandex_meta_cache.json
-sudo chmod 777 /dev/shm/yandex_state.json
-sudo chmod 777 /dev/shm/yandex_meta_cache.json
-
-# 7. Configure Nginx for Port 3000
-echo ">>> [7/7] Configuring Nginx..."
+# 7. Nginx
 sudo bash -c "cat > $NGINX_CONF" <<EOF
 server {
     listen $PORT;
     server_name _;
-
     root $FINAL_WEB_DIR;
     index index.html;
-
-    location / {
-        try_files \$uri \$uri/ /index.html;
-    }
-
-    # API Proxy to PHP files in root
+    location / { try_files \$uri \$uri/ /index.html; }
     location ~ \.php$ {
         root $WEB_ROOT;
         include snippets/fastcgi-php.conf;
         fastcgi_pass unix:$PHP_FPM_SOCK;
         fastcgi_param SCRIPT_FILENAME \$document_root\$fastcgi_script_name;
     }
-
-    # Proxy covers and assets from main Moode
-    location /imagesw/ {
-        proxy_pass http://127.0.0.1/imagesw/;
-    }
-    
-    location /coverart.php {
-        proxy_pass http://127.0.0.1/coverart.php;
-    }
+    location /imagesw/ { proxy_pass http://127.0.0.1/imagesw/; }
+    location /coverart.php { proxy_pass http://127.0.0.1/coverart.php; }
 }
 EOF
 
-# Enable the site and restart Nginx
 sudo ln -sf $NGINX_CONF /etc/nginx/sites-enabled/
-sudo nginx -t
 sudo systemctl restart nginx
 
-echo "-------------------------------------------------------"
-echo "SUCCESSFULLY DEPLOYED!"
-echo "-------------------------------------------------------"
-echo "Access the new UI at: http://moode.local:$PORT"
-echo "Or via IP: http://$(hostname -I | awk '{print $1}'):$PORT"
-echo "To monitor daemon: tail -f /tmp/wave_daemon.log"
-echo "-------------------------------------------------------"
+echo "DONE. Check service: sudo systemctl status wave-yandex.service"

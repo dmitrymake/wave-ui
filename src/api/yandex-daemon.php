@@ -13,8 +13,7 @@ $pollInterval = 5;
 
 function logMsg($msg) {
     $str = "[" . date('H:i:s') . "] $msg\n";
-    file_put_contents(LOG_FILE, $str, FILE_APPEND);
-    chmod(LOG_FILE, 0666); 
+    @file_put_contents(LOG_FILE, $str, FILE_APPEND);
     echo $str;
 }
 
@@ -62,7 +61,8 @@ function getCurrentSongPos() {
 
 function getState() {
     if (!file_exists(STATE_FILE)) return null;
-    return json_decode(file_get_contents(STATE_FILE), true);
+    $data = file_get_contents(STATE_FILE);
+    return json_decode($data, true);
 }
 
 function saveState($state) {
@@ -96,7 +96,7 @@ function updateMetaCache($url, $track) {
     file_put_contents(META_CACHE_FILE, json_encode($cache));
 }
 
-logMsg("Daemon Started (Auto-Extend Logic)");
+logMsg("Daemon Started (Auto-Extend Logic Active)");
 
 $lastTokenTime = 0;
 $api = null;
@@ -129,8 +129,8 @@ while (true) {
 
         if ($tracksRemaining < $minQueueSize) {
             if (empty($state['queue_buffer'])) {
-                if ($state['mode'] === 'station') {
-                    logMsg("Fetching batch from Yandex...");
+                if (isset($state['mode']) && $state['mode'] === 'station') {
+                    logMsg("Station mode: Fetching next batch...");
                     try {
                         $stationId = $state['station_id'] ?? 'user:onetwo';
                         $tracksData = $api->getStationTracks($stationId, false);
@@ -144,7 +144,7 @@ while (true) {
                             saveState($state);
                             logMsg("Fetched " . count($cleanTracks) . " tracks.");
                         } else {
-                            logMsg("No tracks returned. Retrying later.");
+                            logMsg("Yandex returned no tracks.");
                             sleep(10);
                             continue;
                         }
@@ -154,7 +154,7 @@ while (true) {
                         continue;
                     }
                 } else {
-                    logMsg("Playlist ended. Deactivating daemon.");
+                    logMsg("Playlist/Album buffer empty. Finishing.");
                     $state['active'] = false;
                     saveState($state);
                     continue;
@@ -170,16 +170,16 @@ while (true) {
                     if ($url) {
                         mpdSend("add \"$url\"");
                         updateMetaCache($url, $nextTrack);
-                        logMsg("Added: " . $nextTrack['title']);
+                        logMsg("Added to MPD: " . $nextTrack['title']);
                         
                         if (getMpdState() === 'stop') {
                             mpdSend("play");
                         }
                     } else {
-                        logMsg("Direct link failed for: " . $nextTrack['title']);
+                        logMsg("Link failed: " . $nextTrack['title']);
                     }
                 } catch (Exception $e) {
-                    logMsg("Add Track Error: " . $e->getMessage());
+                    logMsg("Error adding track: " . $e->getMessage());
                 }
             }
         }
