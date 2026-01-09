@@ -4,6 +4,7 @@ import { THEMES } from "./theme";
 import md5 from "md5";
 
 export const connectionStatus = writable("Disconnected");
+export const yandexAuthStatus = writable(false);
 
 export const toastMessage = writable(null);
 let toastTimer;
@@ -108,46 +109,14 @@ export const currentSong = writable({
   isYandex: false,
 });
 
-// --- YANDEX CONTEXT WITH PERSISTENCE ---
-const initialYandexState = {
+export const yandexContext = writable({
   active: false,
   tracks: [],
   currentIndex: -1,
   currentTrackId: null,
   currentTrackFile: null,
   streamCache: {},
-};
-
-// Пытаемся восстановить кэш из localStorage, чтобы не терять названия треков при F5
-if (typeof localStorage !== "undefined") {
-  try {
-    const savedCache = localStorage.getItem("yandex_stream_cache");
-    if (savedCache) {
-      initialYandexState.streamCache = JSON.parse(savedCache);
-    }
-  } catch (e) {
-    console.error("Failed to load yandex cache", e);
-  }
-}
-
-export const yandexContext = writable(initialYandexState);
-
-// Сохраняем кэш при каждом обновлении
-yandexContext.subscribe((val) => {
-  if (typeof localStorage !== "undefined" && val.streamCache) {
-    // Ограничиваем размер кэша, чтобы localStorage не переполнился (например, 500 треков)
-    const keys = Object.keys(val.streamCache);
-    if (keys.length > 500) {
-      // Удаляем старые, если логика позволяет, или просто перезаписываем
-      // В данном случае просто сохраняем как есть, это текст, влезет много
-    }
-    localStorage.setItem(
-      "yandex_stream_cache",
-      JSON.stringify(val.streamCache),
-    );
-  }
 });
-// ---------------------------------------
 
 export const isFullPlayerOpen = writable(false);
 export const isLoadingRadio = writable(false);
@@ -376,8 +345,7 @@ export function getTrackThumbUrl(
 
 function isRadioTrack(file) {
   if (!file) return false;
-  // If it's explicitly marked as Yandex (which uses http stream), don't treat as generic radio
-  if (file.includes("yandex.ru") || file.includes("get-mp3")) return false;
+  if (file.includes("yandex.net") || file.includes("get-mp3")) return false;
 
   return (
     file.startsWith("http") || file.includes("://") || file.includes("RADIO")
@@ -444,23 +412,5 @@ isAlarmEnabled.subscribe((val) =>
   localStorage.setItem("alarmEnabled", String(val)),
 );
 alarmPlaylist.subscribe((val) => localStorage.setItem("alarmPlaylist", val));
-
-const savedYandexToken = localStorage.getItem("yandex_token") || "";
-export const yandexToken = writable(savedYandexToken);
-
-yandexToken.subscribe((val) => {
-  if (typeof localStorage !== "undefined") {
-    localStorage.setItem("yandex_token", val);
-  }
-});
-
-const savedYandexEnabled = localStorage.getItem("yandex_enabled") === "true";
-export const isYandexEnabled = writable(savedYandexEnabled);
-
-isYandexEnabled.subscribe((val) => {
-  if (typeof localStorage !== "undefined") {
-    localStorage.setItem("yandex_enabled", String(val));
-  }
-});
 
 export const yandexFavorites = writable(new Set());

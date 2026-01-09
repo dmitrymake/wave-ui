@@ -6,6 +6,7 @@ export const DATABASE = {
 
 export const API_ENDPOINTS = {
   SYNC: `/wave-api.php`,
+  YANDEX: `/wave-yandex-api.php`,
   STATIONS: (isDev) => `/wave-api.php?action=stations`,
   COVER_ART: (file) => `/coverart.php?u=${encodeURIComponent(file)}`,
   RADIO_LOGOS: (filename) => `/imagesw/radio-logos/thumbs/${filename}`,

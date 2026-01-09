@@ -1,6 +1,6 @@
 <script>
-  import { fade } from "svelte/transition";
   import { onMount, onDestroy } from "svelte";
+  import { fade } from "svelte/transition";
   import { CONFIG } from "../../config";
   import {
     showToast,
@@ -10,8 +10,8 @@
     isAlarmEnabled,
     alarmPlaylist,
     playlists,
-    yandexToken,
     isYandexEnabled,
+    yandexAuthStatus,
   } from "../../lib/store";
   import { ApiActions } from "../../lib/api";
   import { THEMES } from "../../lib/theme";
@@ -20,6 +20,8 @@
   let ipAddress = CONFIG.MOODE_IP;
   let serverTime = "--:--";
   let timeInterval;
+  let inputToken = "";
+  let isChecking = false;
 
   function saveConnection() {
     CONFIG.setMoodeIp(ipAddress);
@@ -34,10 +36,6 @@
       ? __BUILD_DATE__
       : new Date().toISOString();
   const buildDate = new Date(buildDateRaw).toLocaleString();
-
-  function handleFeatureNotReady() {
-    showToast("Coming soon in next update", "info");
-  }
 
   function openThemeSelector() {
     const options = THEMES.map((t) => ({ label: t.label, value: t.id }));
@@ -63,6 +61,7 @@
   onMount(() => {
     fetchServerTime();
     timeInterval = setInterval(fetchServerTime, 60000);
+    ApiActions.checkYandexAuth();
   });
 
   onDestroy(() => {
@@ -89,6 +88,16 @@
     isYandexEnabled.update((v) => !v);
   }
 
+  async function handleSaveToken() {
+    if (!inputToken) return;
+    isChecking = true;
+    const success = await ApiActions.saveYandexToken(inputToken);
+    isChecking = false;
+    if (success) {
+      inputToken = "";
+    }
+  }
+
   $: activeThemeLabel =
     THEMES.find((t) => t.id === $currentTheme)?.label || "Default";
 </script>
@@ -96,6 +105,60 @@
 <div class="view-container scrollable" in:fade={{ duration: 200 }}>
   <div class="content-padded">
     <h1 class="header-title big">Settings</h1>
+
+    <div class="section">
+      <div class="section-header">
+        <span>Services</span>
+      </div>
+      <div class="card">
+        <div class="row space-between">
+          <label>Enable Yandex Music (Beta)</label>
+          <button
+            class="toggle-btn"
+            class:active={$isYandexEnabled}
+            on:click={toggleYandex}
+          >
+            <div class="toggle-circle"></div>
+          </button>
+        </div>
+
+        {#if $isYandexEnabled}
+          <div class="separator" in:fade></div>
+
+          <div class="row space-between" in:fade>
+            <label>Connection Status</label>
+            {#if $yandexAuthStatus}
+              <span class="status-badge connected">Connected</span>
+            {:else}
+              <span class="status-badge disconnected">Not Connected</span>
+            {/if}
+          </div>
+
+          <div class="separator" in:fade></div>
+
+          <div class="row" in:fade>
+            <label for="yandex-token">OAuth Token</label>
+            <div class="input-group">
+              <input
+                id="yandex-token"
+                type="password"
+                bind:value={inputToken}
+                placeholder="Paste token here..."
+              />
+              <button
+                class="btn-primary small"
+                disabled={isChecking}
+                on:click={handleSaveToken}
+              >
+                {isChecking ? "Checking..." : "Save"}
+              </button>
+            </div>
+          </div>
+
+          <p class="hint" in:fade>Token is stored securely on the device.</p>
+        {/if}
+      </div>
+    </div>
 
     <div class="section">
       <div class="section-header">
@@ -150,10 +213,6 @@
               <div class="select-arrow">{@html ICONS.CHEVRON_DOWN}</div>
             </div>
           </div>
-
-          <p class="hint" in:fade>
-            Player will clear queue, load this playlist and play at set time.
-          </p>
         {/if}
       </div>
     </div>
@@ -170,49 +229,6 @@
             <span class="chevron">{@html ICONS.NEXT}</span>
           </div>
         </div>
-      </div>
-    </div>
-
-    <div class="section">
-      <div class="section-header">
-        <span>Services</span>
-      </div>
-      <div class="card">
-        <div class="row space-between">
-          <label>Enable Yandex Music (Beta)</label>
-          <button
-            class="toggle-btn"
-            class:active={$isYandexEnabled}
-            on:click={toggleYandex}
-          >
-            <div class="toggle-circle"></div>
-          </button>
-        </div>
-
-        {#if $isYandexEnabled}
-          <div class="separator" in:fade></div>
-
-          <div class="row" in:fade>
-            <label for="yandex-token">OAuth Token</label>
-            <div class="input-group">
-              <input
-                id="yandex-token"
-                type="password"
-                bind:value={$yandexToken}
-                placeholder="Enter token..."
-              />
-            </div>
-          </div>
-
-          <p class="hint" in:fade>
-            Required to access your library and stream music.
-            <a
-              href="https://github.com/MarshalX/yandex-music-api/discussions/513"
-              target="_blank"
-              style="color: var(--c-accent);">How to get token</a
-            >
-          </p>
-        {/if}
       </div>
     </div>
 
@@ -252,11 +268,6 @@
         <div class="info-row">
           <span>Build Date</span>
           <span class="mono small">{buildDate}</span>
-        </div>
-        <div class="separator"></div>
-        <div class="info-row">
-          <span>Developer</span>
-          <span>Moode WaveUI</span>
         </div>
       </div>
     </div>
@@ -485,5 +496,20 @@
   .select-arrow :global(svg) {
     width: 100%;
     height: 100%;
+  }
+
+  .status-badge {
+    font-size: 12px;
+    padding: 4px 8px;
+    border-radius: 4px;
+    font-weight: bold;
+  }
+  .connected {
+    background: rgba(46, 204, 113, 0.2);
+    color: #2ecc71;
+  }
+  .disconnected {
+    background: rgba(231, 76, 60, 0.2);
+    color: #e74c3c;
   }
 </style>

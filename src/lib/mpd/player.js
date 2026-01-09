@@ -12,7 +12,7 @@ import {
   yandexContext,
 } from "../store";
 import { db } from "../db";
-import { ApiActions } from "../api"; // Импорт API для восстановления данных
+import { ApiActions } from "../api";
 
 const POLLER_INTERVAL = 1000;
 const TICKER_INTERVAL = 250;
@@ -108,7 +108,6 @@ async function syncQueue(newVersion) {
     const tracks = rawTracks.map((t) => {
       const fileUrl = t.file || "";
 
-      // 1. Из кэша браузера
       if (yCtx.streamCache && yCtx.streamCache[fileUrl]) {
         const yMeta = yCtx.streamCache[fileUrl];
         return {
@@ -125,12 +124,10 @@ async function syncQueue(newVersion) {
         };
       }
 
-      // 2. Если это Яндекс, но нет в кэше -> пробуем загрузить из RAM сервера асинхронно
       if (fileUrl.includes("yandex.net") || fileUrl.includes("get-mp3")) {
-        fetchYandexMetaForTrack(fileUrl); // Асинхронный вызов
+        fetchYandexMetaForTrack(fileUrl);
       }
 
-      // 3. Из локальной БД
       const lookupKey = fileUrl.normalize("NFC");
       const cached = cachedMap.get(lookupKey);
 
@@ -159,7 +156,6 @@ async function syncQueue(newVersion) {
   }
 }
 
-// Хелпер для асинхронной подгрузки метаданных
 async function fetchYandexMetaForTrack(url) {
   const meta = await ApiActions.getYandexMeta(url);
   if (meta) {
@@ -168,12 +164,10 @@ async function fetchYandexMetaForTrack(url) {
       newCache[url] = { ...meta, isYandex: true, file: url };
       return { ...ctx, streamCache: newCache };
     });
-    // Триггерим обновление текущей песни, если это она
     const song = get(currentSong);
     if (song.file === url) {
       currentSong.update((s) => ({ ...s, ...meta, isYandex: true }));
     }
-    // Триггерим обновление очереди (реактивность сработает)
     queue.update((q) =>
       q.map((t) => {
         if (t.file === url) return { ...t, ...meta, isYandex: true };
@@ -212,7 +206,6 @@ function updateStores(serverStatus, serverSong) {
     (serverSong.file.includes("yandex.net") ||
       serverSong.file.includes("get-mp3"))
   ) {
-    // Если играет Яндекс, но мы не знаем метаданных (например, после F5)
     fetchYandexMetaForTrack(serverSong.file);
   }
 

@@ -2,9 +2,9 @@
   import { onMount } from "svelte";
   import { fade, fly } from "svelte/transition";
   import { YandexApi } from "../../lib/yandex";
-  import { yandexToken, showToast, yandexContext } from "../../lib/store";
+  import { yandexAuthStatus, showToast } from "../../lib/store";
   import { ICONS } from "../../lib/icons";
-  import { playYandexContext } from "../../lib/mpd/index";
+  import { startYandexRadio } from "../../lib/mpd/index";
   import TrackRow from "../TrackRow.svelte";
   import BaseList from "./BaseList.svelte";
   import Skeleton from "../Skeleton.svelte";
@@ -16,133 +16,33 @@
   let isLoading = false;
   let viewMode = "dashboard";
   let activePlaylistName = "";
-  let activePlaylistData = null;
 
   let searchQuery = "";
   let searchType = "all";
   let searchResults = { tracks: [], albums: [], artists: [] };
   let searchTimer;
 
-  let page = 0;
-  let hasMore = true;
-  let showLoadMoreButton = false;
-  let observer;
-  let sentinel;
-
-  $: isTokenSet = !!$yandexToken;
+  $: isTokenSet = $yandexAuthStatus;
 
   onMount(() => {
     if (isTokenSet) {
       loadDashboard();
     }
-    return () => {
-      if (observer) observer.disconnect();
-    };
   });
-
-  // Setup observer for the sentinel element
-  function setupObserver(node) {
-    sentinel = node;
-    if (observer) observer.disconnect();
-
-    observer = new IntersectionObserver(
-      (entries) => {
-        const entry = entries[0];
-        // If sentinel is visible, user is at bottom
-        showLoadMoreButton = entry.isIntersecting && hasMore && !isLoading;
-      },
-      {
-        root: null, // viewport
-        rootMargin: "0px",
-        threshold: 0.1,
-      },
-    );
-
-    observer.observe(sentinel);
-
-    return {
-      destroy() {
-        if (observer) observer.disconnect();
-      },
-    };
-  }
 
   async function loadDashboard() {
     isLoading = true;
     try {
-      const userPlaylists = await YandexApi.getUserPlaylists();
-      playlists = [
-        {
-          kind: "favorites",
-          title: "Favorites",
-          cover: { uri: null },
-          trackCount: "♥",
-        },
-        ...userPlaylists,
-      ];
-    } catch (e) {
-      console.error(e);
+      playlists = [{ kind: "favorites", title: "My Vibe", isStation: true }];
     } finally {
       isLoading = false;
     }
   }
 
   async function openPlaylist(pl) {
-    isLoading = true;
-    viewMode = "playlist";
-    activePlaylistName = pl.title;
-    activePlaylistData = pl;
-    tracksStore.set([]);
-    page = 0;
-    hasMore = true;
-    showLoadMoreButton = false;
-
-    await loadMoreTracks();
-  }
-
-  async function loadMoreTracks() {
-    if (!hasMore && page > 0) return;
-    isLoading = true;
-    showLoadMoreButton = false;
-
-    try {
-      let res;
-      if (activePlaylistData.kind === "favorites") {
-        res = await YandexApi.getFavorites(page);
-      } else if (activePlaylistData.kind === "album") {
-        if (page === 0) {
-          const tracks = await YandexApi.getAlbumTracks(activePlaylistData.id);
-          res = { tracks, total: tracks.length };
-        } else {
-          res = { tracks: [], total: 0 };
-        }
-      } else if (activePlaylistData.kind === "artist") {
-        if (page === 0) {
-          const tracks = await YandexApi.getArtistTracks(activePlaylistData.id);
-          res = { tracks, total: tracks.length };
-        } else {
-          res = { tracks: [], total: 0 };
-        }
-      } else {
-        res = await YandexApi.getPlaylistTracks(
-          activePlaylistData.kind,
-          activePlaylistData.uid,
-          page,
-        );
-      }
-
-      if (res.tracks.length === 0) {
-        hasMore = false;
-      } else {
-        tracksStore.update((curr) => [...curr, ...res.tracks]);
-        page++;
-        if (res.tracks.length < 50) hasMore = false;
-      }
-    } catch (e) {
-      showToast("Failed to load tracks", "error");
-      hasMore = false;
-    } finally {
-      isLoading = false;
+    if (pl.isStation) {
+      showToast("Starting My Vibe...", "info");
+      YandexApi.playRadio("user:onetwo");
     }
   }
 
@@ -170,14 +70,10 @@
     searchResults = { tracks: [], albums: [], artists: [] };
 
     try {
-      const res = await YandexApi.search(
-        searchQuery,
-        searchType === "all" ? "all" : searchType,
-        0,
-      );
+      const res = await YandexApi.search(searchQuery);
       searchResults = res;
       if (searchType === "track" || searchType === "all") {
-        tracksStore.set(res.tracks);
+        tracksStore.set(res.tracks || []);
       } else {
         tracksStore.set([]);
       }
@@ -188,52 +84,24 @@
     }
   }
 
-  async function openAlbum(album) {
-    isLoading = true;
-    viewMode = "playlist";
-    activePlaylistName = album.title;
-    activePlaylistData = { kind: "album", id: album.id };
-    tracksStore.set([]);
-    page = 0;
-    hasMore = true;
-    await loadMoreTracks();
-  }
-
-  async function openArtist(artist) {
-    isLoading = true;
-    viewMode = "playlist";
-    activePlaylistName = artist.name;
-    activePlaylistData = { kind: "artist", id: artist.id };
-    tracksStore.set([]);
-    page = 0;
-    hasMore = true;
-    await loadMoreTracks();
-  }
-
   function goBack() {
     viewMode = "dashboard";
     searchQuery = "";
     tracksStore.set([]);
   }
 
-  async function handlePlay(index) {
-    playYandexContext($tracksStore, index);
-  }
-
-  function getCover(pl) {
-    if (pl.kind === "favorites") return null;
-    if (pl.cover && pl.cover.uri) {
-      return `https://${pl.cover.uri.replace("%%", "200x200")}`;
+  async function handlePlay(track) {
+    if (track.id) {
+      startYandexRadio(track.id);
     }
-    return null;
   }
 </script>
 
 <div class="view-container scrollable relative-parent">
   {#if !isTokenSet}
     <div class="token-alert content-padded">
-      <h3>Yandex Music Token Required</h3>
-      <p>Please go to Settings and enter your OAuth token.</p>
+      <h3>Yandex Music Not Connected</h3>
+      <p>Please go to Settings and connect your account.</p>
     </div>
   {:else}
     <div class="content-padded no-bottom-pad">
@@ -270,14 +138,6 @@
             class:active={searchType === "track"}
             on:click={() => setSearchType("track")}>Tracks</button
           >
-          <button
-            class:active={searchType === "album"}
-            on:click={() => setSearchType("album")}>Albums</button
-          >
-          <button
-            class:active={searchType === "artist"}
-            on:click={() => setSearchType("artist")}>Artists</button
-          >
         </div>
       {/if}
     </div>
@@ -302,23 +162,13 @@
           <div class="music-grid">
             {#each playlists as pl}
               <div class="music-card" on:click={() => openPlaylist(pl)}>
-                <div
-                  class="card-img-container"
-                  class:is-fav={pl.kind === "favorites"}
-                >
-                  {#if pl.kind === "favorites"}
-                    <div class="icon-wrap">{@html ICONS.HEART_FILLED}</div>
-                  {:else if getCover(pl)}
-                    <img src={getCover(pl)} alt={pl.title} loading="lazy" />
-                  {:else}
-                    <div class="icon-wrap">{@html ICONS.PLAYLISTS}</div>
-                  {/if}
+                <div class="card-img-container is-fav">
+                  <div class="icon-wrap">{@html ICONS.RADIO}</div>
                   <div class="play-overlay">
                     <span class="overlay-icon">{@html ICONS.PLAY}</span>
                   </div>
                 </div>
                 <div class="card-title">{pl.title}</div>
-                <div class="card-sub">{pl.trackCount} tracks</div>
               </div>
             {/each}
           </div>
@@ -328,11 +178,11 @@
 
     {#if viewMode === "search"}
       <div class="content-padded">
-        {#if searchResults.albums.length > 0 && (searchType === "all" || searchType === "album")}
+        {#if searchResults.albums && searchResults.albums.length > 0 && searchType === "all"}
           <h3 class="header-label">Albums</h3>
           <div class="music-grid horizontal section-mb">
             {#each searchResults.albums as album}
-              <div class="music-card" on:click={() => openAlbum(album)}>
+              <div class="music-card">
                 <div class="card-img-container">
                   <ImageLoader src={album.image} alt={album.title} radius="8px">
                     <div slot="fallback" class="icon-fallback">
@@ -346,28 +196,6 @@
             {/each}
           </div>
         {/if}
-
-        {#if searchResults.artists.length > 0 && (searchType === "all" || searchType === "artist")}
-          <h3 class="header-label">Artists</h3>
-          <div class="music-grid horizontal section-mb">
-            {#each searchResults.artists as artist}
-              <div class="music-card" on:click={() => openArtist(artist)}>
-                <div class="card-img-container rounded">
-                  <ImageLoader
-                    src={artist.image}
-                    alt={artist.name}
-                    radius="50%"
-                  >
-                    <div slot="fallback" class="icon-fallback">
-                      {@html ICONS.ARTISTS}
-                    </div>
-                  </ImageLoader>
-                </div>
-                <div class="card-title center">{artist.name}</div>
-              </div>
-            {/each}
-          </div>
-        {/if}
       </div>
     {/if}
 
@@ -377,41 +205,15 @@
         {isLoading}
         emptyText={viewMode === "search" ? "No results" : "Playlist is empty"}
       >
-        <div slot="header" class="content-padded">
-          <div class="playlist-header">
-            <h1 class="header-title">{activePlaylistName}</h1>
-            <div class="meta-tag">
-              {$tracksStore.length}{hasMore ? "+" : ""} tracks
-            </div>
-          </div>
-        </div>
-
         <div slot="row" let:item let:index>
           <TrackRow
             track={item}
             {index}
             isEditable={false}
-            on:play={() => handlePlay(index)}
+            on:play={() => handlePlay(item)}
           />
         </div>
-
-        <div slot="footer">
-          {#if hasMore && !isLoading}
-            <div
-              use:setupObserver
-              style="height: 20px; width: 100%; margin-top: 20px;"
-            ></div>
-          {/if}
-        </div>
       </BaseList>
-
-      {#if showLoadMoreButton}
-        <div class="floating-fab-container" transition:fly={{ y: 20 }}>
-          <button class="fab-load-more" on:click={loadMoreTracks}>
-            Load More
-          </button>
-        </div>
-      {/if}
     {/if}
   {/if}
 </div>
@@ -420,7 +222,7 @@
   @import "./MusicViews.css";
 
   .relative-parent {
-    position: relative; /* Needed for absolute positioning of FAB */
+    position: relative;
   }
 
   .token-alert {
@@ -516,10 +318,6 @@
     background: linear-gradient(135deg, var(--c-heart), #9e1a1a);
   }
 
-  .card-img-container.rounded {
-    border-radius: 50%;
-  }
-
   .icon-wrap {
     width: 40%;
     height: 40%;
@@ -548,45 +346,7 @@
     opacity: 0.5;
   }
 
-  .playlist-header {
-    margin-bottom: 10px;
-  }
-
   .section-mb {
     margin-bottom: 24px;
-  }
-
-  .card-title.center {
-    text-align: center;
-  }
-
-  /* Floating Action Button for Load More */
-  .floating-fab-container {
-    position: absolute;
-    bottom: 20px;
-    left: 0;
-    width: 100%;
-    display: flex;
-    justify-content: center;
-    pointer-events: none; /* Let clicks pass through empty space */
-    z-index: 100;
-  }
-
-  .fab-load-more {
-    pointer-events: auto;
-    background: var(--c-accent);
-    color: white;
-    border: none;
-    padding: 10px 24px;
-    border-radius: 30px;
-    font-weight: 600;
-    font-size: 14px;
-    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
-    cursor: pointer;
-    transition: transform 0.2s;
-  }
-
-  .fab-load-more:active {
-    transform: scale(0.95);
   }
 </style>

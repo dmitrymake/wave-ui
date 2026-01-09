@@ -1,15 +1,15 @@
 import { get } from "svelte/store";
 import { API_ENDPOINTS } from "./constants";
-import { isSyncingLibrary, showToast, isLoadingRadio, stations } from "./store";
+import {
+  isSyncingLibrary,
+  showToast,
+  isLoadingRadio,
+  stations,
+  yandexAuthStatus,
+} from "./store";
 import SyncWorker from "./workers/sync.worker.js?worker";
 
-/**
- * Actions for interacting with the wave-api.php backend.
- */
 export const ApiActions = {
-  /**
-   * Starts library synchronization via Web Worker to prevent UI blocking during large JSON parsing.
-   */
   async syncLibrary() {
     if (get(isSyncingLibrary)) return;
 
@@ -60,9 +60,6 @@ export const ApiActions = {
     };
   },
 
-  /**
-   * Loads radio station list and normalizes it for the player.
-   */
   async loadRadioStations() {
     if (get(isLoadingRadio)) return;
 
@@ -86,7 +83,6 @@ export const ApiActions = {
         genre: item.genre || "Radio",
       }));
 
-      // Sort alphabetically by name
       normalized.sort((a, b) =>
         a.name.localeCompare(b.name, undefined, { sensitivity: "base" }),
       );
@@ -100,9 +96,6 @@ export const ApiActions = {
     }
   },
 
-  /**
-   * Set or clear the alarm via Backend cron
-   */
   async setAlarm(enabled, time, playlistName) {
     const isDev = import.meta.env.DEV;
     if (isDev) {
@@ -133,9 +126,6 @@ export const ApiActions = {
     }
   },
 
-  /**
-   * Get server time for display
-   */
   async getServerTime() {
     try {
       const res = await fetch(`${API_ENDPOINTS.SYNC}?action=get_time`);
@@ -149,31 +139,65 @@ export const ApiActions = {
     return null;
   },
 
-  async saveYandexMeta(url, meta) {
+  async checkYandexAuth() {
     try {
-      await fetch(API_ENDPOINTS.SYNC + "?action=set_yandex_meta", {
+      const res = await fetch(API_ENDPOINTS.YANDEX + "?action=status");
+      const data = await res.json();
+
+      yandexAuthStatus.set(data.authorized);
+      return data.authorized;
+    } catch (e) {
+      console.error("Yandex Auth Check Failed", e);
+      yandexAuthStatus.set(false);
+      return false;
+    }
+  },
+
+  async saveYandexToken(token) {
+    try {
+      const res = await fetch(API_ENDPOINTS.YANDEX + "?action=save_token", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ url, meta }),
+        body: JSON.stringify({ token }),
       });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        throw new Error(data.error || "Failed to save");
+      }
+
+      showToast("Yandex connected successfully", "success");
+      yandexAuthStatus.set(true);
+      return true;
     } catch (e) {
-      console.warn("Failed to save meta to RAM", e);
+      console.error(e);
+      showToast("Invalid token or server error", "error");
+      yandexAuthStatus.set(false);
+      return false;
+    }
+  },
+
+  async playYandexStation(stationId = "user:onetwo") {
+    try {
+      await fetch(
+        API_ENDPOINTS.YANDEX + `?action=play_station&station=${stationId}`,
+      );
+      showToast("Starting My Vibe...", "success");
+    } catch (e) {
+      showToast("Failed to start radio", "error");
     }
   },
 
   async getYandexMeta(url) {
     try {
       const res = await fetch(
-        API_ENDPOINTS.SYNC +
-          "?action=get_yandex_meta&url=" +
+        API_ENDPOINTS.YANDEX +
+          "?action=get_meta&url=" +
           encodeURIComponent(url),
       );
-      if (res.ok) {
-        return await res.json();
-      }
-    } catch (e) {
-      console.warn("Failed to get meta from RAM", e);
-    }
+      if (res.ok) return await res.json();
+    } catch (e) {}
     return null;
   },
 };
