@@ -1,18 +1,15 @@
 <?php
-// /var/www/bin/yandex-daemon.php
-
 define('INC', '/var/www/inc');
 require_once INC . '/yandex-music.php';
 
-// Пути должны совпадать с wave-yandex-api.php
 define('STATE_FILE', '/dev/shm/yandex_state.json');
 define('META_CACHE_FILE', '/dev/shm/yandex_meta_cache.json');
 define('TOKEN_FILE', '/var/local/www/yandex_token.dat');
 
-$minQueueSize = 2;
+$minQueueSize = 2; 
 
 function logMsg($msg) {
-    echo "[" . date('H:i:s') . "] $msg\n";
+    // Silent in production or log to file
 }
 
 function mpdCmd($cmd) {
@@ -33,29 +30,41 @@ function saveState($state) {
 function updateMetaCache($url, $track) {
     $cache = file_exists(META_CACHE_FILE) ? json_decode(file_get_contents(META_CACHE_FILE), true) : [];
     
-    // Очистка старого (оставляем 50 последних)
     if (count($cache) > 50) $cache = array_slice($cache, -50, 50, true);
     
     $key = md5($url);
+    
+    $cover = null;
+    if (isset($track['coverUri'])) {
+        $cover = "https://" . str_replace('%%', '400x400', $track['coverUri']);
+    } elseif (isset($track['ogImage'])) {
+        $cover = "https://" . str_replace('%%', '200x200', $track['ogImage']);
+    }
+
+    $artistName = 'Unknown';
+    if (isset($track['artists']) && is_array($track['artists'])) {
+        $artistName = implode(', ', array_column($track['artists'], 'name'));
+    }
+
+    $albumTitle = $track['albums'][0]['title'] ?? '';
+
     $cache[$key] = [
         'id' => $track['id'],
         'title' => $track['title'],
-        'artist' => implode(', ', array_column($track['artists'], 'name')),
-        'album' => $track['albums'][0]['title'] ?? '',
-        'image' => isset($track['coverUri']) ? "https://" . str_replace('%%', '400x400', $track['coverUri']) : null,
-        'isYandex' => true
+        'artist' => $artistName,
+        'album' => $albumTitle,
+        'image' => $cover,
+        'isYandex' => true,
+        'time' => ($track['durationMs'] ?? 0) / 1000
     ];
     
     file_put_contents(META_CACHE_FILE, json_encode($cache));
 }
 
-logMsg("Daemon Started");
-
 $lastTokenTime = 0;
 $api = null;
 
 while (true) {
-    // 1. Горячая перезагрузка API при изменении файла токена
     if (file_exists(TOKEN_FILE)) {
         $fileTime = filemtime(TOKEN_FILE);
         if ($fileTime > $lastTokenTime) {
@@ -63,12 +72,9 @@ while (true) {
             if ($token) {
                 try {
                     $api = new YandexMusic($token);
-                    // Проверка валидности
                     $api->getUserId(); 
                     $lastTokenTime = $fileTime;
-                    logMsg("API Initialized / Updated");
                 } catch (Exception $e) {
-                    logMsg("Token invalid: " . $e->getMessage());
                     $api = null;
                 }
             }
@@ -77,35 +83,29 @@ while (true) {
 
     $state = getState();
 
-    // Работаем только если есть API и флаг активности
     if ($api && $state && !empty($state['active'])) {
         
-        // Проверка очереди MPD
         $queueCount = (int)shell_exec("mpc playlist | wc -l");
         
         if ($queueCount < $minQueueSize) {
-            logMsg("Queue low ($queueCount). Fetching tracks...");
-
-            // 2. Если локальный буфер пуст, качаем пачку из Яндекса
             if (empty($state['queue_buffer'])) {
                 try {
                     $stationId = $state['station_id'] ?? 'user:onetwo';
-                    $tracks = $api->getStationTracks($stationId);
+                    $tracksData = $api->getStationTracks($stationId);
                     
-                    if ($tracks) {
-                        // Берем только полезные данные 'track'
-                        $cleanTracks = array_map(function($item) { return $item['track']; }, $tracks);
+                    if ($tracksData) {
+                        $cleanTracks = [];
+                        foreach ($tracksData as $item) {
+                            $cleanTracks[] = $item['track'];
+                        }
                         $state['queue_buffer'] = $cleanTracks;
                         saveState($state);
-                        logMsg("Fetched " . count($cleanTracks) . " tracks from Yandex");
                     }
                 } catch (Exception $e) {
-                    logMsg("Error fetching tracks: " . $e->getMessage());
-                    sleep(10); // Не долбим API при ошибке
+                    sleep(10);
                 }
             }
 
-            // 3. Берем трек из буфера и добавляем в MPD
             if (!empty($state['queue_buffer'])) {
                 $nextTrack = array_shift($state['queue_buffer']);
                 saveState($state); 
@@ -115,19 +115,15 @@ while (true) {
                     if ($url) {
                         mpdCmd("add \"$url\"");
                         updateMetaCache($url, $nextTrack);
-                        logMsg("Added: " . $nextTrack['title']);
                         
-                        // Если очередь была пуста, запускаем
                         if ($queueCount == 0) mpdCmd("play");
                     }
                 } catch (Exception $e) {
-                    logMsg("Failed to add track {$nextTrack['id']}: " . $e->getMessage());
                 }
             }
         }
     }
 
-    // Экономим CPU, ждем изменений MPD или тайм-аута (для проверки токена)
     $socket = fsockopen("localhost", 6600);
     if ($socket) {
         fwrite($socket, "idle player playlist\n");

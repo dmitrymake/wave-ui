@@ -27,19 +27,30 @@ function mpdExec($cmd) {
     exec("mpc " . $cmd);
 }
 
-// Хелпер для сохранения меты трека (чтобы фронт видел название)
 function cacheTrackMeta($url, $track) {
     $cache = file_exists(META_CACHE_FILE) ? json_decode(file_get_contents(META_CACHE_FILE), true) : [];
     if (count($cache) > 100) $cache = array_slice($cache, -100, 100, true);
     
     $key = md5($url);
+    
+    $cover = null;
+    if (isset($track['coverUri'])) {
+        $cover = "https://" . str_replace('%%', '400x400', $track['coverUri']);
+    }
+
+    $artistName = 'Unknown';
+    if (isset($track['artists']) && is_array($track['artists'])) {
+        $artistName = implode(', ', array_column($track['artists'], 'name'));
+    }
+
     $cache[$key] = [
         'id' => $track['id'],
         'title' => $track['title'],
-        'artist' => implode(', ', array_column($track['artists'], 'name')),
+        'artist' => $artistName,
         'album' => $track['albums'][0]['title'] ?? '',
-        'image' => isset($track['coverUri']) ? "https://" . str_replace('%%', '400x400', $track['coverUri']) : null,
-        'isYandex' => true
+        'image' => $cover,
+        'isYandex' => true,
+        'time' => ($track['durationMs'] ?? 0) / 1000
     ];
     file_put_contents(META_CACHE_FILE, json_encode($cache));
 }
@@ -117,23 +128,23 @@ try {
             
             $queueData = $api->getStationTracks($stationId);
             $initialBuffer = [];
-            
             $count = 0;
+
             if ($queueData) {
                 foreach ($queueData as $item) {
-                    if ($count >= 3) break;
                     $track = $item['track'];
                     
-                    $url = $api->getDirectLink($track['id']);
-                    if ($url) {
-                        mpdExec("add \"$url\"");
-                        cacheTrackMeta($url, $track);
-                        $count++;
+                    if ($count < 2) {
+                        $url = $api->getDirectLink($track['id']);
+                        if ($url) {
+                            mpdExec("add \"$url\"");
+                            cacheTrackMeta($url, $track);
+                            $count++;
+                        }
+                    } else {
+                        $initialBuffer[] = $track;
                     }
-                    // Остальное оставим демону
-                    if ($count >= 3) {
-                       $initialBuffer[] = $item['track']; // Демон подхватит остатки
-                    }
+                    if (count($initialBuffer) >= 5) break;
                 }
             }
 
@@ -143,7 +154,7 @@ try {
                 'active' => true,
                 'mode' => 'station',
                 'station_id' => $stationId,
-                'queue_buffer' => []
+                'queue_buffer' => $initialBuffer
             ]);
             
             echo json_encode(['status' => 'started', 'added' => $count]);
@@ -151,21 +162,22 @@ try {
 
         case 'play_track':
             $id = $_REQUEST['id'];
-            $trackInfo = $api->search($id, 'track')['result']['tracks']['results'][0] ?? null; // Хайп, ищем инфу чтобы закешировать
             
+            $trackInfo = $api->getTrackInfo($id);
             $url = $api->getDirectLink($id);
             
-            if ($url) {
+            if ($url && $trackInfo) {
                 mpdExec("clear");
                 mpdExec("add \"$url\"");
-                mpdExec("play");
                 
-                if ($trackInfo) cacheTrackMeta($url, $trackInfo);
+                cacheTrackMeta($url, $trackInfo);
+                
+                mpdExec("play");
                 
                 saveState(['active' => false]);
                 echo json_encode(['status' => 'playing']);
             } else {
-                throw new Exception("Link generation failed");
+                throw new Exception("Could not generate link");
             }
             break;
 

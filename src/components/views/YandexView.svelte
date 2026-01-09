@@ -14,6 +14,7 @@
   let playlists = [];
   let isLoading = false;
   let viewMode = "dashboard";
+  let activePlaylistInfo = null;
 
   let searchQuery = "";
   let searchType = "all";
@@ -31,17 +32,14 @@
   async function loadDashboard() {
     isLoading = true;
     try {
-      // Загружаем реальные плейлисты с сервера
       const userPls = await YandexApi.getUserPlaylists();
 
       playlists = [
-        // Добавляем "Мою Волну" вручную первым пунктом
         {
           title: "My Vibe",
           kind: "my_vibe",
           cover: null,
           isStation: true,
-          stationId: "user:onetwo",
         },
         ...userPls,
       ];
@@ -53,21 +51,38 @@
     }
   }
 
-  async function openPlaylist(pl) {
-    if (pl.isStation || pl.kind === "my_vibe") {
-      showToast("Starting My Vibe...", "info");
-      try {
-        await YandexApi.playStation(pl.stationId || "user:onetwo");
-      } catch (e) {
-        showToast("Failed to start station", "error");
-      }
+  async function handleCardClick(pl) {
+    if (pl.kind === "my_vibe") {
+      startVibe();
     } else {
-      // Для обычных плейлистов пока нет реализации треков в этом примере
-      // Можно просто запустить их как радио (похожие) или допилить get_playlist_tracks в PHP
-      showToast("Playing playlist as radio...", "info");
-      // Например: station = "playlist:owner:kind"
-      // Но пока запустим просто Vibe, т.к. API getStationTracks гибкое
-      await YandexApi.playStation(`playlist:${pl.uid}:${pl.kind}`);
+      openPlaylist(pl);
+    }
+  }
+
+  async function startVibe() {
+    showToast("Starting My Vibe...", "info");
+    try {
+      await YandexApi.playRadio();
+    } catch (e) {
+      showToast("Failed to start radio", "error");
+    }
+  }
+
+  async function openPlaylist(pl) {
+    viewMode = "playlist";
+    activePlaylistInfo = pl;
+    tracksStore.set([]);
+    isLoading = true;
+
+    try {
+      const res = await YandexApi.getPlaylistTracks(pl.uid, pl.kind);
+      if (res && res.tracks) {
+        tracksStore.set(res.tracks);
+      }
+    } catch (e) {
+      showToast("Failed to load tracks", "error");
+    } finally {
+      isLoading = false;
     }
   }
 
@@ -92,13 +107,10 @@
   async function performSearch() {
     isLoading = true;
     viewMode = "search";
-    // Сбрасываем результаты, чтобы старые не висели
     searchResults = { tracks: [], albums: [], artists: [] };
 
     try {
-      // Теперь PHP возвращает нормализованный JSON {tracks: [], albums: []}
       const res = await YandexApi.search(searchQuery);
-
       if (res) {
         searchResults = res;
         if (searchType === "track" || searchType === "all") {
@@ -119,15 +131,18 @@
     viewMode = "dashboard";
     searchQuery = "";
     tracksStore.set([]);
+    activePlaylistInfo = null;
   }
 
-  async function handlePlay(track) {
-    // Проигрывание трека из поиска
-    // В текущей архитектуре "Сервер всё решает", мы можем попросить сервер запустить радио по треку
+  async function handlePlayTrack(track) {
     if (track.id) {
-      showToast("Starting radio by track...", "info");
-      // Формат станции для трека: track:ID
-      await YandexApi.playStation(`track:${track.id}`);
+      showToast(`Playing ${track.title}...`, "info");
+      try {
+        await YandexApi.playTrack(track.id);
+      } catch (e) {
+        console.error(e);
+        showToast("Error playing track", "error");
+      }
     }
   }
 </script>
@@ -196,7 +211,7 @@
         {:else}
           <div class="music-grid">
             {#each playlists as pl}
-              <div class="music-card" on:click={() => openPlaylist(pl)}>
+              <div class="music-card" on:click={() => handleCardClick(pl)}>
                 <div
                   class="card-img-container"
                   class:is-vibe={pl.kind === "my_vibe"}
@@ -255,12 +270,24 @@
         {isLoading}
         emptyText={viewMode === "search" ? "No results" : "Playlist is empty"}
       >
+        <div slot="header" class="content-padded">
+          {#if activePlaylistInfo}
+            <div class="playlist-header">
+              <h1>{activePlaylistInfo.title}</h1>
+              {#if activePlaylistInfo.trackCount}
+                <div class="card-sub">
+                  {activePlaylistInfo.trackCount} tracks
+                </div>
+              {/if}
+            </div>
+          {/if}
+        </div>
         <div slot="row" let:item let:index>
           <TrackRow
             track={item}
             {index}
             isEditable={false}
-            on:play={() => handlePlay(item)}
+            on:play={() => handlePlayTrack(item)}
           />
         </div>
       </BaseList>
@@ -361,6 +388,12 @@
     font-size: 18px;
     font-weight: 700;
     margin-bottom: 16px;
+    color: var(--c-text-primary);
+  }
+
+  .playlist-header h1 {
+    margin: 0;
+    font-size: 24px;
     color: var(--c-text-primary);
   }
 

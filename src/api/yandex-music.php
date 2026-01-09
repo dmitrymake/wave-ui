@@ -63,7 +63,6 @@ class YandexMusic {
         
         $tracks = [];
         foreach ($data['result']['tracks'] as $item) {
-            // В плейлистах трек часто обернут в объект container, либо лежит напрямую
             $track = $item['track'] ?? $item;
             if (isset($track['id'])) {
                 $tracks[] = $track;
@@ -90,6 +89,11 @@ class YandexMusic {
         $uid = $this->getUserId();
         $action = $isLike ? 'add' : 'remove';
         return $this->request("/users/{$uid}/likes/tracks/{$action}", ['track-id' => $trackId]);
+    }
+
+    public function getTrackInfo($trackId) {
+        $data = $this->request("/tracks/{$trackId}");
+        return $data['result'][0] ?? null;
     }
 
     public function getDirectLink($trackId) {

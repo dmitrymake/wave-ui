@@ -22,7 +22,16 @@ export const YandexApi = {
     return await this.request("get_playlists");
   },
 
+  async getPlaylistTracks(uid, kind) {
+    return await this.request("get_playlist_tracks", { uid, kind });
+  },
+
   async playRadio(trackId) {
+    if (trackId) {
+      return await this.request("play_station", {
+        station: "track:" + trackId,
+      });
+    }
     return await this.request("play_station", { station: "user:onetwo" });
   },
 
@@ -30,9 +39,8 @@ export const YandexApi = {
     return await this.request("play_station", { station: stationId });
   },
 
-  async getFavorites(page = 0) {
-    // Пока заглушка или реализация через прокси, если нужно
-    return { tracks: [], total: 0 };
+  async playTrack(trackId) {
+    return await this.request("play_track", { id: trackId });
   },
 
   async toggleLike(trackId, isLiked) {

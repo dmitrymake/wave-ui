@@ -99,7 +99,6 @@ export const ApiActions = {
   async setAlarm(enabled, time, playlistName) {
     const isDev = import.meta.env.DEV;
     if (isDev) {
-      console.log(`[DEV] Setting Alarm: ${enabled}, ${time}, ${playlistName}`);
       return;
     }
 
@@ -175,17 +174,6 @@ export const ApiActions = {
       showToast("Invalid token or server error", "error");
       yandexAuthStatus.set(false);
       return false;
-    }
-  },
-
-  async playYandexStation(stationId = "user:onetwo") {
-    try {
-      await fetch(
-        API_ENDPOINTS.YANDEX + `?action=play_station&station=${stationId}`,
-      );
-      showToast("Starting My Vibe...", "success");
-    } catch (e) {
-      showToast("Failed to start radio", "error");
     }
   },
 
