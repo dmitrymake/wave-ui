@@ -21,16 +21,11 @@ export const currentTheme = writable(savedTheme);
 
 currentTheme.subscribe((id) => {
   if (typeof document === "undefined") return;
-
   localStorage.setItem("app_theme", id);
-
   const theme = THEMES.find((t) => t.id === id);
   if (!theme) return;
-
   const root = document.documentElement;
-
   document.body.setAttribute("data-theme", id);
-
   Object.entries(theme.colors).forEach(([key, value]) => {
     root.style.setProperty(key, value);
   });
@@ -110,6 +105,13 @@ export const currentSong = writable({
   stationName: null,
   id: null,
   pos: null,
+});
+
+export const yandexContext = writable({
+  active: false,
+  tracks: [],
+  currentIndex: -1,
+  currentTrackFile: null,
 });
 
 export const isFullPlayerOpen = writable(false);

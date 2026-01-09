@@ -22,7 +22,6 @@ export const YandexApi = {
     });
 
     if (!res.ok) {
-      // Попытка прочитать текст ошибки от PHP
       let errorMsg = `Yandex API Error: ${res.status}`;
       try {
         const errJson = await res.json();
@@ -40,11 +39,38 @@ export const YandexApi = {
 
   async getUserId() {
     const data = await this.request("/account/status");
-    // Проверка структуры ответа
     if (!data.result || !data.result.account) {
       throw new Error("Invalid response from Yandex: " + JSON.stringify(data));
     }
     return data.result.account.uid;
+  },
+
+  async getUserPlaylists() {
+    try {
+      const uid = await this.getUserId();
+      const data = await this.request(`/users/${uid}/playlists/list`);
+      return data.result || [];
+    } catch (e) {
+      console.error("Yandex Playlists Error:", e);
+      return [];
+    }
+  },
+
+  async getPlaylistTracks(kind, uid = null) {
+    try {
+      if (!uid) uid = await this.getUserId();
+      const data = await this.request(`/users/${uid}/playlists/${kind}`);
+
+      const res = data.result;
+      if (!res || !res.tracks) return [];
+
+      const ids = res.tracks.map((t) => t.id);
+      const slice = ids.slice(0, 100);
+      return await this.getTracksByIds(slice);
+    } catch (e) {
+      console.error("Yandex Playlist Tracks Error:", e);
+      return [];
+    }
   },
 
   async getFavorites() {
@@ -52,11 +78,31 @@ export const YandexApi = {
       const uid = await this.getUserId();
       const data = await this.request(`/users/${uid}/likes/tracks`);
 
-      const library = data.result.library;
-      if (!library || library.length === 0) return [];
+      let ids = [];
+      const res = data.result;
 
-      const ids = library.map((item) => item.id).slice(0, 50);
-      return await this.getTracksByIds(ids);
+      if (!res) return [];
+
+      if (res.ids && Array.isArray(res.ids)) {
+        ids = res.ids;
+      } else if (res.library && Array.isArray(res.library)) {
+        ids = res.library.map((t) => t.id);
+      } else if (
+        res.library &&
+        res.library.tracks &&
+        Array.isArray(res.library.tracks)
+      ) {
+        ids = res.library.tracks.map((t) => t.id);
+      } else if (Array.isArray(res)) {
+        ids = res.map((t) => t.id);
+      }
+
+      ids = ids.filter((id) => id);
+
+      if (ids.length === 0) return [];
+
+      const slice = ids.slice(0, 100);
+      return await this.getTracksByIds(slice);
     } catch (e) {
       console.error("Yandex Favorites Error:", e);
       return [];
@@ -69,7 +115,8 @@ export const YandexApi = {
       const data = await this.request(
         `/search?text=${encodeURIComponent(query)}&type=track&page=0`,
       );
-      const tracks = data.result.tracks ? data.result.tracks.results : [];
+      const tracks =
+        data.result && data.result.tracks ? data.result.tracks.results : [];
       return this.normalizeTracks(tracks);
     } catch (e) {
       console.error("Yandex Search Error:", e);
@@ -89,8 +136,15 @@ export const YandexApi = {
   async getStreamUrl(trackId) {
     try {
       const data = await this.request(`/tracks/${trackId}/download-info`);
-      const srcUrl = data.result[0].downloadInfoUrl;
+      if (!data.result || !data.result[0]) throw new Error("No download info");
 
+      // Sort by bitrate descending to get best quality
+      const sorted = data.result.sort(
+        (a, b) => b.bitrate_in_kbps - a.bitrate_in_kbps,
+      );
+      const target = sorted[0]; // Best quality
+
+      const srcUrl = target.downloadInfoUrl;
       const xmlText = await this.request(srcUrl, { isXml: true });
 
       const parser = new DOMParser();
@@ -118,14 +172,14 @@ export const YandexApi = {
 
     return rawTracks.map((t) => ({
       title: t.title,
-      artist: t.artists.map((a) => a.name).join(", "),
-      album: t.albums.length > 0 ? t.albums[0].title : "Single",
-      file: `https://music.yandex.ru/album/${t.albums[0]?.id}/track/${t.id}`,
+      artist: t.artists ? t.artists.map((a) => a.name).join(", ") : "Unknown",
+      album: t.albums && t.albums.length > 0 ? t.albums[0].title : "Single",
+      file: `https://music.yandex.ru/album/${t.albums && t.albums[0] ? t.albums[0].id : 0}/track/${t.id}`,
       id: t.id,
       image: t.coverUri
         ? `https://${t.coverUri.replace("%%", "200x200")}`
         : null,
-      time: t.durationMs / 1000,
+      time: t.durationMs ? t.durationMs / 1000 : 0,
       genre: "Yandex Music",
       isYandex: true,
       stationName: null,

@@ -17,12 +17,11 @@
   import SearchView from "./views/SearchView.svelte";
   import SettingsView from "./views/SettingsView.svelte";
   import QueueView from "./views/QueueView.svelte";
+  import YandexView from "./views/YandexView.svelte";
 
   import MiniPlayer from "./MiniPlayer.svelte";
   import FullPlayer from "./FullPlayer.svelte";
   import SideMenu from "./SideMenu.svelte";
-
-  import YandexView from "./views/YandexView.svelte";
 
   let isMobileMenuOpen = false;
 
@@ -67,8 +66,7 @@
             {#if $activeMenuTab === "radio"}Radio
             {:else if $activeMenuTab === "playlists"}Playlists
             {:else if $activeMenuTab === "search"}Search
-            {:else if $activeMenuTab === "yandex"}
-              <YandexView />
+            {:else if $activeMenuTab === "yandex"}Yandex Music
             {:else if $activeMenuTab === "queue"}Queue
             {:else if $activeMenuTab === "favorites"}Favorites
             {:else if $activeMenuTab === "settings"}Settings
@@ -88,6 +86,8 @@
         <div class="view-wrapper">
           {#if $activeMenuTab === "radio"}
             <RadioView />
+          {:else if $activeMenuTab === "yandex"}
+            <YandexView />
           {:else if $activeMenuTab === "queue"}
             <QueueView />
           {:else if $activeMenuTab === "playlists" || $activeMenuTab === "favorites"}

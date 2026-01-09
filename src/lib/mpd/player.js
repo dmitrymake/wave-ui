@@ -9,6 +9,7 @@ import {
   queueVersion,
   queue,
   isQueueLocked,
+  yandexContext, // IMPORTED
 } from "../store";
 import { db } from "../db";
 
@@ -133,9 +134,34 @@ async function syncQueue(newVersion) {
 function updateStores(serverStatus, serverSong) {
   const oldSong = get(currentSong);
   const allStations = get(stations);
+  const yCtx = get(yandexContext);
+
+  // YANDEX OVERRIDE LOGIC
+  // If the playing URL matches what we expect from Yandex, override metadata
+  if (
+    yCtx.active &&
+    yCtx.tracks.length > 0 &&
+    yCtx.currentIndex >= 0 &&
+    yCtx.currentTrackFile &&
+    serverSong.file === yCtx.currentTrackFile
+  ) {
+    const yTrack = yCtx.tracks[yCtx.currentIndex];
+    if (yTrack) {
+      serverSong.title = yTrack.title;
+      serverSong.artist = yTrack.artist;
+      serverSong.album = yTrack.album;
+      serverSong.image = yTrack.image; // Pass image for cover logic
+      serverSong.isYandex = true;
+
+      // Fix Duration if MPD says 0 or infinity
+      if (yTrack.time > 0) {
+        serverStatus.duration = yTrack.time;
+      }
+    }
+  }
 
   const isRadio = serverSong.file && serverSong.file.startsWith("http");
-  if (isRadio) {
+  if (isRadio && !serverSong.isYandex) {
     const clean = (str) =>
       (str || "")
         .toString()
@@ -177,7 +203,7 @@ function updateStores(serverStatus, serverSong) {
       isInitialSync = false;
       forceHardSync = false;
       timeDriftSpeed = 1.0;
-      if (isRadio) serverStatus.elapsed = 0;
+      if (isRadio && !serverSong.isYandex) serverStatus.elapsed = 0;
       manageTicker(isPlaying && !isRadio);
       return serverStatus;
     }
@@ -348,6 +374,7 @@ export const PlayerActions = {
     currentSong.set({
       title: meta.title || uri.split("/").pop(),
       artist: meta.artist || "",
+      album: meta.album || "",
       file: uri,
     });
     startTicker();
