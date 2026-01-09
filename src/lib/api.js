@@ -99,4 +99,53 @@ export const ApiActions = {
       isLoadingRadio.set(false);
     }
   },
+
+  /**
+   * Set or clear the alarm via Backend cron
+   */
+  async setAlarm(enabled, time, playlistName) {
+    const isDev = import.meta.env.DEV;
+    if (isDev) {
+      console.log(`[DEV] Setting Alarm: ${enabled}, ${time}, ${playlistName}`);
+      return;
+    }
+
+    try {
+      const formData = new FormData();
+      formData.append("action", "set_alarm");
+      formData.append("enabled", enabled ? "1" : "0");
+      formData.append("time", time);
+      formData.append("playlist", playlistName);
+
+      const res = await fetch(API_ENDPOINTS.SYNC, {
+        method: "POST",
+        body: formData,
+      });
+
+      if (!res.ok) throw new Error("Server error");
+      const result = await res.json();
+      if (result.error) throw new Error(result.error);
+
+      return true;
+    } catch (e) {
+      console.error("[API] Failed to set alarm", e);
+      throw e;
+    }
+  },
+
+  /**
+   * Get server time for display
+   */
+  async getServerTime() {
+    try {
+      const res = await fetch(`${API_ENDPOINTS.SYNC}?action=get_time`);
+      if (res.ok) {
+        const data = await res.json();
+        return data.time;
+      }
+    } catch (e) {
+      console.error("Failed to get server time", e);
+    }
+    return null;
+  },
 };

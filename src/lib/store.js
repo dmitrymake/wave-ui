@@ -24,7 +24,6 @@ currentTheme.subscribe((id) => {
 
   localStorage.setItem("app_theme", id);
 
-  // Находим объект темы в массиве
   const theme = THEMES.find((t) => t.id === id);
   if (!theme) return;
 
@@ -389,11 +388,14 @@ export const coverUrl = currentCover;
 
 const savedAlarmTime = localStorage.getItem("alarmTime") || "08:00";
 const savedAlarmEnabled = localStorage.getItem("alarmEnabled") === "true";
+const savedAlarmPlaylist = localStorage.getItem("alarmPlaylist") || "Favorites";
 
 export const alarmTime = writable(savedAlarmTime);
 export const isAlarmEnabled = writable(savedAlarmEnabled);
+export const alarmPlaylist = writable(savedAlarmPlaylist);
 
 alarmTime.subscribe((val) => localStorage.setItem("alarmTime", val));
 isAlarmEnabled.subscribe((val) =>
   localStorage.setItem("alarmEnabled", String(val)),
 );
+alarmPlaylist.subscribe((val) => localStorage.setItem("alarmPlaylist", val));

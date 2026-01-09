@@ -19,7 +19,7 @@ echo "-------------------------------------------------------"
 # 1. Install Runtime Dependencies
 echo ">>> [1/6] Installing dependencies..."
 sudo apt-get update -qq
-sudo apt-get install -y -qq websockify git
+sudo apt-get install -y -qq websockify git mpc
 
 # 2. Clone Repository
 echo ">>> [2/6] Fetching code..."
