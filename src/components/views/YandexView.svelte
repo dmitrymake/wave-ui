@@ -184,6 +184,35 @@
       }
     }
   }
+
+  async function handlePlayAll() {
+    const tracks = $tracksStore;
+    if (tracks.length === 0) return;
+
+    isLoading = true;
+    try {
+      // Очищаем очередь и добавляем первый трек через play_track
+      await YandexApi.request("play_track", { id: tracks[0].id, append: "0" });
+      // Остальные треки добавляем в очередь
+      for (let i = 1; i < tracks.length; i++) {
+        await YandexApi.request("play_track", {
+          id: tracks[i].id,
+          append: "1",
+        });
+      }
+      showToast(`Playing ${tracks.length} tracks`, "success");
+    } finally {
+      isLoading = false;
+    }
+  }
+
+  async function handleAddToQueue() {
+    const tracks = $tracksStore;
+    for (const t of tracks) {
+      await YandexApi.request("play_track", { id: t.id, append: "1" });
+    }
+    showToast(`Added ${tracks.length} tracks to queue`, "success");
+  }
 </script>
 
 <div class="view-container scrollable relative-parent">
@@ -330,30 +359,40 @@
       </div>
     {/if}
 
-    {#if viewMode === "list" || (viewMode === "search" && (searchType === "all" || searchType === "track"))}
-      <BaseList
-        itemsStore={tracksStore}
-        {isLoading}
-        emptyText={viewMode === "search" ? "No results" : "Playlist is empty"}
+    {#if viewMode === "list" && $tracksStore.length > 0}
+      <div
+        class="header-actions"
+        style="display:flex; gap:10px; padding: 10px 16px;"
       >
-        <div slot="header" class="content-padded">
-          {#if viewMode === "list"}
-            <div class="playlist-header">
-              <h1>{activeTitle}</h1>
-              <div class="card-sub">{activeSubtitle}</div>
-            </div>
-          {/if}
-        </div>
-        <div slot="row" let:item let:index>
-          <TrackRow
-            track={item}
-            {index}
-            isEditable={false}
-            on:play={() => handlePlayTrack(item)}
-          />
-        </div>
-      </BaseList>
+        <button class="btn-primary" on:click={handlePlayAll}>Play All</button>
+        <button class="btn-secondary" on:click={handleAddToQueue}
+          >Add to Queue</button
+        >
+      </div>
     {/if}
+
+    <BaseList
+      itemsStore={tracksStore}
+      {isLoading}
+      emptyText={viewMode === "search" ? "No results" : "Playlist is empty"}
+    >
+      <div slot="header" class="content-padded">
+        {#if viewMode === "list"}
+          <div class="playlist-header">
+            <h1>{activeTitle}</h1>
+            <div class="card-sub">{activeSubtitle}</div>
+          </div>
+        {/if}
+      </div>
+      <div slot="row" let:item let:index>
+        <TrackRow
+          track={item}
+          {index}
+          isEditable={false}
+          on:play={() => handlePlayTrack(item)}
+        />
+      </div>
+    </BaseList>
   {/if}
 </div>
 

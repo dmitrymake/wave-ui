@@ -50,7 +50,8 @@ function formatTrack($t) {
         'title' => $t['title'],
         'artist' => implode(', ', array_column($t['artists'] ?? [], 'name')),
         'album' => $t['albums'][0]['title'] ?? 'Single',
-        'id' => $t['id'],
+        'id' => (string)$t['id'],
+        'file' => "yandex:".$t['id'],
         'image' => isset($t['coverUri']) ? "https://" . str_replace('%%', '200x200', $t['coverUri']) : null,
         'isYandex' => true,
         'time' => ($t['durationMs'] ?? 0) / 1000
@@ -199,18 +200,22 @@ try {
 
         case 'play_track':
             $id = $_REQUEST['id'];
+            $append = ($_REQUEST['append'] ?? '0') === '1';
             $trackInfo = $api->getTrackInfo($id);
             $url = $api->getDirectLink($id);
             
             if ($url && $trackInfo) {
-                mpdSend("clear");
+                if (!$append) {
+                    mpdSend("clear");
+                }
                 mpdSend("add \"$url\"");
                 cacheTrackMeta($url, $trackInfo);
-                mpdSend("play");
-                saveState(['active' => false]);
-                echo json_encode(['status' => 'playing']);
-            } else {
-                throw new Exception("Could not generate link");
+                
+                if (!$append) {
+                    mpdSend("play");
+                    saveState(['active' => false]);
+                }
+                echo json_encode(['status' => 'ok']);
             }
             break;
 

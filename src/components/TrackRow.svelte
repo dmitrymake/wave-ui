@@ -3,12 +3,12 @@
   import { fade } from "svelte/transition";
   import ImageLoader from "./ImageLoader.svelte";
   import * as MPD from "../lib/mpd";
-  import { YandexApi } from "../lib/yandex"; // Импортируем API
+  import { YandexApi } from "../lib/yandex";
   import { ICONS } from "../lib/icons";
   import {
     activeMenuTab,
     favorites,
-    yandexFavorites, // Импортируем store яндекс лайков
+    yandexFavorites,
     stations,
     getTrackThumbUrl,
     getTrackCoverUrl,
@@ -33,9 +33,6 @@
 
   $: if (track) imgError = false;
 
-  // --- ЛОГИКА ЛАЙКА ---
-  // Если трек Яндекса - смотрим в yandexFavorites (по ID)
-  // Если локальный - смотрим в favorites (по file path)
   $: isLiked = track.isYandex
     ? $yandexFavorites.has(String(track.id))
     : $favorites.has(track.file);
@@ -118,7 +115,6 @@
     }
   }
 
-  // --- ОБРАБОТЧИК ЛАЙКА ---
   async function handleToggleLike(e) {
     e.stopPropagation();
     if (track.isYandex) {
@@ -213,11 +209,13 @@
   </div>
 
   <div class="right">
-    <button
-      class="btn-icon small context-menu-btn"
-      title="Options"
-      on:click={handleMenuClick}
-    >
+    {#if track.isYandex}
+      <span class="yandex-icon-inline" title="Yandex Music">
+        {@html ICONS.YANDEX}
+      </span>
+    {/if}
+
+    <button class="btn-icon small context-menu-btn" on:click={handleMenuClick}>
       {@html ICONS.DOTS}
     </button>
 
@@ -485,5 +483,18 @@
   .context-menu-btn:hover {
     opacity: 1;
     color: var(--c-text-primary);
+  }
+
+  .yandex-icon-inline {
+    width: 16px;
+    height: 16px;
+    display: flex;
+    align-items: center;
+    margin-right: 4px;
+    opacity: 0.8;
+  }
+  .yandex-icon-inline :global(svg) {
+    width: 100%;
+    height: 100%;
   }
 </style>

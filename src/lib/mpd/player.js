@@ -108,13 +108,18 @@ async function syncQueue(newVersion) {
     const tracks = rawTracks.map((t) => {
       const fileUrl = t.file || "";
 
-      if (yCtx.streamCache && yCtx.streamCache[fileUrl]) {
+      const isYandex =
+        fileUrl.includes("yandex.net") ||
+        fileUrl.includes("get-mp3") ||
+        fileUrl.startsWith("yandex:");
+
+      if (isYandex && yCtx.streamCache && yCtx.streamCache[fileUrl]) {
         const yMeta = yCtx.streamCache[fileUrl];
         return {
           ...t,
-          title: yMeta.title,
-          artist: yMeta.artist,
-          album: yMeta.album,
+          title: yMeta.title || t.title,
+          artist: yMeta.artist || t.artist,
+          album: yMeta.album || t.album,
           image: yMeta.image,
           isYandex: true,
           id: yMeta.id,
@@ -124,7 +129,7 @@ async function syncQueue(newVersion) {
         };
       }
 
-      if (fileUrl.includes("yandex.net") || fileUrl.includes("get-mp3")) {
+      if (isYandex) {
         fetchYandexMetaForTrack(fileUrl);
       }
 
@@ -139,12 +144,14 @@ async function syncQueue(newVersion) {
           title: t.title || cached.title,
           artist: t.artist || cached.artist,
           album: t.album || cached.album,
+          isYandex: isYandex,
           _uid: String(t.id || t.pos + t.file),
         };
       }
 
       return {
         ...t,
+        isYandex: isYandex,
         _uid: String(t.id || t.pos + t.file),
       };
     });
@@ -157,8 +164,11 @@ async function syncQueue(newVersion) {
 }
 
 async function fetchYandexMetaForTrack(url) {
+  const yCtx = get(yandexContext);
+  if (yCtx.streamCache && yCtx.streamCache[url]) return;
+
   const meta = await ApiActions.getYandexMeta(url);
-  if (meta) {
+  {
     yandexContext.update((ctx) => {
       const newCache = { ...ctx.streamCache };
       newCache[url] = { ...meta, isYandex: true, file: url };
