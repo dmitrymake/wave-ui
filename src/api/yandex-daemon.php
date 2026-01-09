@@ -10,13 +10,15 @@ define('LOG_FILE', '/tmp/wave_daemon.log');
 $minQueueSize = 2; 
 
 function logMsg($msg) {
-    // Enable for debugging:
-    // file_put_contents(LOG_FILE, "[" . date('H:i:s') . "] $msg\n", FILE_APPEND);
+    file_put_contents(LOG_FILE, "[" . date('H:i:s') . "] $msg\n", FILE_APPEND);
 }
 
 function mpdSend($cmd) {
     $fp = fsockopen("localhost", 6600, $errno, $errstr, 5);
-    if (!$fp) return false;
+    if (!$fp) {
+        logMsg("MPD Connect Error: $errstr");
+        return false;
+    }
     fgets($fp);
     fwrite($fp, "$cmd\n");
     $resp = "";
@@ -64,13 +66,11 @@ function updateMetaCache($url, $track) {
         $artistName = implode(', ', array_column($track['artists'], 'name'));
     }
 
-    $albumTitle = $track['albums'][0]['title'] ?? '';
-
     $cache[$key] = [
         'id' => $track['id'],
         'title' => $track['title'],
         'artist' => $artistName,
-        'album' => $albumTitle,
+        'album' => $track['albums'][0]['title'] ?? '',
         'image' => $cover,
         'isYandex' => true,
         'time' => ($track['durationMs'] ?? 0) / 1000
@@ -78,6 +78,8 @@ function updateMetaCache($url, $track) {
     
     file_put_contents(META_CACHE_FILE, json_encode($cache));
 }
+
+logMsg("Daemon Started");
 
 $lastTokenTime = 0;
 $api = null;
@@ -92,7 +94,9 @@ while (true) {
                     $api = new YandexMusic($token);
                     $api->getUserId(); 
                     $lastTokenTime = $fileTime;
+                    logMsg("API Initialized");
                 } catch (Exception $e) {
+                    logMsg("Token Error: " . $e->getMessage());
                     $api = null;
                 }
             }
@@ -101,19 +105,19 @@ while (true) {
 
     $state = getState();
 
-    // Only run if active
     if ($api && $state && !empty($state['active'])) {
         
         $queueCount = getQueueLength();
         
-        // Refill Queue Logic
         if ($queueCount < $minQueueSize) {
             
-            // 1. Fetch more if buffer empty
+            // Если буфер пуст, качаем пачку
             if (empty($state['queue_buffer'])) {
+                logMsg("Buffer empty. Fetching more...");
                 try {
                     $stationId = $state['station_id'] ?? 'user:onetwo';
-                    $tracksData = $api->getStationTracks($stationId);
+                    // false = не начинать новую сессию, продолжить старую
+                    $tracksData = $api->getStationTracks($stationId, false);
                     
                     if ($tracksData) {
                         $cleanTracks = [];
@@ -122,13 +126,17 @@ while (true) {
                         }
                         $state['queue_buffer'] = $cleanTracks;
                         saveState($state);
+                        logMsg("Fetched " . count($cleanTracks) . " tracks");
+                    } else {
+                        logMsg("No tracks received from rotor.");
                     }
                 } catch (Exception $e) {
+                    logMsg("Fetch Error: " . $e->getMessage());
                     sleep(5);
                 }
             }
 
-            // 2. Push next track to MPD
+            // Добавляем трек из буфера в MPD
             if (!empty($state['queue_buffer'])) {
                 $nextTrack = array_shift($state['queue_buffer']);
                 saveState($state); 
@@ -138,17 +146,19 @@ while (true) {
                     if ($url) {
                         mpdSend("add \"$url\"");
                         updateMetaCache($url, $nextTrack);
+                        logMsg("Queueing: " . $nextTrack['title']);
                         
                         if ($queueCount == 0) mpdSend("play");
+                    } else {
+                        logMsg("Failed to get URL for track " . $nextTrack['id']);
                     }
                 } catch (Exception $e) {
-                    // Skip broken track
+                    logMsg("Add Error: " . $e->getMessage());
                 }
             }
         }
     }
 
-    // Wait for MPD event (Blocking I/O saves CPU)
     $socket = fsockopen("localhost", 6600);
     if ($socket) {
         fwrite($socket, "idle player playlist\n");

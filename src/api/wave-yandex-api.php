@@ -8,12 +8,16 @@ header('Access-Control-Allow-Headers: *');
 define('INC', '/var/www/inc');
 require_once INC . '/yandex-music.php';
 
-// RAM storage paths (persist across requests, clear on reboot)
 define('STATE_FILE', '/dev/shm/yandex_state.json');
 define('META_CACHE_FILE', '/dev/shm/yandex_meta_cache.json');
 define('TOKEN_FILE', '/var/local/www/yandex_token.dat');
+define('LOG_FILE', '/tmp/wave_debug.log');
 
 $action = $_REQUEST['action'] ?? '';
+
+function debug($msg) {
+    file_put_contents(LOG_FILE, "[" . date('H:i:s') . "] API: $msg\n", FILE_APPEND);
+}
 
 function getToken() {
     return file_exists(TOKEN_FILE) ? trim(file_get_contents(TOKEN_FILE)) : null;
@@ -23,17 +27,14 @@ function saveState($data) {
     file_put_contents(STATE_FILE, json_encode($data));
 }
 
-// Send MPD commands via socket (more reliable than exec)
 function mpdSend($cmd) {
     $fp = fsockopen("localhost", 6600, $errno, $errstr, 5);
-    if (!$fp) return false;
-    
-    // Read banner
+    if (!$fp) {
+        debug("MPD Connect Error: $errstr");
+        return false;
+    }
     fgets($fp); 
-    
-    // Send command
     fwrite($fp, "$cmd\n");
-    
     $resp = "";
     while (!feof($fp)) {
         $line = fgets($fp);
@@ -58,8 +59,6 @@ function formatTrack($t) {
 
 function cacheTrackMeta($url, $track) {
     $cache = file_exists(META_CACHE_FILE) ? json_decode(file_get_contents(META_CACHE_FILE), true) : [];
-    
-    // Keep cache size manageable
     if (count($cache) > 200) $cache = array_slice($cache, -100, 100, true);
     
     $key = md5($url);
@@ -69,19 +68,16 @@ function cacheTrackMeta($url, $track) {
 }
 
 try {
-    // 1. Status Check
     if ($action === 'status') {
         $token = getToken();
         echo json_encode(['authorized' => !!$token]);
         exit;
     }
 
-    // 2. Save Token
     if ($action === 'save_token') {
         $input = json_decode(file_get_contents('php://input'), true);
         if (empty($input['token'])) throw new Exception("Empty token");
         
-        // Validate token
         $api = new YandexMusic($input['token']);
         $api->getUserId(); 
         
@@ -93,7 +89,6 @@ try {
         exit;
     }
 
-    // 3. Authenticated Actions
     $token = getToken();
     if (!$token) throw new Exception("Token not found");
     $api = new YandexMusic($token);
@@ -103,7 +98,6 @@ try {
             $playlists = $api->getUserPlaylists();
             $result = [];
             
-            // Manually inject "Favorites" as the first playlist
             $result[] = [
                 'title' => 'Favorites',
                 'kind' => 'favorites', 
@@ -114,7 +108,6 @@ try {
             ];
 
             foreach ($playlists as $pl) {
-                // Filter out garbage playlists
                 if (empty($pl['title'])) continue;
                 if (isset($pl['trackCount']) && $pl['trackCount'] === 0) continue;
 
@@ -166,10 +159,11 @@ try {
 
         case 'play_station':
             $stationId = $_REQUEST['station'] ?? 'user:onetwo';
+            debug("Start Station: $stationId");
             
             mpdSend("clear");
             
-            $queueData = $api->getStationTracks($stationId);
+            $queueData = $api->getStationTracks($stationId, true);
             $initialBuffer = [];
             $count = 0;
 
@@ -177,7 +171,6 @@ try {
                 foreach ($queueData as $item) {
                     $track = $item['track'];
                     
-                    // Add first 2 tracks immediately for instant playback
                     if ($count < 2) {
                         $url = $api->getDirectLink($track['id']);
                         if ($url) {
@@ -186,16 +179,14 @@ try {
                             $count++;
                         }
                     } else {
-                        // Push rest to daemon buffer
                         $initialBuffer[] = $track;
                     }
-                    if (count($initialBuffer) >= 5) break;
+                    if (count($initialBuffer) >= 10) break;
                 }
             }
 
             mpdSend("play");
 
-            // Handover to daemon
             saveState([
                 'active' => true,
                 'mode' => 'station',
@@ -208,7 +199,6 @@ try {
 
         case 'play_track':
             $id = $_REQUEST['id'];
-            
             $trackInfo = $api->getTrackInfo($id);
             $url = $api->getDirectLink($id);
             
@@ -217,8 +207,6 @@ try {
                 mpdSend("add \"$url\"");
                 cacheTrackMeta($url, $trackInfo);
                 mpdSend("play");
-                
-                // Disable daemon radio mode
                 saveState(['active' => false]);
                 echo json_encode(['status' => 'playing']);
             } else {
@@ -228,6 +216,7 @@ try {
 
         case 'search':
             $q = $_GET['query'];
+            debug("Searching: $q");
             $raw = $api->search($q);
             $res = $raw['result'] ?? [];
             
@@ -276,11 +265,13 @@ try {
             break;
 
         case 'like':
+            debug("LIKE Track ID: " . $_REQUEST['track_id']);
             $api->toggleLike($_REQUEST['track_id'], true);
             echo json_encode(['status' => 'liked']);
             break;
 
         case 'dislike':
+            debug("DISLIKE Track ID: " . $_REQUEST['track_id']);
             $api->toggleLike($_REQUEST['track_id'], false);
             mpdSend("next");
             echo json_encode(['status' => 'disliked']);
@@ -291,6 +282,7 @@ try {
     }
 
 } catch (Exception $e) {
+    debug("Error: " . $e->getMessage());
     http_response_code(500);
     echo json_encode(['error' => $e->getMessage()]);
 }

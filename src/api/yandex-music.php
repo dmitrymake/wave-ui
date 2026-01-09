@@ -9,12 +9,16 @@ class YandexMusic {
         $this->token = $token;
     }
 
+    private function log($msg) {
+        file_put_contents('/tmp/wave_debug.log', "[Lib] $msg\n", FILE_APPEND);
+    }
+
     private function request($path, $postData = null, $isXml = false) {
         $url = strpos($path, 'http') === 0 ? $path : "https://api.music.yandex.net" . $path;
         
         $headers = [
             "Authorization: OAuth " . $this->token,
-            "Accept-Language: en"
+            "Accept-Language: ru"
         ];
 
         $ch = curl_init($url);
@@ -31,7 +35,17 @@ class YandexMusic {
 
         curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
         $response = curl_exec($ch);
+        $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        
+        if (curl_errno($ch)) {
+            $this->log("Curl Error ($url): " . curl_error($ch));
+        }
+        
         curl_close($ch);
+
+        if ($httpCode !== 200) {
+            $this->log("HTTP $httpCode on $url: " . substr($response, 0, 100));
+        }
 
         if ($isXml) return $response;
         return json_decode($response, true);
@@ -46,11 +60,9 @@ class YandexMusic {
 
     public function getUserPlaylists() {
         $uid = $this->getUserId();
-        // Fetch user created playlists
         $data = $this->request("/users/{$uid}/playlists/list");
         $userPlaylists = $data['result'] ?? [];
 
-        // Fetch smart playlists (Playlist of the day, Deja Vu, etc.)
         $feed = $this->request("/landing3?blocks=personal-playlists");
         $smartPlaylists = [];
         if (isset($feed['result']['blocks'][0]['entities'])) {
@@ -66,7 +78,6 @@ class YandexMusic {
         
         $tracks = [];
         foreach ($data['result']['tracks'] as $item) {
-            // Handle differences in API response structure
             $track = $item['track'] ?? $item;
             if (isset($track['id'])) $tracks[] = $track;
         }
@@ -89,9 +100,10 @@ class YandexMusic {
         return $data['result']['tracks'] ?? [];
     }
 
-    // Use the rotor endpoint for infinite radio generation
-    public function getStationTracks($stationId) {
-        $data = $this->request("/rotor/station/{$stationId}/tracks?new-queue=true");
+    // ИСПРАВЛЕНО: параметр newQueue
+    public function getStationTracks($stationId, $newQueue = false) {
+        $param = $newQueue ? 'true' : 'false';
+        $data = $this->request("/rotor/station/{$stationId}/tracks?new-queue={$param}");
         return $data['result']['sequence'] ?? [];
     }
 
@@ -107,6 +119,7 @@ class YandexMusic {
     public function toggleLike($trackId, $isLike = true) {
         $uid = $this->getUserId();
         $action = $isLike ? 'add' : 'remove';
+        $this->log("Liking track $trackId: $action");
         return $this->request("/users/{$uid}/likes/tracks/{$action}", ['track-id' => $trackId]);
     }
 
@@ -123,15 +136,9 @@ class YandexMusic {
             }
         } elseif (isset($res['ids'])) {
             $ids = $res['ids'];
-        } elseif (is_array($res)) {
-            foreach ($res as $t) {
-                if (isset($t['id'])) $ids[] = $t['id'];
-            }
         }
         
-        // Limit to 100 recent favorites to prevent timeouts
         $ids = array_slice($ids, 0, 100);
-        
         if (empty($ids)) return [];
         
         return $this->getTracksByIds($ids);
@@ -152,7 +159,6 @@ class YandexMusic {
         $data = $this->request("/tracks/{$trackId}/download-info");
         if (empty($data['result'][0]['downloadInfoUrl'])) return null;
 
-        // Sort by bitrate descending (Highest Quality)
         usort($data['result'], function($a, $b) {
             return $b['bitrateInKbps'] - $a['bitrateInKbps'];
         });
