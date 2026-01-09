@@ -16,10 +16,16 @@ echo "-------------------------------------------------------"
 echo "Deploying WaveUI to Moode on Port $PORT"
 echo "-------------------------------------------------------"
 
-# 1. Install Runtime Dependencies
+# 1. Install Runtime Dependencies (ADDED php-curl)
 echo ">>> [1/6] Installing dependencies..."
 sudo apt-get update -qq
-sudo apt-get install -y -qq websockify git mpc
+# Добавил php-curl в список пакетов
+sudo apt-get install -y -qq websockify git mpc php-curl
+
+# Перезагружаем PHP, чтобы применился curl.
+# Используем wildcard (*), чтобы зацепить любую версию (php8.2-fpm, php8.4-fpm и т.д.)
+echo ">>> Reloading PHP Service..."
+sudo systemctl restart php*-fpm
 
 # 2. Clone Repository
 echo ">>> [2/6] Fetching code..."

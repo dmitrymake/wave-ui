@@ -38,25 +38,21 @@
     currentView?.view === "queue" ||
     (currentView?.view === "root" && $activeMenuTab === "queue");
 
-  // Exact match in the Queue (Solid highlight + Icons)
   $: isExactActive = isQueueContext ? Number(index) === playingIndex : false;
 
-  // Global file match
   $: isPlayingFile = track.file === playingFile;
 
-  // Duplicate: File is playing, but this is not the active Queue row (Striped bg)
   $: showStripes = isPlayingFile && !isExactActive;
 
   $: isRadio =
     track.file &&
-    (track.file.startsWith("http") || track.file.includes("RADIO"));
+    (track.file.startsWith("http") || track.file.includes("RADIO")) &&
+    !track.isYandex;
 
-  // Icon Logic: Only show status icons for the exact active track in queue
   $: showPause = isExactActive && isPlaying && isHovering;
   $: showEq = isExactActive && isPlaying && !isHovering;
   $: showStatic = isExactActive && !isPlaying && !isHovering;
 
-  // Show Play button on hover for any track if not currently pausing active track
   $: showPlay = isHovering && !showPause;
 
   $: title = track.title || track.file?.split("/").pop();
@@ -82,7 +78,6 @@
 
   function handleAction(e) {
     e.stopPropagation();
-    // Toggle play/pause if this file is currently playing anywhere
     if (isPlayingFile) MPD.togglePlay();
     else dispatch("play");
   }
@@ -246,7 +241,6 @@
     background: var(--c-surface-active);
   }
 
-  /* Striped animation for duplicates */
   .row.striped::before {
     content: "";
     position: absolute;

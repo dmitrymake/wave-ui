@@ -210,6 +210,8 @@
           {emptyText}
         </div>
       {/if}
+
+      <slot name="footer"></slot>
     {/if}
   </div>
 </div>

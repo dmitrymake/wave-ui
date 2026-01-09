@@ -423,6 +423,11 @@ export const Router = {
         ]);
         break;
 
+      case "yandex":
+        activeMenuTab.set("yandex");
+        navigationStack.set([{ view: "root" }]);
+        break;
+
       default:
         this.setRootTab("artists");
         break;
@@ -954,6 +959,55 @@ export const ApiActions = {
       isLoadingRadio.set(false);
     }
   },
+
+  /**
+   * Set or clear the alarm via Backend cron
+   */
+  async setAlarm(enabled, time, playlistName) {
+    const isDev = import.meta.env.DEV;
+    if (isDev) {
+      console.log(`[DEV] Setting Alarm: ${enabled}, ${time}, ${playlistName}`);
+      return;
+    }
+
+    try {
+      const formData = new FormData();
+      formData.append("action", "set_alarm");
+      formData.append("enabled", enabled ? "1" : "0");
+      formData.append("time", time);
+      formData.append("playlist", playlistName);
+
+      const res = await fetch(API_ENDPOINTS.SYNC, {
+        method: "POST",
+        body: formData,
+      });
+
+      if (!res.ok) throw new Error("Server error");
+      const result = await res.json();
+      if (result.error) throw new Error(result.error);
+
+      return true;
+    } catch (e) {
+      console.error("[API] Failed to set alarm", e);
+      throw e;
+    }
+  },
+
+  /**
+   * Get server time for display
+   */
+  async getServerTime() {
+    try {
+      const res = await fetch(`${API_ENDPOINTS.SYNC}?action=get_time`);
+      if (res.ok) {
+        const data = await res.json();
+        return data.time;
+      }
+    } catch (e) {
+      console.error("Failed to get server time", e);
+    }
+    return null;
+  },
 };
 
 === ./lib/icons.js ===
@@ -997,6 +1051,7 @@ import circleCheck from "./svg/circle-check.svg?raw";
 import dots from "./svg/dots.svg?raw";
 import sortDescending from "./svg/sort-descending.svg?raw";
 import sortAscending from "./svg/sort-ascending.svg?raw";
+import brandYandex from "./svg/yandex.svg?raw";
 
 export const ICONS = {
   ARTISTS: music,
@@ -1044,6 +1099,8 @@ export const ICONS = {
 
   SORT_DESC: sortDescending,
   SORT_ASC: sortAscending,
+
+  YANDEX: brandYandex,
 };
 
 === ./lib/workers/sync.worker.js ===
@@ -1544,7 +1601,15 @@ import { get } from "svelte/store";
 import { mpdClient } from "./client";
 import { PlayerActions, startStatusPoller } from "./player";
 import { LibraryActions } from "./library";
-import { currentSong, stations, selectedStationName, status } from "../store";
+import {
+  currentSong,
+  stations,
+  selectedStationName,
+  status,
+  yandexContext,
+  showToast,
+} from "../store";
+import { YandexApi } from "../yandex";
 
 export function connect() {
   mpdClient.connect();
@@ -1570,6 +1635,7 @@ export const {
   saveQueue,
   playAllTracks,
   addAllToQueue,
+  playUri,
 } = PlayerActions;
 
 export const {
@@ -1588,10 +1654,35 @@ export function nav(cmd) {
   const stationList = get(stations);
   const selStation = get(selectedStationName);
   const isRadioMode = song.file && song.file.startsWith("http");
+  const yCtx = get(yandexContext);
 
+  // YANDEX NEXT LOGIC
+  if (
+    yCtx.active &&
+    yCtx.tracks.length > 0 &&
+    (song.isYandex || (song.file && song.file === yCtx.currentTrackFile))
+  ) {
+    let nextIndex;
+    if (cmd === "next") {
+      nextIndex = yCtx.currentIndex + 1;
+      if (nextIndex >= yCtx.tracks.length) nextIndex = 0; // Loop or stop
+    } else {
+      nextIndex = yCtx.currentIndex - 1;
+      if (nextIndex < 0) nextIndex = yCtx.tracks.length - 1;
+    }
+
+    const nextTrack = yCtx.tracks[nextIndex];
+    if (nextTrack) {
+      playYandexTrack(nextTrack, nextIndex);
+      return;
+    }
+  }
+
+  // RADIO NEXT LOGIC
   if (
     isRadioMode &&
     stationList.length > 0 &&
+    !song.isYandex &&
     (cmd === "next" || cmd === "previous")
   ) {
     let currentIndex = stationList.findIndex((s) => s.name === selStation);
@@ -1607,6 +1698,7 @@ export function nav(cmd) {
     }
     playStation(stationList[nextIndex]);
   } else {
+    // STANDARD MPD NEXT
     if (cmd === "next") PlayerActions.next();
     if (cmd === "previous") PlayerActions.previous();
   }
@@ -1614,6 +1706,9 @@ export function nav(cmd) {
 
 export function playStation(station) {
   if (!station) return;
+  // Disable Yandex context on radio play
+  yandexContext.update((ctx) => ({ ...ctx, active: false }));
+
   selectedStationName.set(station.name);
   const streamUrl =
     station[1] || station.station || station.file || station.url;
@@ -1628,6 +1723,7 @@ export function playStation(station) {
 
 export function playTrackOptimistic(track) {
   if (!track) return;
+  yandexContext.update((ctx) => ({ ...ctx, active: false }));
   selectedStationName.set(null);
   PlayerActions.playUri(track.file, {
     title: track.title,
@@ -1637,8 +1733,36 @@ export function playTrackOptimistic(track) {
   });
 }
 
+// HELPER FOR YANDEX PLAYBACK
+export async function playYandexTrack(track, index) {
+  if (!track.id) return;
+  showToast(`Resolving ${track.title}...`, "info");
+
+  try {
+    const streamUrl = await YandexApi.getStreamUrl(track.id);
+    if (!streamUrl) throw new Error("No Stream");
+
+    // Update Context
+    yandexContext.update((ctx) => ({
+      ...ctx,
+      active: true,
+      currentIndex: index,
+      currentTrackFile: streamUrl,
+    }));
+
+    PlayerActions.playUri(streamUrl, {
+      title: track.title,
+      artist: track.artist,
+      album: track.album,
+    });
+  } catch (e) {
+    showToast("Failed to play Yandex track", "error");
+  }
+}
+
 export async function playPlaylistContext(playlistName, index = 0) {
   if (!playlistName) return;
+  yandexContext.update((ctx) => ({ ...ctx, active: false }));
   selectedStationName.set(null);
   const safeName = playlistName.replace(/"/g, '\\"');
   try {
@@ -1663,6 +1787,7 @@ import {
   queueVersion,
   queue,
   isQueueLocked,
+  yandexContext, // IMPORTED
 } from "../store";
 import { db } from "../db";
 
@@ -1787,9 +1912,34 @@ async function syncQueue(newVersion) {
 function updateStores(serverStatus, serverSong) {
   const oldSong = get(currentSong);
   const allStations = get(stations);
+  const yCtx = get(yandexContext);
+
+  // YANDEX OVERRIDE LOGIC
+  // If the playing URL matches what we expect from Yandex, override metadata
+  if (
+    yCtx.active &&
+    yCtx.tracks.length > 0 &&
+    yCtx.currentIndex >= 0 &&
+    yCtx.currentTrackFile &&
+    serverSong.file === yCtx.currentTrackFile
+  ) {
+    const yTrack = yCtx.tracks[yCtx.currentIndex];
+    if (yTrack) {
+      serverSong.title = yTrack.title;
+      serverSong.artist = yTrack.artist;
+      serverSong.album = yTrack.album;
+      serverSong.image = yTrack.image; // Pass image for cover logic
+      serverSong.isYandex = true;
+
+      // Fix Duration if MPD says 0 or infinity
+      if (yTrack.time > 0) {
+        serverStatus.duration = yTrack.time;
+      }
+    }
+  }
 
   const isRadio = serverSong.file && serverSong.file.startsWith("http");
-  if (isRadio) {
+  if (isRadio && !serverSong.isYandex) {
     const clean = (str) =>
       (str || "")
         .toString()
@@ -1831,7 +1981,7 @@ function updateStores(serverStatus, serverSong) {
       isInitialSync = false;
       forceHardSync = false;
       timeDriftSpeed = 1.0;
-      if (isRadio) serverStatus.elapsed = 0;
+      if (isRadio && !serverSong.isYandex) serverStatus.elapsed = 0;
       manageTicker(isPlaying && !isRadio);
       return serverStatus;
     }
@@ -2002,6 +2152,7 @@ export const PlayerActions = {
     currentSong.set({
       title: meta.title || uri.split("/").pop(),
       artist: meta.artist || "",
+      album: meta.album || "",
       file: uri,
     });
     startTicker();
@@ -2443,6 +2594,196 @@ export const MpdParser = {
   },
 };
 
+=== ./lib/yandex.js ===
+import { get } from "svelte/store";
+import { yandexToken } from "./store";
+import md5 from "md5";
+
+export const YandexApi = {
+  async request(path, options = {}) {
+    const token = get(yandexToken);
+    if (!token) throw new Error("No token provided");
+
+    const proxyUrl = `/wave-api.php?action=yandex_proxy&path=${encodeURIComponent(path)}&token=${encodeURIComponent(token)}`;
+
+    const headers = {
+      Authorization: `OAuth ${token}`,
+      "Accept-Language": "ru",
+      ...(options.headers || {}),
+    };
+
+    const res = await fetch(proxyUrl, {
+      method: options.method || "GET",
+      headers: headers,
+      body: options.body,
+    });
+
+    if (!res.ok) {
+      let errorMsg = `Yandex API Error: ${res.status}`;
+      try {
+        const errJson = await res.json();
+        if (errJson.error) errorMsg = errJson.error;
+      } catch (e) {}
+      throw new Error(errorMsg);
+    }
+
+    if (options.isXml) {
+      return await res.text();
+    }
+
+    return await res.json();
+  },
+
+  async getUserId() {
+    const data = await this.request("/account/status");
+    if (!data.result || !data.result.account) {
+      throw new Error("Invalid response from Yandex: " + JSON.stringify(data));
+    }
+    return data.result.account.uid;
+  },
+
+  async getUserPlaylists() {
+    try {
+      const uid = await this.getUserId();
+      const data = await this.request(`/users/${uid}/playlists/list`);
+      return data.result || [];
+    } catch (e) {
+      console.error("Yandex Playlists Error:", e);
+      return [];
+    }
+  },
+
+  async getPlaylistTracks(kind, uid = null) {
+    try {
+      if (!uid) uid = await this.getUserId();
+      const data = await this.request(`/users/${uid}/playlists/${kind}`);
+
+      const res = data.result;
+      if (!res || !res.tracks) return [];
+
+      const ids = res.tracks.map((t) => t.id);
+      const slice = ids.slice(0, 100);
+      return await this.getTracksByIds(slice);
+    } catch (e) {
+      console.error("Yandex Playlist Tracks Error:", e);
+      return [];
+    }
+  },
+
+  async getFavorites() {
+    try {
+      const uid = await this.getUserId();
+      const data = await this.request(`/users/${uid}/likes/tracks`);
+
+      let ids = [];
+      const res = data.result;
+
+      if (!res) return [];
+
+      if (res.ids && Array.isArray(res.ids)) {
+        ids = res.ids;
+      } else if (res.library && Array.isArray(res.library)) {
+        ids = res.library.map((t) => t.id);
+      } else if (
+        res.library &&
+        res.library.tracks &&
+        Array.isArray(res.library.tracks)
+      ) {
+        ids = res.library.tracks.map((t) => t.id);
+      } else if (Array.isArray(res)) {
+        ids = res.map((t) => t.id);
+      }
+
+      ids = ids.filter((id) => id);
+
+      if (ids.length === 0) return [];
+
+      const slice = ids.slice(0, 100);
+      return await this.getTracksByIds(slice);
+    } catch (e) {
+      console.error("Yandex Favorites Error:", e);
+      return [];
+    }
+  },
+
+  async search(query) {
+    if (!query) return [];
+    try {
+      const data = await this.request(
+        `/search?text=${encodeURIComponent(query)}&type=track&page=0`,
+      );
+      const tracks =
+        data.result && data.result.tracks ? data.result.tracks.results : [];
+      return this.normalizeTracks(tracks);
+    } catch (e) {
+      console.error("Yandex Search Error:", e);
+      return [];
+    }
+  },
+
+  async getTracksByIds(ids) {
+    if (!ids.length) return [];
+    const data = await this.request("/tracks", {
+      method: "POST",
+      body: `track-ids=${ids.join(",")}`,
+    });
+    return this.normalizeTracks(data.result);
+  },
+
+  async getStreamUrl(trackId) {
+    try {
+      const data = await this.request(`/tracks/${trackId}/download-info`);
+      if (!data.result || !data.result[0]) throw new Error("No download info");
+
+      // Sort by bitrate descending to get best quality
+      const sorted = data.result.sort(
+        (a, b) => b.bitrate_in_kbps - a.bitrate_in_kbps,
+      );
+      const target = sorted[0]; // Best quality
+
+      const srcUrl = target.downloadInfoUrl;
+      const xmlText = await this.request(srcUrl, { isXml: true });
+
+      const parser = new DOMParser();
+      const xmlDoc = parser.parseFromString(xmlText, "text/xml");
+
+      const host = xmlDoc.getElementsByTagName("host")[0]?.textContent;
+      const path = xmlDoc.getElementsByTagName("path")[0]?.textContent;
+      const ts = xmlDoc.getElementsByTagName("ts")[0]?.textContent;
+      const s = xmlDoc.getElementsByTagName("s")[0]?.textContent;
+
+      if (!host || !path || !ts || !s) throw new Error("Invalid XML format");
+
+      const SALT = "XGRlBW9FXlekgbPrRHuSiA";
+      const sign = md5(SALT + path.substring(1) + s);
+
+      return `https://${host}/get-mp3/${sign}/${ts}${path}`;
+    } catch (e) {
+      console.error("Failed to get Yandex Stream URL", e);
+      return null;
+    }
+  },
+
+  normalizeTracks(rawTracks) {
+    if (!Array.isArray(rawTracks)) return [];
+
+    return rawTracks.map((t) => ({
+      title: t.title,
+      artist: t.artists ? t.artists.map((a) => a.name).join(", ") : "Unknown",
+      album: t.albums && t.albums.length > 0 ? t.albums[0].title : "Single",
+      file: `https://music.yandex.ru/album/${t.albums && t.albums[0] ? t.albums[0].id : 0}/track/${t.id}`,
+      id: t.id,
+      image: t.coverUri
+        ? `https://${t.coverUri.replace("%%", "200x200")}`
+        : null,
+      time: t.durationMs ? t.durationMs / 1000 : 0,
+      genre: "Yandex Music",
+      isYandex: true,
+      stationName: null,
+    }));
+  },
+};
+
 === ./lib/actions.js ===
 export function longpress(node, duration = 2000) {
   let timer;
@@ -2796,17 +3137,11 @@ export const currentTheme = writable(savedTheme);
 
 currentTheme.subscribe((id) => {
   if (typeof document === "undefined") return;
-
   localStorage.setItem("app_theme", id);
-
-  // Находим объект темы в массиве
   const theme = THEMES.find((t) => t.id === id);
   if (!theme) return;
-
   const root = document.documentElement;
-
   document.body.setAttribute("data-theme", id);
-
   Object.entries(theme.colors).forEach(([key, value]) => {
     root.style.setProperty(key, value);
   });
@@ -2819,7 +3154,7 @@ export const modal = writable({
   confirmLabel: "Confirm",
   cancelLabel: "Cancel",
   onConfirm: null,
-  type: "confirm", // 'confirm' | 'alert' | 'prompt' | 'select'
+  type: "confirm",
   inputValue: "",
   placeholder: "",
   options: [],
@@ -2888,7 +3223,13 @@ export const currentSong = writable({
   pos: null,
 });
 
-// UI
+export const yandexContext = writable({
+  active: false,
+  tracks: [],
+  currentIndex: -1,
+  currentTrackFile: null,
+});
+
 export const isFullPlayerOpen = writable(false);
 export const isLoadingRadio = writable(false);
 export const isLoadingPlaylists = writable(false);
@@ -2944,9 +3285,7 @@ function vibrate() {
   if (typeof navigator !== "undefined" && navigator.vibrate) {
     try {
       navigator.vibrate(70);
-    } catch (e) {
-      // ignore
-    }
+    } catch (e) {}
   }
 }
 
@@ -3050,6 +3389,10 @@ export function getTrackCoverUrl(
 ) {
   if (!track || !track.file) return "/images/default_cover.png";
 
+  if (track.image && track.image.startsWith("http")) {
+    return track.image;
+  }
+
   if (isRadioTrack(track.file) || track.genre === "Radio") {
     if (track.image) {
       return getStationImageUrl(track);
@@ -3084,6 +3427,10 @@ export function getTrackThumbUrl(
       resolveRadioImage(track, stationList, selectedRadioName) ||
       "/images/radio_icon.png"
     );
+  }
+
+  if (track.image && track.image.startsWith("http")) {
+    return track.image;
   }
 
   if (!track.file) return "/images/default_icon.png";
@@ -3164,14 +3511,35 @@ export const coverUrl = currentCover;
 
 const savedAlarmTime = localStorage.getItem("alarmTime") || "08:00";
 const savedAlarmEnabled = localStorage.getItem("alarmEnabled") === "true";
+const savedAlarmPlaylist = localStorage.getItem("alarmPlaylist") || "Favorites";
 
 export const alarmTime = writable(savedAlarmTime);
 export const isAlarmEnabled = writable(savedAlarmEnabled);
+export const alarmPlaylist = writable(savedAlarmPlaylist);
 
 alarmTime.subscribe((val) => localStorage.setItem("alarmTime", val));
 isAlarmEnabled.subscribe((val) =>
   localStorage.setItem("alarmEnabled", String(val)),
 );
+alarmPlaylist.subscribe((val) => localStorage.setItem("alarmPlaylist", val));
+
+const savedYandexToken = localStorage.getItem("yandex_token") || "";
+export const yandexToken = writable(savedYandexToken);
+
+yandexToken.subscribe((val) => {
+  if (typeof localStorage !== "undefined") {
+    localStorage.setItem("yandex_token", val);
+  }
+});
+
+const savedYandexEnabled = localStorage.getItem("yandex_enabled") === "true";
+export const isYandexEnabled = writable(savedYandexEnabled);
+
+isYandexEnabled.subscribe((val) => {
+  if (typeof localStorage !== "undefined") {
+    localStorage.setItem("yandex_enabled", String(val));
+  }
+});
 
 === ./sw.js ===
 const CACHE_NAME = "covers-v1";
@@ -3331,6 +3699,7 @@ self.addEventListener("fetch", (event) => {
   import SearchView from "./views/SearchView.svelte";
   import SettingsView from "./views/SettingsView.svelte";
   import QueueView from "./views/QueueView.svelte";
+  import YandexView from "./views/YandexView.svelte";
 
   import MiniPlayer from "./MiniPlayer.svelte";
   import FullPlayer from "./FullPlayer.svelte";
@@ -3379,6 +3748,7 @@ self.addEventListener("fetch", (event) => {
             {#if $activeMenuTab === "radio"}Radio
             {:else if $activeMenuTab === "playlists"}Playlists
             {:else if $activeMenuTab === "search"}Search
+            {:else if $activeMenuTab === "yandex"}Yandex Music
             {:else if $activeMenuTab === "queue"}Queue
             {:else if $activeMenuTab === "favorites"}Favorites
             {:else if $activeMenuTab === "settings"}Settings
@@ -3398,6 +3768,8 @@ self.addEventListener("fetch", (event) => {
         <div class="view-wrapper">
           {#if $activeMenuTab === "radio"}
             <RadioView />
+          {:else if $activeMenuTab === "yandex"}
+            <YandexView />
           {:else if $activeMenuTab === "queue"}
             <QueueView />
           {:else if $activeMenuTab === "playlists" || $activeMenuTab === "favorites"}
@@ -6568,15 +6940,353 @@ self.addEventListener("fetch", (event) => {
   }
 </style>
 
+=== ./components/views/YandexView.svelte ===
+<script>
+  import { onMount } from "svelte";
+  import { fade } from "svelte/transition";
+  import { YandexApi } from "../../lib/yandex";
+  import { yandexToken, showToast, yandexContext } from "../../lib/store";
+  import { ICONS } from "../../lib/icons";
+  import * as MPD from "../../lib/mpd";
+  import { playYandexTrack } from "../../lib/mpd/index"; // Import new helper
+  import TrackRow from "../TrackRow.svelte";
+  import BaseList from "./BaseList.svelte";
+  import Skeleton from "../Skeleton.svelte";
+  import { writable } from "svelte/store";
+
+  const tracksStore = writable([]);
+  let playlists = [];
+  let isLoading = false;
+  let viewMode = "dashboard"; // 'dashboard' | 'playlist' | 'search'
+  let activePlaylistName = "";
+  let searchQuery = "";
+  let searchTimer;
+
+  $: isTokenSet = !!$yandexToken;
+
+  onMount(() => {
+    if (isTokenSet) {
+      loadDashboard();
+    }
+  });
+
+  async function loadDashboard() {
+    isLoading = true;
+    try {
+      const userPlaylists = await YandexApi.getUserPlaylists();
+      playlists = [
+        {
+          kind: "favorites",
+          title: "Favorites",
+          cover: { uri: null },
+          trackCount: "♥",
+        },
+        ...userPlaylists,
+      ];
+    } catch (e) {
+      console.error(e);
+    } finally {
+      isLoading = false;
+    }
+  }
+
+  async function openPlaylist(pl) {
+    isLoading = true;
+    viewMode = "playlist";
+    activePlaylistName = pl.title;
+    tracksStore.set([]);
+
+    try {
+      let tracks;
+      if (pl.kind === "favorites") {
+        tracks = await YandexApi.getFavorites();
+      } else {
+        tracks = await YandexApi.getPlaylistTracks(pl.kind, pl.uid);
+      }
+      tracksStore.set(tracks);
+    } catch (e) {
+      showToast("Failed to load tracks", "error");
+    } finally {
+      isLoading = false;
+    }
+  }
+
+  function handleSearchInput(e) {
+    searchQuery = e.target.value;
+    clearTimeout(searchTimer);
+
+    if (searchQuery.length > 2) {
+      searchTimer = setTimeout(() => {
+        performSearch();
+      }, 600);
+    } else if (searchQuery.length === 0) {
+      viewMode = "dashboard";
+    }
+  }
+
+  async function performSearch() {
+    isLoading = true;
+    viewMode = "search";
+    activePlaylistName = `Search: ${searchQuery}`;
+    tracksStore.set([]);
+
+    try {
+      const tracks = await YandexApi.search(searchQuery);
+      tracksStore.set(tracks);
+    } catch (e) {
+      showToast("Search failed", "error");
+    } finally {
+      isLoading = false;
+    }
+  }
+
+  function goBack() {
+    viewMode = "dashboard";
+    searchQuery = "";
+    tracksStore.set([]);
+  }
+
+  // UPDATED PLAY FUNCTION
+  async function handlePlay(track, index) {
+    // Set the full list context so "Next" works
+    yandexContext.set({
+      active: true,
+      tracks: $tracksStore,
+      currentIndex: index,
+      currentTrackFile: null, // Will be set in playYandexTrack
+    });
+
+    playYandexTrack(track, index);
+  }
+
+  function getCover(pl) {
+    if (pl.kind === "favorites") return null;
+    if (pl.cover && pl.cover.uri) {
+      return `https://${pl.cover.uri.replace("%%", "200x200")}`;
+    }
+    return null;
+  }
+</script>
+
+<div class="view-container scrollable">
+  {#if !isTokenSet}
+    <div class="token-alert content-padded">
+      <h3>Yandex Music Token Required</h3>
+      <p>Please go to Settings and enter your OAuth token.</p>
+    </div>
+  {:else}
+    <div class="content-padded no-bottom-pad">
+      <div class="search-input-container">
+        {#if viewMode !== "dashboard"}
+          <button class="back-icon-btn" on:click={goBack}>
+            {@html ICONS.BACK}
+          </button>
+        {:else}
+          <span class="search-icon">{@html ICONS.SEARCH}</span>
+        {/if}
+
+        <input
+          type="text"
+          placeholder="Search Yandex Music..."
+          bind:value={searchQuery}
+          on:input={handleSearchInput}
+        />
+
+        {#if searchQuery}
+          <button class="clear-btn" on:click={goBack}>
+            {@html ICONS.CLOSE}
+          </button>
+        {/if}
+      </div>
+    </div>
+
+    {#if viewMode === "dashboard"}
+      <div class="content-padded" in:fade>
+        <h2 class="header-label">My Music</h2>
+
+        {#if isLoading}
+          <div class="music-grid">
+            {#each Array(6) as _}
+              <div class="music-card skeleton-card">
+                <Skeleton
+                  width="100%"
+                  style="aspect-ratio:1; border-radius:12px; margin-bottom: 8px;"
+                />
+                <Skeleton width="70%" height="14px" />
+              </div>
+            {/each}
+          </div>
+        {:else}
+          <div class="music-grid">
+            {#each playlists as pl}
+              <div class="music-card" on:click={() => openPlaylist(pl)}>
+                <div
+                  class="card-img-container"
+                  class:is-fav={pl.kind === "favorites"}
+                >
+                  {#if pl.kind === "favorites"}
+                    <div class="icon-wrap">{@html ICONS.HEART_FILLED}</div>
+                  {:else if getCover(pl)}
+                    <img src={getCover(pl)} alt={pl.title} loading="lazy" />
+                  {:else}
+                    <div class="icon-wrap">{@html ICONS.PLAYLISTS}</div>
+                  {/if}
+                  <div class="play-overlay">
+                    <span class="overlay-icon">{@html ICONS.PLAY}</span>
+                  </div>
+                </div>
+                <div class="card-title">{pl.title}</div>
+                <div class="card-sub">{pl.trackCount} tracks</div>
+              </div>
+            {/each}
+          </div>
+        {/if}
+      </div>
+    {/if}
+
+    {#if viewMode === "playlist" || viewMode === "search"}
+      <BaseList
+        itemsStore={tracksStore}
+        {isLoading}
+        emptyText={viewMode === "search"
+          ? "No results found"
+          : "Playlist is empty"}
+      >
+        <div slot="header" class="content-padded">
+          <div class="playlist-header">
+            <h1 class="header-title">{activePlaylistName}</h1>
+            <div class="meta-tag">{$tracksStore.length} tracks</div>
+          </div>
+        </div>
+
+        <div slot="row" let:item let:index>
+          <TrackRow
+            track={item}
+            {index}
+            isEditable={false}
+            on:play={() => handlePlay(item, index)}
+          />
+        </div>
+      </BaseList>
+    {/if}
+  {/if}
+</div>
+
+<style>
+  @import "./MusicViews.css";
+
+  .token-alert {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    height: 50vh;
+    text-align: center;
+    color: var(--c-text-secondary);
+  }
+
+  .search-input-container {
+    display: flex;
+    align-items: center;
+    background: var(--c-surface-input);
+    border: 1px solid var(--c-border);
+    border-radius: 8px;
+    padding: 8px 12px;
+    margin-bottom: 20px;
+    gap: 10px;
+  }
+
+  input {
+    flex: 1;
+    background: transparent;
+    border: none;
+    color: var(--c-text-primary);
+    outline: none;
+    font-size: 15px;
+  }
+
+  .search-icon,
+  .back-icon-btn,
+  .clear-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--c-text-muted);
+    width: 20px;
+    height: 20px;
+  }
+
+  .back-icon-btn,
+  .clear-btn {
+    background: none;
+    border: none;
+    padding: 0;
+    cursor: pointer;
+  }
+
+  .back-icon-btn {
+    color: var(--c-text-primary);
+  }
+
+  .back-icon-btn :global(svg),
+  .search-icon :global(svg),
+  .clear-btn :global(svg) {
+    width: 100%;
+    height: 100%;
+  }
+
+  .header-label {
+    font-size: 18px;
+    font-weight: 700;
+    margin-bottom: 16px;
+    color: var(--c-text-primary);
+  }
+
+  .card-img-container.is-fav {
+    background: linear-gradient(135deg, var(--c-heart), #9e1a1a);
+  }
+
+  .icon-wrap {
+    width: 40%;
+    height: 40%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: white;
+  }
+  .icon-wrap :global(svg) {
+    width: 100%;
+    height: 100%;
+  }
+
+  .playlist-header {
+    margin-bottom: 10px;
+  }
+</style>
+
 === ./components/views/SettingsView.svelte ===
 <script>
   import { fade } from "svelte/transition";
+  import { onMount, onDestroy } from "svelte";
   import { CONFIG } from "../../config";
-  import { showToast, showModal, currentTheme } from "../../lib/store";
+  import {
+    showToast,
+    showModal,
+    currentTheme,
+    alarmTime,
+    isAlarmEnabled,
+    alarmPlaylist,
+    playlists,
+    yandexToken,
+    isYandexEnabled,
+  } from "../../lib/store";
+  import { ApiActions } from "../../lib/api";
   import { THEMES } from "../../lib/theme";
   import { ICONS } from "../../lib/icons";
 
   let ipAddress = CONFIG.MOODE_IP;
+  let serverTime = "--:--";
+  let timeInterval;
 
   function saveConnection() {
     CONFIG.setMoodeIp(ipAddress);
@@ -6612,6 +7322,40 @@ self.addEventListener("fetch", (event) => {
     });
   }
 
+  async function fetchServerTime() {
+    const t = await ApiActions.getServerTime();
+    if (t) serverTime = t;
+  }
+
+  onMount(() => {
+    fetchServerTime();
+    timeInterval = setInterval(fetchServerTime, 60000);
+  });
+
+  onDestroy(() => {
+    if (timeInterval) clearInterval(timeInterval);
+  });
+
+  async function handleSaveAlarm() {
+    try {
+      await ApiActions.setAlarm($isAlarmEnabled, $alarmTime, $alarmPlaylist);
+      if ($isAlarmEnabled) {
+        showToast(`Alarm set for ${$alarmTime}`, "success");
+      }
+    } catch (e) {
+      showToast("Failed to sync alarm settings", "error");
+    }
+  }
+
+  function toggleAlarm() {
+    isAlarmEnabled.update((v) => !v);
+    handleSaveAlarm();
+  }
+
+  function toggleYandex() {
+    isYandexEnabled.update((v) => !v);
+  }
+
   $: activeThemeLabel =
     THEMES.find((t) => t.id === $currentTheme)?.label || "Default";
 </script>
@@ -6619,6 +7363,125 @@ self.addEventListener("fetch", (event) => {
 <div class="view-container scrollable" in:fade={{ duration: 200 }}>
   <div class="content-padded">
     <h1 class="header-title big">Settings</h1>
+
+    <div class="section">
+      <div class="section-header">
+        <span>Alarm Clock</span>
+      </div>
+      <div class="card">
+        <div class="row space-between">
+          <span class="label-text">Current Player Time</span>
+          <span class="mono-badge">{serverTime}</span>
+        </div>
+
+        <div class="separator"></div>
+
+        <div class="row space-between">
+          <label>Enable Alarm</label>
+          <button
+            class="toggle-btn"
+            class:active={$isAlarmEnabled}
+            on:click={toggleAlarm}
+          >
+            <div class="toggle-circle"></div>
+          </button>
+        </div>
+
+        {#if $isAlarmEnabled}
+          <div class="separator" in:fade></div>
+
+          <div class="row space-between" in:fade>
+            <label for="alarm-time">Wake up time</label>
+            <input
+              id="alarm-time"
+              type="time"
+              bind:value={$alarmTime}
+              on:change={handleSaveAlarm}
+            />
+          </div>
+
+          <div class="separator" in:fade></div>
+
+          <div class="row space-between" in:fade>
+            <label for="alarm-pl">Playlist</label>
+            <div class="select-wrapper">
+              <select
+                id="alarm-pl"
+                bind:value={$alarmPlaylist}
+                on:change={handleSaveAlarm}
+              >
+                {#each $playlists as pl}
+                  <option value={pl.name}>{pl.name}</option>
+                {/each}
+              </select>
+              <div class="select-arrow">{@html ICONS.CHEVRON_DOWN}</div>
+            </div>
+          </div>
+
+          <p class="hint" in:fade>
+            Player will clear queue, load this playlist and play at set time.
+          </p>
+        {/if}
+      </div>
+    </div>
+
+    <div class="section">
+      <div class="section-header">
+        <span>Appearance</span>
+      </div>
+      <div class="card clickable" on:click={openThemeSelector}>
+        <div class="row space-between">
+          <span>Interface Theme</span>
+          <div class="row-gap">
+            <span class="value">{activeThemeLabel}</span>
+            <span class="chevron">{@html ICONS.NEXT}</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="section">
+      <div class="section-header">
+        <span>Services</span>
+      </div>
+      <div class="card">
+        <div class="row space-between">
+          <label>Enable Yandex Music (Beta)</label>
+          <button
+            class="toggle-btn"
+            class:active={$isYandexEnabled}
+            on:click={toggleYandex}
+          >
+            <div class="toggle-circle"></div>
+          </button>
+        </div>
+
+        {#if $isYandexEnabled}
+          <div class="separator" in:fade></div>
+
+          <div class="row" in:fade>
+            <label for="yandex-token">OAuth Token</label>
+            <div class="input-group">
+              <input
+                id="yandex-token"
+                type="password"
+                bind:value={$yandexToken}
+                placeholder="Enter token..."
+              />
+            </div>
+          </div>
+
+          <p class="hint" in:fade>
+            Required to access your library and stream music.
+            <a
+              href="https://github.com/MarshalX/yandex-music-api/discussions/513"
+              target="_blank"
+              style="color: var(--c-accent);">How to get token</a
+            >
+          </p>
+        {/if}
+      </div>
+    </div>
 
     <div class="section">
       <div class="section-header">
@@ -6640,45 +7503,6 @@ self.addEventListener("fetch", (event) => {
           </div>
         </div>
         <p class="hint">Current: {CONFIG.MOODE_IP}</p>
-      </div>
-    </div>
-
-    <div class="section">
-      <div class="section-header">
-        <span>Appearance</span>
-      </div>
-      <div class="card clickable" on:click={openThemeSelector}>
-        <div class="row space-between">
-          <span>Interface Theme</span>
-          <div class="row-gap">
-            <span class="value">{activeThemeLabel}</span>
-            <span class="chevron">{@html ICONS.NEXT}</span>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <div class="section">
-      <div class="section-header">
-        <span>Alarm Clock</span>
-      </div>
-      <div class="card clickable" on:click={handleFeatureNotReady}>
-        <div class="row space-between">
-          <span>Wake up time</span>
-          <span class="value">Coming Soon</span>
-        </div>
-      </div>
-    </div>
-
-    <div class="section">
-      <div class="section-header">
-        <span>Language</span>
-      </div>
-      <div class="card clickable" on:click={handleFeatureNotReady}>
-        <div class="row space-between">
-          <span>Interface Language</span>
-          <span class="value">English</span>
-        </div>
       </div>
     </div>
 
@@ -6763,7 +7587,8 @@ self.addEventListener("fetch", (event) => {
     gap: 8px;
   }
 
-  label {
+  label,
+  .label-text {
     font-size: 14px;
     color: var(--c-text-secondary);
     font-weight: 600;
@@ -6775,7 +7600,8 @@ self.addEventListener("fetch", (event) => {
     flex: 1;
   }
 
-  input[type="text"] {
+  input[type="text"],
+  input[type="password"] {
     background: var(--c-surface-input);
     border: 1px solid var(--c-border);
     color: var(--c-text-primary);
@@ -6784,6 +7610,17 @@ self.addEventListener("fetch", (event) => {
     font-size: 14px;
     outline: none;
     flex: 1;
+  }
+
+  input[type="time"] {
+    background: var(--c-surface-input);
+    border: 1px solid var(--c-border);
+    color: var(--c-text-primary);
+    padding: 6px 10px;
+    border-radius: 8px;
+    font-size: 16px;
+    font-family: inherit;
+    outline: none;
   }
 
   .btn-primary.small {
@@ -6832,11 +7669,89 @@ self.addEventListener("fetch", (event) => {
     font-size: 12px;
   }
 
+  .mono-badge {
+    font-family: monospace;
+    background: var(--c-accent);
+    color: var(--c-text-primary);
+    padding: 4px 8px;
+    border-radius: 6px;
+    font-size: 14px;
+    font-weight: bold;
+  }
+
   .separator {
     height: 1px;
     background: var(--c-border);
     opacity: 0.5;
     margin: 4px 0;
+  }
+
+  .toggle-btn {
+    width: 44px;
+    height: 24px;
+    background: var(--c-surface-input);
+    border-radius: 12px;
+    border: 1px solid var(--c-border);
+    position: relative;
+    cursor: pointer;
+    transition:
+      background 0.2s,
+      border-color 0.2s;
+    padding: 0;
+  }
+
+  .toggle-btn.active {
+    background: var(--c-accent);
+    border-color: var(--c-accent);
+  }
+
+  .toggle-circle {
+    width: 20px;
+    height: 20px;
+    background: white;
+    border-radius: 50%;
+    position: absolute;
+    top: 1px;
+    left: 1px;
+    transition: transform 0.2s cubic-bezier(0.2, 0.8, 0.2, 1);
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+  }
+
+  .toggle-btn.active .toggle-circle {
+    transform: translateX(20px);
+  }
+
+  .select-wrapper {
+    position: relative;
+    max-width: 150px;
+  }
+
+  select {
+    appearance: none;
+    background: var(--c-surface-input);
+    border: 1px solid var(--c-border);
+    color: var(--c-text-primary);
+    padding: 6px 30px 6px 12px;
+    border-radius: 8px;
+    font-size: 14px;
+    outline: none;
+    width: 100%;
+    text-overflow: ellipsis;
+  }
+
+  .select-arrow {
+    position: absolute;
+    right: 8px;
+    top: 50%;
+    transform: translateY(-50%);
+    pointer-events: none;
+    width: 16px;
+    height: 16px;
+    color: var(--c-text-muted);
+  }
+  .select-arrow :global(svg) {
+    width: 100%;
+    height: 100%;
   }
 </style>
 
@@ -7905,6 +8820,7 @@ self.addEventListener("fetch", (event) => {
     activeMenuTab,
     isSyncingLibrary,
     isSidebarCollapsed,
+    isYandexEnabled,
   } from "../lib/store";
   import { ApiActions } from "../lib/api";
 
@@ -7915,14 +8831,20 @@ self.addEventListener("fetch", (event) => {
   let touchCurrentX = 0;
   let isSwiping = false;
 
-  const MENU_ITEMS = [
+  const ALL_MENU_ITEMS = [
     { id: "queue", label: "Queue", icon: ICONS.MENU },
     { id: "favorites", label: "Favorites", icon: ICONS.HEART },
     { id: "artists", label: "Artists", icon: ICONS.ARTISTS },
     { id: "albums", label: "Albums", icon: ICONS.ALBUMS },
     { id: "playlists", label: "Playlists", icon: ICONS.PLAYLISTS },
     { id: "radio", label: "Radio", icon: ICONS.RADIO },
+    { id: "yandex", label: "Yandex Music", icon: ICONS.YANDEX },
   ];
+
+  $: visibleMenuItems = ALL_MENU_ITEMS.filter((item) => {
+    if (item.id === "yandex") return $isYandexEnabled;
+    return true;
+  });
 
   function switchTab(id) {
     window.location.hash = `/${id}`;
@@ -8011,7 +8933,7 @@ self.addEventListener("fetch", (event) => {
 
   <div class="scroll-area custom-scrollbar">
     <nav>
-      {#each MENU_ITEMS as item}
+      {#each visibleMenuItems as item (item.id)}
         <button
           class="nav-item"
           class:active={$activeMenuTab === item.id}
@@ -8340,7 +9262,6 @@ self.addEventListener("fetch", (event) => {
       backdrop-filter: blur(4px);
     }
 
-    /* Force FULL View elements visible */
     .collapse-btn {
       display: none;
     }
@@ -10132,6 +11053,11 @@ export const Router = {
         ]);
         break;
 
+      case "yandex":
+        activeMenuTab.set("yandex");
+        navigationStack.set([{ view: "root" }]);
+        break;
+
       default:
         this.setRootTab("artists");
         break;
@@ -10663,6 +11589,55 @@ export const ApiActions = {
       isLoadingRadio.set(false);
     }
   },
+
+  /**
+   * Set or clear the alarm via Backend cron
+   */
+  async setAlarm(enabled, time, playlistName) {
+    const isDev = import.meta.env.DEV;
+    if (isDev) {
+      console.log(`[DEV] Setting Alarm: ${enabled}, ${time}, ${playlistName}`);
+      return;
+    }
+
+    try {
+      const formData = new FormData();
+      formData.append("action", "set_alarm");
+      formData.append("enabled", enabled ? "1" : "0");
+      formData.append("time", time);
+      formData.append("playlist", playlistName);
+
+      const res = await fetch(API_ENDPOINTS.SYNC, {
+        method: "POST",
+        body: formData,
+      });
+
+      if (!res.ok) throw new Error("Server error");
+      const result = await res.json();
+      if (result.error) throw new Error(result.error);
+
+      return true;
+    } catch (e) {
+      console.error("[API] Failed to set alarm", e);
+      throw e;
+    }
+  },
+
+  /**
+   * Get server time for display
+   */
+  async getServerTime() {
+    try {
+      const res = await fetch(`${API_ENDPOINTS.SYNC}?action=get_time`);
+      if (res.ok) {
+        const data = await res.json();
+        return data.time;
+      }
+    } catch (e) {
+      console.error("Failed to get server time", e);
+    }
+    return null;
+  },
 };
 
 === lib/icons.js ===
@@ -10706,6 +11681,7 @@ import circleCheck from "./svg/circle-check.svg?raw";
 import dots from "./svg/dots.svg?raw";
 import sortDescending from "./svg/sort-descending.svg?raw";
 import sortAscending from "./svg/sort-ascending.svg?raw";
+import brandYandex from "./svg/yandex.svg?raw";
 
 export const ICONS = {
   ARTISTS: music,
@@ -10753,6 +11729,8 @@ export const ICONS = {
 
   SORT_DESC: sortDescending,
   SORT_ASC: sortAscending,
+
+  YANDEX: brandYandex,
 };
 
 === lib/workers/sync.worker.js ===
@@ -11253,7 +12231,15 @@ import { get } from "svelte/store";
 import { mpdClient } from "./client";
 import { PlayerActions, startStatusPoller } from "./player";
 import { LibraryActions } from "./library";
-import { currentSong, stations, selectedStationName, status } from "../store";
+import {
+  currentSong,
+  stations,
+  selectedStationName,
+  status,
+  yandexContext,
+  showToast,
+} from "../store";
+import { YandexApi } from "../yandex";
 
 export function connect() {
   mpdClient.connect();
@@ -11279,6 +12265,7 @@ export const {
   saveQueue,
   playAllTracks,
   addAllToQueue,
+  playUri,
 } = PlayerActions;
 
 export const {
@@ -11297,10 +12284,35 @@ export function nav(cmd) {
   const stationList = get(stations);
   const selStation = get(selectedStationName);
   const isRadioMode = song.file && song.file.startsWith("http");
+  const yCtx = get(yandexContext);
 
+  // YANDEX NEXT LOGIC
+  if (
+    yCtx.active &&
+    yCtx.tracks.length > 0 &&
+    (song.isYandex || (song.file && song.file === yCtx.currentTrackFile))
+  ) {
+    let nextIndex;
+    if (cmd === "next") {
+      nextIndex = yCtx.currentIndex + 1;
+      if (nextIndex >= yCtx.tracks.length) nextIndex = 0; // Loop or stop
+    } else {
+      nextIndex = yCtx.currentIndex - 1;
+      if (nextIndex < 0) nextIndex = yCtx.tracks.length - 1;
+    }
+
+    const nextTrack = yCtx.tracks[nextIndex];
+    if (nextTrack) {
+      playYandexTrack(nextTrack, nextIndex);
+      return;
+    }
+  }
+
+  // RADIO NEXT LOGIC
   if (
     isRadioMode &&
     stationList.length > 0 &&
+    !song.isYandex &&
     (cmd === "next" || cmd === "previous")
   ) {
     let currentIndex = stationList.findIndex((s) => s.name === selStation);
@@ -11316,6 +12328,7 @@ export function nav(cmd) {
     }
     playStation(stationList[nextIndex]);
   } else {
+    // STANDARD MPD NEXT
     if (cmd === "next") PlayerActions.next();
     if (cmd === "previous") PlayerActions.previous();
   }
@@ -11323,6 +12336,9 @@ export function nav(cmd) {
 
 export function playStation(station) {
   if (!station) return;
+  // Disable Yandex context on radio play
+  yandexContext.update((ctx) => ({ ...ctx, active: false }));
+
   selectedStationName.set(station.name);
   const streamUrl =
     station[1] || station.station || station.file || station.url;
@@ -11337,6 +12353,7 @@ export function playStation(station) {
 
 export function playTrackOptimistic(track) {
   if (!track) return;
+  yandexContext.update((ctx) => ({ ...ctx, active: false }));
   selectedStationName.set(null);
   PlayerActions.playUri(track.file, {
     title: track.title,
@@ -11346,8 +12363,36 @@ export function playTrackOptimistic(track) {
   });
 }
 
+// HELPER FOR YANDEX PLAYBACK
+export async function playYandexTrack(track, index) {
+  if (!track.id) return;
+  showToast(`Resolving ${track.title}...`, "info");
+
+  try {
+    const streamUrl = await YandexApi.getStreamUrl(track.id);
+    if (!streamUrl) throw new Error("No Stream");
+
+    // Update Context
+    yandexContext.update((ctx) => ({
+      ...ctx,
+      active: true,
+      currentIndex: index,
+      currentTrackFile: streamUrl,
+    }));
+
+    PlayerActions.playUri(streamUrl, {
+      title: track.title,
+      artist: track.artist,
+      album: track.album,
+    });
+  } catch (e) {
+    showToast("Failed to play Yandex track", "error");
+  }
+}
+
 export async function playPlaylistContext(playlistName, index = 0) {
   if (!playlistName) return;
+  yandexContext.update((ctx) => ({ ...ctx, active: false }));
   selectedStationName.set(null);
   const safeName = playlistName.replace(/"/g, '\\"');
   try {
@@ -11372,6 +12417,7 @@ import {
   queueVersion,
   queue,
   isQueueLocked,
+  yandexContext, // IMPORTED
 } from "../store";
 import { db } from "../db";
 
@@ -11496,9 +12542,34 @@ async function syncQueue(newVersion) {
 function updateStores(serverStatus, serverSong) {
   const oldSong = get(currentSong);
   const allStations = get(stations);
+  const yCtx = get(yandexContext);
+
+  // YANDEX OVERRIDE LOGIC
+  // If the playing URL matches what we expect from Yandex, override metadata
+  if (
+    yCtx.active &&
+    yCtx.tracks.length > 0 &&
+    yCtx.currentIndex >= 0 &&
+    yCtx.currentTrackFile &&
+    serverSong.file === yCtx.currentTrackFile
+  ) {
+    const yTrack = yCtx.tracks[yCtx.currentIndex];
+    if (yTrack) {
+      serverSong.title = yTrack.title;
+      serverSong.artist = yTrack.artist;
+      serverSong.album = yTrack.album;
+      serverSong.image = yTrack.image; // Pass image for cover logic
+      serverSong.isYandex = true;
+
+      // Fix Duration if MPD says 0 or infinity
+      if (yTrack.time > 0) {
+        serverStatus.duration = yTrack.time;
+      }
+    }
+  }
 
   const isRadio = serverSong.file && serverSong.file.startsWith("http");
-  if (isRadio) {
+  if (isRadio && !serverSong.isYandex) {
     const clean = (str) =>
       (str || "")
         .toString()
@@ -11540,7 +12611,7 @@ function updateStores(serverStatus, serverSong) {
       isInitialSync = false;
       forceHardSync = false;
       timeDriftSpeed = 1.0;
-      if (isRadio) serverStatus.elapsed = 0;
+      if (isRadio && !serverSong.isYandex) serverStatus.elapsed = 0;
       manageTicker(isPlaying && !isRadio);
       return serverStatus;
     }
@@ -11711,6 +12782,7 @@ export const PlayerActions = {
     currentSong.set({
       title: meta.title || uri.split("/").pop(),
       artist: meta.artist || "",
+      album: meta.album || "",
       file: uri,
     });
     startTicker();
@@ -12152,6 +13224,196 @@ export const MpdParser = {
   },
 };
 
+=== lib/yandex.js ===
+import { get } from "svelte/store";
+import { yandexToken } from "./store";
+import md5 from "md5";
+
+export const YandexApi = {
+  async request(path, options = {}) {
+    const token = get(yandexToken);
+    if (!token) throw new Error("No token provided");
+
+    const proxyUrl = `/wave-api.php?action=yandex_proxy&path=${encodeURIComponent(path)}&token=${encodeURIComponent(token)}`;
+
+    const headers = {
+      Authorization: `OAuth ${token}`,
+      "Accept-Language": "ru",
+      ...(options.headers || {}),
+    };
+
+    const res = await fetch(proxyUrl, {
+      method: options.method || "GET",
+      headers: headers,
+      body: options.body,
+    });
+
+    if (!res.ok) {
+      let errorMsg = `Yandex API Error: ${res.status}`;
+      try {
+        const errJson = await res.json();
+        if (errJson.error) errorMsg = errJson.error;
+      } catch (e) {}
+      throw new Error(errorMsg);
+    }
+
+    if (options.isXml) {
+      return await res.text();
+    }
+
+    return await res.json();
+  },
+
+  async getUserId() {
+    const data = await this.request("/account/status");
+    if (!data.result || !data.result.account) {
+      throw new Error("Invalid response from Yandex: " + JSON.stringify(data));
+    }
+    return data.result.account.uid;
+  },
+
+  async getUserPlaylists() {
+    try {
+      const uid = await this.getUserId();
+      const data = await this.request(`/users/${uid}/playlists/list`);
+      return data.result || [];
+    } catch (e) {
+      console.error("Yandex Playlists Error:", e);
+      return [];
+    }
+  },
+
+  async getPlaylistTracks(kind, uid = null) {
+    try {
+      if (!uid) uid = await this.getUserId();
+      const data = await this.request(`/users/${uid}/playlists/${kind}`);
+
+      const res = data.result;
+      if (!res || !res.tracks) return [];
+
+      const ids = res.tracks.map((t) => t.id);
+      const slice = ids.slice(0, 100);
+      return await this.getTracksByIds(slice);
+    } catch (e) {
+      console.error("Yandex Playlist Tracks Error:", e);
+      return [];
+    }
+  },
+
+  async getFavorites() {
+    try {
+      const uid = await this.getUserId();
+      const data = await this.request(`/users/${uid}/likes/tracks`);
+
+      let ids = [];
+      const res = data.result;
+
+      if (!res) return [];
+
+      if (res.ids && Array.isArray(res.ids)) {
+        ids = res.ids;
+      } else if (res.library && Array.isArray(res.library)) {
+        ids = res.library.map((t) => t.id);
+      } else if (
+        res.library &&
+        res.library.tracks &&
+        Array.isArray(res.library.tracks)
+      ) {
+        ids = res.library.tracks.map((t) => t.id);
+      } else if (Array.isArray(res)) {
+        ids = res.map((t) => t.id);
+      }
+
+      ids = ids.filter((id) => id);
+
+      if (ids.length === 0) return [];
+
+      const slice = ids.slice(0, 100);
+      return await this.getTracksByIds(slice);
+    } catch (e) {
+      console.error("Yandex Favorites Error:", e);
+      return [];
+    }
+  },
+
+  async search(query) {
+    if (!query) return [];
+    try {
+      const data = await this.request(
+        `/search?text=${encodeURIComponent(query)}&type=track&page=0`,
+      );
+      const tracks =
+        data.result && data.result.tracks ? data.result.tracks.results : [];
+      return this.normalizeTracks(tracks);
+    } catch (e) {
+      console.error("Yandex Search Error:", e);
+      return [];
+    }
+  },
+
+  async getTracksByIds(ids) {
+    if (!ids.length) return [];
+    const data = await this.request("/tracks", {
+      method: "POST",
+      body: `track-ids=${ids.join(",")}`,
+    });
+    return this.normalizeTracks(data.result);
+  },
+
+  async getStreamUrl(trackId) {
+    try {
+      const data = await this.request(`/tracks/${trackId}/download-info`);
+      if (!data.result || !data.result[0]) throw new Error("No download info");
+
+      // Sort by bitrate descending to get best quality
+      const sorted = data.result.sort(
+        (a, b) => b.bitrate_in_kbps - a.bitrate_in_kbps,
+      );
+      const target = sorted[0]; // Best quality
+
+      const srcUrl = target.downloadInfoUrl;
+      const xmlText = await this.request(srcUrl, { isXml: true });
+
+      const parser = new DOMParser();
+      const xmlDoc = parser.parseFromString(xmlText, "text/xml");
+
+      const host = xmlDoc.getElementsByTagName("host")[0]?.textContent;
+      const path = xmlDoc.getElementsByTagName("path")[0]?.textContent;
+      const ts = xmlDoc.getElementsByTagName("ts")[0]?.textContent;
+      const s = xmlDoc.getElementsByTagName("s")[0]?.textContent;
+
+      if (!host || !path || !ts || !s) throw new Error("Invalid XML format");
+
+      const SALT = "XGRlBW9FXlekgbPrRHuSiA";
+      const sign = md5(SALT + path.substring(1) + s);
+
+      return `https://${host}/get-mp3/${sign}/${ts}${path}`;
+    } catch (e) {
+      console.error("Failed to get Yandex Stream URL", e);
+      return null;
+    }
+  },
+
+  normalizeTracks(rawTracks) {
+    if (!Array.isArray(rawTracks)) return [];
+
+    return rawTracks.map((t) => ({
+      title: t.title,
+      artist: t.artists ? t.artists.map((a) => a.name).join(", ") : "Unknown",
+      album: t.albums && t.albums.length > 0 ? t.albums[0].title : "Single",
+      file: `https://music.yandex.ru/album/${t.albums && t.albums[0] ? t.albums[0].id : 0}/track/${t.id}`,
+      id: t.id,
+      image: t.coverUri
+        ? `https://${t.coverUri.replace("%%", "200x200")}`
+        : null,
+      time: t.durationMs ? t.durationMs / 1000 : 0,
+      genre: "Yandex Music",
+      isYandex: true,
+      stationName: null,
+    }));
+  },
+};
+
 === lib/actions.js ===
 export function longpress(node, duration = 2000) {
   let timer;
@@ -12505,17 +13767,11 @@ export const currentTheme = writable(savedTheme);
 
 currentTheme.subscribe((id) => {
   if (typeof document === "undefined") return;
-
   localStorage.setItem("app_theme", id);
-
-  // Находим объект темы в массиве
   const theme = THEMES.find((t) => t.id === id);
   if (!theme) return;
-
   const root = document.documentElement;
-
   document.body.setAttribute("data-theme", id);
-
   Object.entries(theme.colors).forEach(([key, value]) => {
     root.style.setProperty(key, value);
   });
@@ -12528,7 +13784,7 @@ export const modal = writable({
   confirmLabel: "Confirm",
   cancelLabel: "Cancel",
   onConfirm: null,
-  type: "confirm", // 'confirm' | 'alert' | 'prompt' | 'select'
+  type: "confirm",
   inputValue: "",
   placeholder: "",
   options: [],
@@ -12597,7 +13853,13 @@ export const currentSong = writable({
   pos: null,
 });
 
-// UI
+export const yandexContext = writable({
+  active: false,
+  tracks: [],
+  currentIndex: -1,
+  currentTrackFile: null,
+});
+
 export const isFullPlayerOpen = writable(false);
 export const isLoadingRadio = writable(false);
 export const isLoadingPlaylists = writable(false);
@@ -12653,9 +13915,7 @@ function vibrate() {
   if (typeof navigator !== "undefined" && navigator.vibrate) {
     try {
       navigator.vibrate(70);
-    } catch (e) {
-      // ignore
-    }
+    } catch (e) {}
   }
 }
 
@@ -12759,6 +14019,10 @@ export function getTrackCoverUrl(
 ) {
   if (!track || !track.file) return "/images/default_cover.png";
 
+  if (track.image && track.image.startsWith("http")) {
+    return track.image;
+  }
+
   if (isRadioTrack(track.file) || track.genre === "Radio") {
     if (track.image) {
       return getStationImageUrl(track);
@@ -12793,6 +14057,10 @@ export function getTrackThumbUrl(
       resolveRadioImage(track, stationList, selectedRadioName) ||
       "/images/radio_icon.png"
     );
+  }
+
+  if (track.image && track.image.startsWith("http")) {
+    return track.image;
   }
 
   if (!track.file) return "/images/default_icon.png";
@@ -12873,12 +14141,33 @@ export const coverUrl = currentCover;
 
 const savedAlarmTime = localStorage.getItem("alarmTime") || "08:00";
 const savedAlarmEnabled = localStorage.getItem("alarmEnabled") === "true";
+const savedAlarmPlaylist = localStorage.getItem("alarmPlaylist") || "Favorites";
 
 export const alarmTime = writable(savedAlarmTime);
 export const isAlarmEnabled = writable(savedAlarmEnabled);
+export const alarmPlaylist = writable(savedAlarmPlaylist);
 
 alarmTime.subscribe((val) => localStorage.setItem("alarmTime", val));
 isAlarmEnabled.subscribe((val) =>
   localStorage.setItem("alarmEnabled", String(val)),
 );
+alarmPlaylist.subscribe((val) => localStorage.setItem("alarmPlaylist", val));
+
+const savedYandexToken = localStorage.getItem("yandex_token") || "";
+export const yandexToken = writable(savedYandexToken);
+
+yandexToken.subscribe((val) => {
+  if (typeof localStorage !== "undefined") {
+    localStorage.setItem("yandex_token", val);
+  }
+});
+
+const savedYandexEnabled = localStorage.getItem("yandex_enabled") === "true";
+export const isYandexEnabled = writable(savedYandexEnabled);
+
+isYandexEnabled.subscribe((val) => {
+  if (typeof localStorage !== "undefined") {
+    localStorage.setItem("yandex_enabled", String(val));
+  }
+});
 

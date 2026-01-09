@@ -105,12 +105,14 @@ export const currentSong = writable({
   stationName: null,
   id: null,
   pos: null,
+  isYandex: false,
 });
 
 export const yandexContext = writable({
   active: false,
   tracks: [],
   currentIndex: -1,
+  currentTrackId: null,
   currentTrackFile: null,
 });
 
@@ -341,6 +343,9 @@ export function getTrackThumbUrl(
 
 function isRadioTrack(file) {
   if (!file) return false;
+  // If it's explicitly marked as Yandex (which uses http stream), don't treat as generic radio
+  if (file.includes("yandex.ru") || file.includes("get-mp3")) return false;
+
   return (
     file.startsWith("http") || file.includes("://") || file.includes("RADIO")
   );

@@ -36,7 +36,8 @@
   $: duration = $status.duration > 0 ? $status.duration : 1;
   $: elapsed = $status.elapsed || 0;
   $: isPlaying = $status.state === "play";
-  $: isRadio = $currentSong.file?.startsWith("http");
+
+  $: isRadio = $currentSong.file?.startsWith("http") && !$currentSong.isYandex;
 
   $: displayTitle = $currentSong.title || "Not Playing";
   $: displayArtist = $currentSong.stationName || $currentSong.artist || "Moode";
@@ -508,7 +509,6 @@
     color: var(--c-accent);
   }
 
-  /* NEW COLOR LOGIC */
   .btn-icon.liked {
     color: var(--c-heart);
   }

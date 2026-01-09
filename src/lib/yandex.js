@@ -3,6 +3,10 @@ import { yandexToken } from "./store";
 import md5 from "md5";
 
 export const YandexApi = {
+  /**
+
+* General request helper for Yandex API via local proxy
+*/
   async request(path, options = {}) {
     const token = get(yandexToken);
     if (!token) throw new Error("No token provided");
@@ -11,7 +15,7 @@ export const YandexApi = {
 
     const headers = {
       Authorization: `OAuth ${token}`,
-      "Accept-Language": "ru",
+      "Accept-Language": "en",
       ...(options.headers || {}),
     };
 
@@ -56,33 +60,48 @@ export const YandexApi = {
     }
   },
 
-  async getPlaylistTracks(kind, uid = null) {
+  /**
+
+* Get tracks from a specific playlist with pagination support
+* @param {string} kind - Playlist kind (ID)
+* @param {string|null} uid - User ID (optional)
+* @param {number} page - Page index (0-based)
+*/
+  async getPlaylistTracks(kind, uid = null, page = 0) {
     try {
       if (!uid) uid = await this.getUserId();
       const data = await this.request(`/users/${uid}/playlists/${kind}`);
-
       const res = data.result;
-      if (!res || !res.tracks) return [];
-
+      if (!res || !res.tracks) return { tracks: [], total: 0 };
+      // Yandex returns the full list of track IDs in the playlist object.
+      // We must slice the IDs locally and then fetch details in batches.
       const ids = res.tracks.map((t) => t.id);
-      const slice = ids.slice(0, 100);
-      return await this.getTracksByIds(slice);
+      const PAGE_SIZE = 50;
+      const start = page * PAGE_SIZE;
+      const slice = ids.slice(start, start + PAGE_SIZE);
+      const tracks = await this.getTracksByIds(slice);
+      return {
+        tracks,
+        total: ids.length,
+      };
     } catch (e) {
       console.error("Yandex Playlist Tracks Error:", e);
-      return [];
+      return { tracks: [], total: 0 };
     }
   },
 
-  async getFavorites() {
+  /**
+
+* Get user favorites (Likes) with pagination
+*/
+  async getFavorites(page = 0) {
     try {
       const uid = await this.getUserId();
       const data = await this.request(`/users/${uid}/likes/tracks`);
-
       let ids = [];
       const res = data.result;
-
-      if (!res) return [];
-
+      if (!res) return { tracks: [], total: 0 };
+      // Handle different API response structures for favorites
       if (res.ids && Array.isArray(res.ids)) {
         ids = res.ids;
       } else if (res.library && Array.isArray(res.library)) {
@@ -96,30 +115,116 @@ export const YandexApi = {
       } else if (Array.isArray(res)) {
         ids = res.map((t) => t.id);
       }
-
       ids = ids.filter((id) => id);
-
-      if (ids.length === 0) return [];
-
-      const slice = ids.slice(0, 100);
-      return await this.getTracksByIds(slice);
+      if (ids.length === 0) return { tracks: [], total: 0 };
+      const PAGE_SIZE = 50;
+      const start = page * PAGE_SIZE;
+      const slice = ids.slice(start, start + PAGE_SIZE);
+      const tracks = await this.getTracksByIds(slice);
+      return {
+        tracks,
+        total: ids.length,
+      };
     } catch (e) {
       console.error("Yandex Favorites Error:", e);
+      return { tracks: [], total: 0 };
+    }
+  },
+
+  /**
+
+* Unified search for Tracks, Albums, and Artists
+* @param {string} query
+* @param {string} type - 'all', 'track', 'album', 'artist'
+* @param {number} page
+*/
+  async search(query, type = "all", page = 0) {
+    if (!query) return { tracks: [], albums: [], artists: [] };
+    try {
+      const p = page;
+      // type can be: 'all', 'track', 'album', 'artist', 'playlist'
+      const data = await this.request(
+        `/search?text=${encodeURIComponent(query)}&type=${type}&page=${p}&nocorrect=false`,
+      );
+      const res = data.result;
+      let tracks = [];
+      let albums = [];
+      let artists = [];
+      if (res.tracks && res.tracks.results) {
+        tracks = this.normalizeTracks(res.tracks.results);
+      }
+      if (res.albums && res.albums.results) {
+        albums = res.albums.results.map((a) => ({
+          ...a,
+          isAlbum: true,
+          image: a.coverUri
+            ? `https://${a.coverUri.replace("%%", "200x200")}`
+            : null,
+          artist:
+            a.artists && a.artists.length > 0 ? a.artists[0].name : "Unknown",
+        }));
+      }
+      if (res.artists && res.artists.results) {
+        artists = res.artists.results.map((a) => ({
+          ...a,
+          isArtist: true,
+          name: a.name,
+          image:
+            a.cover && a.cover.uri
+              ? `https://${a.cover.uri.replace("%%", "200x200")}`
+              : null,
+        }));
+      }
+      return { tracks, albums, artists };
+    } catch (e) {
+      console.error("Yandex Search Error:", e);
+      return { tracks: [], albums: [], artists: [] };
+    }
+  },
+
+  async getAlbumTracks(albumId) {
+    try {
+      const data = await this.request(`/albums/${albumId}/with-tracks`);
+      if (!data.result || !data.result.volumes) return [];
+
+      const rawTracks = [];
+      // Volumes usually represent discs. Flatten them.
+      data.result.volumes.forEach((vol) => {
+        if (Array.isArray(vol)) {
+          rawTracks.push(...vol);
+        }
+      });
+      return this.normalizeTracks(rawTracks);
+    } catch (e) {
+      console.error("Yandex Album Error:", e);
       return [];
     }
   },
 
-  async search(query) {
-    if (!query) return [];
+  async getArtistTracks(artistId) {
     try {
       const data = await this.request(
-        `/search?text=${encodeURIComponent(query)}&type=track&page=0`,
+        `/artists/${artistId}/tracks?page=0&page-size=50`,
       );
-      const tracks =
-        data.result && data.result.tracks ? data.result.tracks.results : [];
-      return this.normalizeTracks(tracks);
+      if (!data.result || !data.result.tracks) return [];
+      return this.normalizeTracks(data.result.tracks);
     } catch (e) {
-      console.error("Yandex Search Error:", e);
+      console.error("Yandex Artist Error:", e);
+      return [];
+    }
+  },
+
+  /**
+
+* "My Vibe" / Radio based on track
+*/
+  async getSimilarTracks(trackId) {
+    try {
+      const data = await this.request(`/tracks/${trackId}/similar`);
+      if (!data.result || !data.result.similarTracks) return [];
+      return this.normalizeTracks(data.result.similarTracks);
+    } catch (e) {
+      console.error("Yandex Similar Tracks Error:", e);
       return [];
     }
   },
@@ -172,7 +277,10 @@ export const YandexApi = {
 
     return rawTracks.map((t) => ({
       title: t.title,
-      artist: t.artists ? t.artists.map((a) => a.name).join(", ") : "Unknown",
+      artist:
+        t.artists && t.artists.length > 0
+          ? t.artists.map((a) => a.name).join(", ")
+          : "Unknown",
       album: t.albums && t.albums.length > 0 ? t.albums[0].title : "Single",
       file: `https://music.yandex.ru/album/${t.albums && t.albums[0] ? t.albums[0].id : 0}/track/${t.id}`,
       id: t.id,

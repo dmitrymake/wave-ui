@@ -61,7 +61,9 @@
 
   $: duration = $status.duration || 1;
   $: elapsed = $status.elapsed || 0;
-  $: isRadio = $currentSong.file?.startsWith("http");
+
+  $: isRadio = $currentSong.file?.startsWith("http") && !$currentSong.isYandex;
+
   $: isPlaying = $status.state === "play";
   $: isSmooth = isPlaying && !isDraggingBar && !isRadio;
 
@@ -735,7 +737,6 @@
     padding: 0 4px;
   }
 
-  /* NEW STYLES FOR VOLUME CONTROLS */
   .vol-btn {
     background: transparent;
     border: none;

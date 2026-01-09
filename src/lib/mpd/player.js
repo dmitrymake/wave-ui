@@ -9,7 +9,7 @@ import {
   queueVersion,
   queue,
   isQueueLocked,
-  yandexContext, // IMPORTED
+  yandexContext,
 } from "../store";
 import { db } from "../db";
 
@@ -138,14 +138,23 @@ function updateStores(serverStatus, serverSong) {
 
   // YANDEX OVERRIDE LOGIC
   // If the playing URL matches what we expect from Yandex, override metadata
-  if (
-    yCtx.active &&
-    yCtx.tracks.length > 0 &&
-    yCtx.currentIndex >= 0 &&
-    yCtx.currentTrackFile &&
-    serverSong.file === yCtx.currentTrackFile
-  ) {
-    const yTrack = yCtx.tracks[yCtx.currentIndex];
+  // Also check if the title looks like a raw hash (common issue with streams)
+  const isHashTitle =
+    serverSong.title && /^[a-f0-9]{32,128}$/i.test(serverSong.title);
+
+  if (yCtx.active && yCtx.tracks.length > 0) {
+    // Try to match by file URL or if we just have a broken title and context is active
+    let yTrack = null;
+
+    if (serverSong.file === yCtx.currentTrackFile) {
+      yTrack =
+        yCtx.tracks.find((t) => t.id === yCtx.currentTrackId) ||
+        yCtx.tracks[yCtx.currentIndex];
+    } else if (isHashTitle) {
+      // Fallback: if title is broken, assume it's the current context track
+      yTrack = yCtx.tracks[yCtx.currentIndex];
+    }
+
     if (yTrack) {
       serverSong.title = yTrack.title;
       serverSong.artist = yTrack.artist;
@@ -204,7 +213,7 @@ function updateStores(serverStatus, serverSong) {
       forceHardSync = false;
       timeDriftSpeed = 1.0;
       if (isRadio && !serverSong.isYandex) serverStatus.elapsed = 0;
-      manageTicker(isPlaying && !isRadio);
+      manageTicker(isPlaying && (!isRadio || serverSong.isYandex));
       return serverStatus;
     }
 
@@ -213,11 +222,11 @@ function updateStores(serverStatus, serverSong) {
     if (forceHardSync) {
       forceHardSync = false;
       timeDriftSpeed = 1.0;
-      manageTicker(isPlaying && !isRadio);
+      manageTicker(isPlaying && (!isRadio || serverSong.isYandex));
       return serverStatus;
     }
 
-    if (isPlaying && !isRadio) {
+    if (isPlaying && (!isRadio || serverSong.isYandex)) {
       const diff = serverStatus.elapsed - localStatus.elapsed;
       if (Math.abs(diff) > 2.0) {
         timeDriftSpeed = 1.0;

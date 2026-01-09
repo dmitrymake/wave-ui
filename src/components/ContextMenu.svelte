@@ -14,6 +14,7 @@
   import { PlayerActions } from "../lib/mpd/player";
   import { LibraryActions } from "../lib/mpd/library";
   import { mpdClient } from "../lib/mpd/client";
+  import { startYandexRadio } from "../lib/mpd/index";
 
   let innerWidth;
   let innerHeight;
@@ -51,7 +52,6 @@
     closeContextMenu();
   }
 
-  // --- ACTIONS ---
   function handlePlayNext() {
     if ($contextMenu.track) PlayerActions.playNext($contextMenu.track.file);
     closeContextMenu();
@@ -107,9 +107,6 @@
   function handlePlaylistPlay() {
     const pl = $contextMenu.context.playlist;
     if (pl) {
-      // Play context clears queue and plays
-      // import { playPlaylistContext } from "../lib/mpd"; // Need this or call via client
-      // Or reuse runMpdRequest
       mpdClient
         .send("stop")
         .then(() => mpdClient.send("clear"))
@@ -155,6 +152,14 @@
     });
   }
 
+  function handleMyVibe() {
+    const t = $contextMenu.track;
+    if (t && t.isYandex && t.id) {
+      startYandexRadio(t.id);
+    }
+    closeContextMenu();
+  }
+
   function showPlaylists() {
     view = "playlists";
   }
@@ -184,9 +189,11 @@
     ($contextMenu.track.file.includes("http") ||
       $contextMenu.track.file.includes("://"));
 
+  $: isYandexTrack = $contextMenu.track && $contextMenu.track.isYandex;
+
   $: isPlaylistContext = $contextMenu.context?.type === "playlist";
   $: isQueueContext = $contextMenu.context?.type === "queue";
-  $: isPlaylistCard = $contextMenu.context?.type === "playlist-card"; // NEW
+  $: isPlaylistCard = $contextMenu.context?.type === "playlist-card";
   $: isMiniPlayerSource = $contextMenu.context?.source === "miniplayer";
 
   $: stylePosition = (() => {
@@ -335,6 +342,13 @@
             <span class="icon">{@html ICONS.ADD_TO_PLAYLIST || ICONS.ADD}</span>
             <span>Add to Playlist...</span>
           </button>
+
+          {#if isYandexTrack}
+            <button class="menu-row" on:click={handleMyVibe}>
+              <span class="icon">{@html ICONS.RADIO}</span>
+              <span>My Vibe</span>
+            </button>
+          {/if}
 
           {#if !isRadio}
             <button class="menu-row" on:click={handleGoToAlbum}>
