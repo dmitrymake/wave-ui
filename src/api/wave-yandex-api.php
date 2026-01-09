@@ -48,13 +48,22 @@ function mpdSend($cmd) {
 }
 
 function formatTrack($t) {
+    $cover = null;
+    if (!empty($t['coverUri'])) {
+        $cover = $t['coverUri'];
+    } elseif (!empty($t['album']['coverUri'])) {
+        $cover = $t['album']['coverUri'];
+    } elseif (!empty($t['albums'][0]['coverUri'])) {
+        $cover = $t['albums'][0]['coverUri'];
+    }
+
     return [
         'title' => $t['title'] ?? 'Unknown Title',
         'artist' => isset($t['artists']) ? implode(', ', array_column($t['artists'], 'name')) : 'Unknown Artist',
-        'album' => $t['albums'][0]['title'] ?? 'Single',
+        'album' => $t['albums'][0]['title'] ?? $t['album']['title'] ?? 'Single',
         'id' => (string)$t['id'],
         'file' => "yandex:".$t['id'],
-        'image' => isset($t['coverUri']) ? "https://" . str_replace('%%', '200x200', $t['coverUri']) : null,
+        'image' => $cover ? "https://" . str_replace('%%', '200x200', $cover) : null,
         'isYandex' => true,
         'time' => ($t['durationMs'] ?? 0) / 1000
     ];
