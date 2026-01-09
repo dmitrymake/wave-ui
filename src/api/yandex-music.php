@@ -21,6 +21,7 @@ class YandexMusic {
         curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
         curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
         curl_setopt($ch, CURLOPT_USERAGENT, $this->userAgent);
+        curl_setopt($ch, CURLOPT_TIMEOUT, 10);
 
         if ($postData) {
             curl_setopt($ch, CURLOPT_POST, true);
@@ -30,6 +31,11 @@ class YandexMusic {
 
         curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
         $response = curl_exec($ch);
+        
+        if (curl_errno($ch)) {
+            file_put_contents('/tmp/wave_debug.log', "Curl Error: " . curl_error($ch) . "\n", FILE_APPEND);
+        }
+        
         curl_close($ch);
 
         if ($isXml) return $response;
@@ -64,11 +70,25 @@ class YandexMusic {
         $tracks = [];
         foreach ($data['result']['tracks'] as $item) {
             $track = $item['track'] ?? $item;
-            if (isset($track['id'])) {
-                $tracks[] = $track;
-            }
+            if (isset($track['id'])) $tracks[] = $track;
         }
         return $tracks;
+    }
+
+    public function getAlbumTracks($albumId) {
+        $data = $this->request("/albums/{$albumId}/with-tracks");
+        if (!isset($data['result']['volumes'])) return [];
+        
+        $tracks = [];
+        foreach ($data['result']['volumes'] as $vol) {
+            if (is_array($vol)) $tracks = array_merge($tracks, $vol);
+        }
+        return $tracks;
+    }
+
+    public function getArtistTracks($artistId) {
+        $data = $this->request("/artists/{$artistId}/tracks?page-size=50");
+        return $data['result']['tracks'] ?? [];
     }
 
     public function getStationTracks($stationId) {
@@ -98,7 +118,11 @@ class YandexMusic {
 
     public function getDirectLink($trackId) {
         $data = $this->request("/tracks/{$trackId}/download-info");
-        if (empty($data['result'][0]['downloadInfoUrl'])) return null;
+        
+        if (empty($data['result'][0]['downloadInfoUrl'])) {
+            file_put_contents('/tmp/wave_debug.log', "No download info for $trackId\n", FILE_APPEND);
+            return null;
+        }
 
         usort($data['result'], function($a, $b) {
             return $b['bitrateInKbps'] - $a['bitrateInKbps'];

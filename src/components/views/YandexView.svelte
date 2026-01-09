@@ -14,7 +14,10 @@
   let playlists = [];
   let isLoading = false;
   let viewMode = "dashboard";
-  let activePlaylistInfo = null;
+
+  // Хлебные крошки и заголовок
+  let activeTitle = "";
+  let activeSubtitle = "";
 
   let searchQuery = "";
   let searchType = "all";
@@ -51,26 +54,20 @@
     }
   }
 
-  async function handleCardClick(pl) {
-    if (pl.kind === "my_vibe") {
-      startVibe();
-    } else {
-      openPlaylist(pl);
-    }
-  }
-
-  async function startVibe() {
-    showToast("Starting My Vibe...", "info");
-    try {
-      await YandexApi.playRadio();
-    } catch (e) {
-      showToast("Failed to start radio", "error");
-    }
-  }
-
   async function openPlaylist(pl) {
-    viewMode = "playlist";
-    activePlaylistInfo = pl;
+    if (pl.kind === "my_vibe") {
+      showToast("Starting My Vibe...", "info");
+      try {
+        await YandexApi.playRadio();
+      } catch (e) {
+        showToast("Failed to start radio", "error");
+      }
+      return;
+    }
+
+    viewMode = "list";
+    activeTitle = pl.title;
+    activeSubtitle = pl.trackCount + " tracks";
     tracksStore.set([]);
     isLoading = true;
 
@@ -81,6 +78,46 @@
       }
     } catch (e) {
       showToast("Failed to load tracks", "error");
+    } finally {
+      isLoading = false;
+    }
+  }
+
+  async function openAlbum(album) {
+    viewMode = "list";
+    activeTitle = album.title;
+    activeSubtitle = album.artist;
+    tracksStore.set([]);
+    isLoading = true;
+
+    try {
+      const res = await YandexApi.request("get_album_tracks", { id: album.id });
+      if (res && res.tracks) {
+        tracksStore.set(res.tracks);
+      }
+    } catch (e) {
+      showToast("Failed to load album", "error");
+    } finally {
+      isLoading = false;
+    }
+  }
+
+  async function openArtist(artist) {
+    viewMode = "list";
+    activeTitle = artist.title;
+    activeSubtitle = "Popular Tracks";
+    tracksStore.set([]);
+    isLoading = true;
+
+    try {
+      const res = await YandexApi.request("get_artist_tracks", {
+        id: artist.id,
+      });
+      if (res && res.tracks) {
+        tracksStore.set(res.tracks);
+      }
+    } catch (e) {
+      showToast("Failed to load artist", "error");
     } finally {
       isLoading = false;
     }
@@ -115,8 +152,6 @@
         searchResults = res;
         if (searchType === "track" || searchType === "all") {
           tracksStore.set(res.tracks || []);
-        } else {
-          tracksStore.set([]);
         }
       }
     } catch (e) {
@@ -128,10 +163,14 @@
   }
 
   function goBack() {
-    viewMode = "dashboard";
-    searchQuery = "";
-    tracksStore.set([]);
-    activePlaylistInfo = null;
+    if (viewMode === "list") {
+      if (searchQuery.length > 0) viewMode = "search";
+      else viewMode = "dashboard";
+    } else {
+      viewMode = "dashboard";
+      searchQuery = "";
+      tracksStore.set([]);
+    }
   }
 
   async function handlePlayTrack(track) {
@@ -172,7 +211,13 @@
         />
 
         {#if searchQuery}
-          <button class="clear-btn" on:click={goBack}>
+          <button
+            class="clear-btn"
+            on:click={() => {
+              searchQuery = "";
+              viewMode = "dashboard";
+            }}
+          >
             {@html ICONS.CLOSE}
           </button>
         {/if}
@@ -211,7 +256,7 @@
         {:else}
           <div class="music-grid">
             {#each playlists as pl}
-              <div class="music-card" on:click={() => handleCardClick(pl)}>
+              <div class="music-card" on:click={() => openPlaylist(pl)}>
                 <div
                   class="card-img-container"
                   class:is-vibe={pl.kind === "my_vibe"}
@@ -225,7 +270,6 @@
                       </div>
                     </ImageLoader>
                   {/if}
-
                   <div class="play-overlay">
                     <span class="overlay-icon">{@html ICONS.PLAY}</span>
                   </div>
@@ -243,11 +287,33 @@
 
     {#if viewMode === "search"}
       <div class="content-padded">
+        {#if searchResults.artists && searchResults.artists.length > 0 && searchType === "all"}
+          <h3 class="header-label">Artists</h3>
+          <div class="music-grid horizontal section-mb">
+            {#each searchResults.artists as artist}
+              <div class="music-card" on:click={() => openArtist(artist)}>
+                <div class="card-img-container rounded">
+                  <ImageLoader
+                    src={artist.image}
+                    alt={artist.title}
+                    radius="50%"
+                  >
+                    <div slot="fallback" class="icon-fallback">
+                      {@html ICONS.ARTISTS}
+                    </div>
+                  </ImageLoader>
+                </div>
+                <div class="card-title center">{artist.title}</div>
+              </div>
+            {/each}
+          </div>
+        {/if}
+
         {#if searchResults.albums && searchResults.albums.length > 0 && searchType === "all"}
           <h3 class="header-label">Albums</h3>
           <div class="music-grid horizontal section-mb">
             {#each searchResults.albums as album}
-              <div class="music-card">
+              <div class="music-card" on:click={() => openAlbum(album)}>
                 <div class="card-img-container">
                   <ImageLoader src={album.image} alt={album.title} radius="8px">
                     <div slot="fallback" class="icon-fallback">
@@ -264,21 +330,17 @@
       </div>
     {/if}
 
-    {#if viewMode === "playlist" || (viewMode === "search" && (searchType === "all" || searchType === "track"))}
+    {#if viewMode === "list" || (viewMode === "search" && (searchType === "all" || searchType === "track"))}
       <BaseList
         itemsStore={tracksStore}
         {isLoading}
         emptyText={viewMode === "search" ? "No results" : "Playlist is empty"}
       >
         <div slot="header" class="content-padded">
-          {#if activePlaylistInfo}
+          {#if viewMode === "list"}
             <div class="playlist-header">
-              <h1>{activePlaylistInfo.title}</h1>
-              {#if activePlaylistInfo.trackCount}
-                <div class="card-sub">
-                  {activePlaylistInfo.trackCount} tracks
-                </div>
-              {/if}
+              <h1>{activeTitle}</h1>
+              <div class="card-sub">{activeSubtitle}</div>
             </div>
           {/if}
         </div>
@@ -399,6 +461,12 @@
 
   .card-img-container.is-vibe {
     background: linear-gradient(135deg, #a4508b, #5f0a87);
+  }
+  .card-img-container.rounded {
+    border-radius: 50%;
+  }
+  .card-title.center {
+    text-align: center;
   }
 
   .icon-wrap {

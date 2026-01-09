@@ -11,8 +11,13 @@ require_once INC . '/yandex-music.php';
 define('STATE_FILE', '/dev/shm/yandex_state.json');
 define('META_CACHE_FILE', '/dev/shm/yandex_meta_cache.json');
 define('TOKEN_FILE', '/var/local/www/yandex_token.dat');
+define('LOG_FILE', '/tmp/wave_debug.log');
 
 $action = $_REQUEST['action'] ?? '';
+
+function debug($msg) {
+    file_put_contents(LOG_FILE, "[" . date('H:i:s') . "] API: $msg\n", FILE_APPEND);
+}
 
 function getToken() {
     return file_exists(TOKEN_FILE) ? trim(file_get_contents(TOKEN_FILE)) : null;
@@ -22,14 +27,27 @@ function saveState($data) {
     file_put_contents(STATE_FILE, json_encode($data));
 }
 
-function mpdExec($cmd) {
-    $cmd = str_replace('"', '\"', $cmd);
-    exec("mpc " . $cmd);
+function mpdSend($cmd) {
+    $fp = fsockopen("localhost", 6600, $errno, $errstr, 5);
+    if (!$fp) {
+        debug("MPD Connection Failed: $errstr");
+        return;
+    }
+    
+    fgets($fp);
+    
+    fwrite($fp, "$cmd\n");
+    
+    while (!feof($fp)) {
+        $line = fgets($fp);
+        if (strpos($line, 'OK') === 0 || strpos($line, 'ACK') === 0) break;
+    }
+    fclose($fp);
 }
 
 function cacheTrackMeta($url, $track) {
     $cache = file_exists(META_CACHE_FILE) ? json_decode(file_get_contents(META_CACHE_FILE), true) : [];
-    if (count($cache) > 100) $cache = array_slice($cache, -100, 100, true);
+    if (count($cache) > 200) $cache = array_slice($cache, -100, 100, true);
     
     $key = md5($url);
     
@@ -55,6 +73,18 @@ function cacheTrackMeta($url, $track) {
     file_put_contents(META_CACHE_FILE, json_encode($cache));
 }
 
+function formatTrack($t) {
+    return [
+        'title' => $t['title'],
+        'artist' => implode(', ', array_column($t['artists'] ?? [], 'name')),
+        'album' => $t['albums'][0]['title'] ?? 'Single',
+        'id' => $t['id'],
+        'image' => isset($t['coverUri']) ? "https://" . str_replace('%%', '200x200', $t['coverUri']) : null,
+        'isYandex' => true,
+        'time' => ($t['durationMs'] ?? 0) / 1000
+    ];
+}
+
 try {
     if ($action === 'status') {
         $token = getToken();
@@ -67,7 +97,7 @@ try {
         if (empty($input['token'])) throw new Exception("Empty token");
         
         $api = new YandexMusic($input['token']);
-        $api->getUserId(); 
+        $api->getUserId();
         
         if (!is_dir(dirname(TOKEN_FILE))) mkdir(dirname(TOKEN_FILE), 0755, true);
         file_put_contents(TOKEN_FILE, $input['token']);
@@ -107,24 +137,29 @@ try {
             $kind = $_GET['kind'];
             $rawTracks = $api->getPlaylistTracks($uid, $kind);
             
-            $tracks = [];
-            foreach ($rawTracks as $t) {
-                $tracks[] = [
-                    'title' => $t['title'],
-                    'artist' => implode(', ', array_column($t['artists'], 'name')),
-                    'album' => $t['albums'][0]['title'] ?? '',
-                    'id' => $t['id'],
-                    'image' => isset($t['coverUri']) ? "https://" . str_replace('%%', '200x200', $t['coverUri']) : null,
-                    'isYandex' => true
-                ];
-            }
+            $tracks = array_map('formatTrack', $rawTracks);
+            echo json_encode(['tracks' => $tracks]);
+            break;
+
+        case 'get_artist_tracks':
+            $id = $_GET['id'];
+            $rawTracks = $api->getArtistTracks($id);
+            $tracks = array_map('formatTrack', $rawTracks);
+            echo json_encode(['tracks' => $tracks]);
+            break;
+
+        case 'get_album_tracks':
+            $id = $_GET['id'];
+            $rawTracks = $api->getAlbumTracks($id);
+            $tracks = array_map('formatTrack', $rawTracks);
             echo json_encode(['tracks' => $tracks]);
             break;
 
         case 'play_station':
             $stationId = $_REQUEST['station'] ?? 'user:onetwo';
+            debug("Playing station: $stationId");
             
-            mpdExec("clear");
+            mpdSend("clear");
             
             $queueData = $api->getStationTracks($stationId);
             $initialBuffer = [];
@@ -137,7 +172,7 @@ try {
                     if ($count < 2) {
                         $url = $api->getDirectLink($track['id']);
                         if ($url) {
-                            mpdExec("add \"$url\"");
+                            mpdSend("add \"$url\"");
                             cacheTrackMeta($url, $track);
                             $count++;
                         }
@@ -148,7 +183,7 @@ try {
                 }
             }
 
-            mpdExec("play");
+            mpdSend("play");
 
             saveState([
                 'active' => true,
@@ -162,17 +197,18 @@ try {
 
         case 'play_track':
             $id = $_REQUEST['id'];
+            debug("Playing track ID: $id");
             
             $trackInfo = $api->getTrackInfo($id);
             $url = $api->getDirectLink($id);
             
             if ($url && $trackInfo) {
-                mpdExec("clear");
-                mpdExec("add \"$url\"");
+                mpdSend("clear");
+                mpdSend("add \"$url\"");
                 
                 cacheTrackMeta($url, $trackInfo);
                 
-                mpdExec("play");
+                mpdSend("play");
                 
                 saveState(['active' => false]);
                 echo json_encode(['status' => 'playing']);
@@ -188,16 +224,7 @@ try {
             
             $tracks = [];
             if (isset($res['tracks']['results'])) {
-                foreach ($res['tracks']['results'] as $t) {
-                    $tracks[] = [
-                        'title' => $t['title'],
-                        'artist' => implode(', ', array_column($t['artists'], 'name')),
-                        'album' => $t['albums'][0]['title'] ?? 'Single',
-                        'id' => $t['id'],
-                        'image' => isset($t['coverUri']) ? "https://" . str_replace('%%', '200x200', $t['coverUri']) : null,
-                        'isYandex' => true
-                    ];
-                }
+                $tracks = array_map('formatTrack', $res['tracks']['results']);
             }
             
             $albums = [];
@@ -212,11 +239,23 @@ try {
                     ];
                 }
             }
+
+            $artists = [];
+            if (isset($res['artists']['results'])) {
+                foreach ($res['artists']['results'] as $a) {
+                    $artists[] = [
+                        'title' => $a['name'],
+                        'id' => $a['id'],
+                        'image' => isset($a['cover']['uri']) ? "https://" . str_replace('%%', '200x200', $a['cover']['uri']) : null,
+                        'kind' => 'artist'
+                    ];
+                }
+            }
             
             echo json_encode([
                 'tracks' => $tracks, 
                 'albums' => $albums, 
-                'artists' => []
+                'artists' => $artists
             ]);
             break;
             
@@ -234,7 +273,7 @@ try {
 
         case 'dislike':
             $api->toggleLike($_REQUEST['track_id'], false);
-            mpdExec("next");
+            mpdSend("next");
             echo json_encode(['status' => 'disliked']);
             break;
 
@@ -244,6 +283,7 @@ try {
 
 } catch (Exception $e) {
     http_response_code(500);
+    debug("Error: " . $e->getMessage());
     echo json_encode(['error' => $e->getMessage()]);
 }
 ?>
