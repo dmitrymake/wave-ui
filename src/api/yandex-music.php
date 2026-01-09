@@ -14,14 +14,14 @@ class YandexMusic {
         
         $headers = [
             "Authorization: OAuth " . $this->token,
-            "Accept-Language: ru"
+            "Accept-Language: en"
         ];
 
         $ch = curl_init($url);
         curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
         curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
         curl_setopt($ch, CURLOPT_USERAGENT, $this->userAgent);
-        curl_setopt($ch, CURLOPT_TIMEOUT, 10);
+        curl_setopt($ch, CURLOPT_TIMEOUT, 15);
 
         if ($postData) {
             curl_setopt($ch, CURLOPT_POST, true);
@@ -31,11 +31,6 @@ class YandexMusic {
 
         curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
         $response = curl_exec($ch);
-        
-        if (curl_errno($ch)) {
-            file_put_contents('/tmp/wave_debug.log', "Curl Error: " . curl_error($ch) . "\n", FILE_APPEND);
-        }
-        
         curl_close($ch);
 
         if ($isXml) return $response;
@@ -51,9 +46,11 @@ class YandexMusic {
 
     public function getUserPlaylists() {
         $uid = $this->getUserId();
+        // Fetch user created playlists
         $data = $this->request("/users/{$uid}/playlists/list");
         $userPlaylists = $data['result'] ?? [];
 
+        // Fetch smart playlists (Playlist of the day, Deja Vu, etc.)
         $feed = $this->request("/landing3?blocks=personal-playlists");
         $smartPlaylists = [];
         if (isset($feed['result']['blocks'][0]['entities'])) {
@@ -69,6 +66,7 @@ class YandexMusic {
         
         $tracks = [];
         foreach ($data['result']['tracks'] as $item) {
+            // Handle differences in API response structure
             $track = $item['track'] ?? $item;
             if (isset($track['id'])) $tracks[] = $track;
         }
@@ -91,8 +89,9 @@ class YandexMusic {
         return $data['result']['tracks'] ?? [];
     }
 
+    // Use the rotor endpoint for infinite radio generation
     public function getStationTracks($stationId) {
-        $data = $this->request("/info/stations/{$stationId}/tracks-from-queue");
+        $data = $this->request("/rotor/station/{$stationId}/tracks?new-queue=true");
         return $data['result']['sequence'] ?? [];
     }
 
@@ -111,6 +110,39 @@ class YandexMusic {
         return $this->request("/users/{$uid}/likes/tracks/{$action}", ['track-id' => $trackId]);
     }
 
+    public function getFavorites() {
+        $uid = $this->getUserId();
+        $data = $this->request("/users/{$uid}/likes/tracks");
+        
+        $ids = [];
+        $res = $data['result'] ?? [];
+
+        if (isset($res['library']['tracks'])) {
+            foreach ($res['library']['tracks'] as $t) {
+                $ids[] = $t['id'];
+            }
+        } elseif (isset($res['ids'])) {
+            $ids = $res['ids'];
+        } elseif (is_array($res)) {
+            foreach ($res as $t) {
+                if (isset($t['id'])) $ids[] = $t['id'];
+            }
+        }
+        
+        // Limit to 100 recent favorites to prevent timeouts
+        $ids = array_slice($ids, 0, 100);
+        
+        if (empty($ids)) return [];
+        
+        return $this->getTracksByIds($ids);
+    }
+
+    public function getTracksByIds($ids) {
+        if (is_array($ids)) $ids = implode(',', $ids);
+        $data = $this->request("/tracks", ['track-ids' => $ids]);
+        return $data['result'] ?? [];
+    }
+
     public function getTrackInfo($trackId) {
         $data = $this->request("/tracks/{$trackId}");
         return $data['result'][0] ?? null;
@@ -118,12 +150,9 @@ class YandexMusic {
 
     public function getDirectLink($trackId) {
         $data = $this->request("/tracks/{$trackId}/download-info");
-        
-        if (empty($data['result'][0]['downloadInfoUrl'])) {
-            file_put_contents('/tmp/wave_debug.log', "No download info for $trackId\n", FILE_APPEND);
-            return null;
-        }
+        if (empty($data['result'][0]['downloadInfoUrl'])) return null;
 
+        // Sort by bitrate descending (Highest Quality)
         usort($data['result'], function($a, $b) {
             return $b['bitrateInKbps'] - $a['bitrateInKbps'];
         });

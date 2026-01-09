@@ -10,7 +10,8 @@ define('LOG_FILE', '/tmp/wave_daemon.log');
 $minQueueSize = 2; 
 
 function logMsg($msg) {
-    file_put_contents(LOG_FILE, "[" . date('H:i:s') . "] $msg\n", FILE_APPEND);
+    // Enable for debugging:
+    // file_put_contents(LOG_FILE, "[" . date('H:i:s') . "] $msg\n", FILE_APPEND);
 }
 
 function mpdSend($cmd) {
@@ -54,6 +55,8 @@ function updateMetaCache($url, $track) {
     $cover = null;
     if (isset($track['coverUri'])) {
         $cover = "https://" . str_replace('%%', '400x400', $track['coverUri']);
+    } elseif (isset($track['ogImage'])) {
+        $cover = "https://" . str_replace('%%', '200x200', $track['ogImage']);
     }
 
     $artistName = 'Unknown';
@@ -61,11 +64,13 @@ function updateMetaCache($url, $track) {
         $artistName = implode(', ', array_column($track['artists'], 'name'));
     }
 
+    $albumTitle = $track['albums'][0]['title'] ?? '';
+
     $cache[$key] = [
         'id' => $track['id'],
         'title' => $track['title'],
         'artist' => $artistName,
-        'album' => $track['albums'][0]['title'] ?? '',
+        'album' => $albumTitle,
         'image' => $cover,
         'isYandex' => true,
         'time' => ($track['durationMs'] ?? 0) / 1000
@@ -73,8 +78,6 @@ function updateMetaCache($url, $track) {
     
     file_put_contents(META_CACHE_FILE, json_encode($cache));
 }
-
-logMsg("Daemon Started");
 
 $lastTokenTime = 0;
 $api = null;
@@ -89,9 +92,7 @@ while (true) {
                     $api = new YandexMusic($token);
                     $api->getUserId(); 
                     $lastTokenTime = $fileTime;
-                    logMsg("API Initialized");
                 } catch (Exception $e) {
-                    logMsg("Token Error: " . $e->getMessage());
                     $api = null;
                 }
             }
@@ -100,11 +101,15 @@ while (true) {
 
     $state = getState();
 
+    // Only run if active
     if ($api && $state && !empty($state['active'])) {
         
         $queueCount = getQueueLength();
         
+        // Refill Queue Logic
         if ($queueCount < $minQueueSize) {
+            
+            // 1. Fetch more if buffer empty
             if (empty($state['queue_buffer'])) {
                 try {
                     $stationId = $state['station_id'] ?? 'user:onetwo';
@@ -117,14 +122,13 @@ while (true) {
                         }
                         $state['queue_buffer'] = $cleanTracks;
                         saveState($state);
-                        logMsg("Fetched " . count($cleanTracks) . " tracks");
                     }
                 } catch (Exception $e) {
-                    logMsg("Fetch Error: " . $e->getMessage());
                     sleep(5);
                 }
             }
 
+            // 2. Push next track to MPD
             if (!empty($state['queue_buffer'])) {
                 $nextTrack = array_shift($state['queue_buffer']);
                 saveState($state); 
@@ -134,19 +138,17 @@ while (true) {
                     if ($url) {
                         mpdSend("add \"$url\"");
                         updateMetaCache($url, $nextTrack);
-                        logMsg("Added: " . $nextTrack['title']);
                         
                         if ($queueCount == 0) mpdSend("play");
-                    } else {
-                        logMsg("No URL for track " . $nextTrack['id']);
                     }
                 } catch (Exception $e) {
-                    logMsg("Add Error: " . $e->getMessage());
+                    // Skip broken track
                 }
             }
         }
     }
 
+    // Wait for MPD event (Blocking I/O saves CPU)
     $socket = fsockopen("localhost", 6600);
     if ($socket) {
         fwrite($socket, "idle player playlist\n");
