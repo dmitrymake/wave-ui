@@ -5,6 +5,7 @@ error_reporting(E_ALL);
 
 header('Access-Control-Allow-Origin: *');
 header('Access-Control-Allow-Methods: GET, POST, OPTIONS');
+header('Access-Control-Allow-Headers: Authorization, Content-Type, Accept-Language');
 
 if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') exit(0);
 
@@ -23,40 +24,43 @@ if (!isset($_SESSION['library_misc_options'])) $_SESSION['library_misc_options']
 
 $action = isset($_REQUEST['action']) ? $_REQUEST['action'] : 'library';
 
-// Устанавливаем JSON заголовок по умолчанию для всех действий КРОМЕ прокси
 if ($action !== 'yandex_proxy') {
     header('Content-Type: application/json');
 }
 
 try {
-    // --- YANDEX PROXY START ---
     if ($action === 'yandex_proxy') {
         $path = $_GET['path'] ?? '';
         if (!$path) {
             header('Content-Type: application/json');
             throw new Exception("No path provided for proxy");
         }
-
         $is_storage = strpos($path, 'http') === 0;
         $url = $is_storage ? $path : "https://api.music.yandex.net" . $path;
 
         $ch = curl_init($url);
         
         $requestHeaders = [];
-        if (function_exists('getallheaders')) {
-            $headers = getallheaders();
-            foreach ($headers as $key => $value) {
-                if (strtolower($key) === 'authorization') {
-                    $requestHeaders[] = "Authorization: $value";
-                }
-                if (strtolower($key) === 'accept-language') {
-                    $requestHeaders[] = "Accept-Language: $value";
-                }
-            }
+
+        $auth_token = null;
+        if (isset($_SERVER['HTTP_AUTHORIZATION'])) {
+            $auth_token = $_SERVER['HTTP_AUTHORIZATION'];
+        } elseif (isset($_SERVER['REDIRECT_HTTP_AUTHORIZATION'])) {
+            $auth_token = $_SERVER['REDIRECT_HTTP_AUTHORIZATION'];
         }
         
-        if (empty($requestHeaders) && isset($_GET['token'])) {
-            $requestHeaders[] = "Authorization: OAuth " . $_GET['token'];
+        if (!$auth_token && isset($_GET['token'])) {
+            $auth_token = "OAuth " . $_GET['token'];
+        }
+
+        if ($auth_token) {
+            $requestHeaders[] = "Authorization: $auth_token";
+        }
+
+        if (isset($_SERVER['HTTP_ACCEPT_LANGUAGE'])) {
+            $requestHeaders[] = "Accept-Language: " . $_SERVER['HTTP_ACCEPT_LANGUAGE'];
+        } else {
+            $requestHeaders[] = "Accept-Language: ru";
         }
 
         if ($_SERVER['REQUEST_METHOD'] === 'POST') {
@@ -68,9 +72,9 @@ try {
 
         curl_setopt($ch, CURLOPT_HTTPHEADER, $requestHeaders);
         curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-        curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false); // Игнорируем проблемы с SSL локально
+        curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
         curl_setopt($ch, CURLOPT_FOLLOWLOCATION, true);
-        curl_setopt($ch, CURLOPT_USERAGENT, 'Mozilla/5.0 (compatible; MoodeAudio/1.0)');
+        curl_setopt($ch, CURLOPT_USERAGENT, 'Yandex-Music-Client'); 
 
         $response = curl_exec($ch);
         $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
@@ -81,7 +85,9 @@ try {
 
         if ($curlError) {
             header('Content-Type: application/json');
-            throw new Exception("Proxy Error: " . $curlError);
+            http_response_code(500); // Internal Error
+            echo json_encode(["error" => "Proxy Curl Error: " . $curlError]);
+            exit;
         }
 
         if ($contentType) {
@@ -92,13 +98,10 @@ try {
         echo $response;
         exit;
     }
-
     if ($action === 'stations') {
         $dbh = sqlConnect();
         if (!$dbh) throw new Exception("Moode DB Error");
-        
         $stations = sqlRead('cfg_radio', $dbh, 'all');
-        
         echo json_encode(is_array($stations) ? $stations : []);
         
     } elseif ($action === 'get_time') {
@@ -113,14 +116,12 @@ try {
         $timeStr = $_POST['time'] ?? '08:00';
         $playlist = $_POST['playlist'] ?? 'Favorites';
 
-        // Escape quotes for the shell command inside crontab
         $safePlaylist = str_replace('"', '\"', $playlist); 
         $cronId = "# WAVE_UI_ALARM";
 
         $currentCron = shell_exec('crontab -l 2>/dev/null');
         if (!$currentCron) $currentCron = "";
 
-        // Filter out existing alarm lines
         $lines = explode("\n", $currentCron);
         $newLines = [];
         foreach ($lines as $line) {
@@ -133,18 +134,13 @@ try {
             $parts = explode(':', $timeStr);
             $hour = intval($parts[0]);
             $min = intval($parts[1]);
-
-            // MPC sequence: Clear Queue -> Vol 70 -> Load Playlist -> Play
             $cmd = "/usr/bin/mpc clear && /usr/bin/mpc volume 70 && /usr/bin/mpc load \"$safePlaylist\" && /usr/bin/mpc play";
-            
-            // Crontab format: m h dom mon dow command
             $cronLine = "$min $hour * * * $cmd $cronId";
             $newLines[] = $cronLine;
         }
 
         $newCronContent = implode("\n", $newLines) . "\n";
         
-        // Write to crontab via pipe
         $descriptorSpec = [
             0 => ["pipe", "r"],
             1 => ["pipe", "w"],
@@ -173,11 +169,10 @@ try {
         }
 
     } else {
-        // Default: Sync Library using Moode logic
+        // Default Library Sync
         $sock = openMpdSock('localhost', 6600);
         $lib = loadLibrary($sock);
         closeMpdSock($sock);
-        
         echo $lib ?: json_encode([]);
     }
 
@@ -186,6 +181,6 @@ try {
         header('Content-Type: application/json');
         http_response_code(500);
     }
-    echo json_encode(["error" => $e->getMessage()]);
+    echo json_encode(["error" => "PHP Error: " . $e->getMessage()]);
 }
 ?>
