@@ -198,6 +198,39 @@ try {
             echo json_encode(['status' => 'started', 'added' => $count]);
             break;
 
+        case 'play_playlist':
+            $input = json_decode(file_get_contents('php://input'), true);
+            $tracks = $input['tracks'] ?? [];
+            if (empty($tracks)) throw new Exception("No tracks provided");
+
+            debug("Playing playlist: " . count($tracks) . " tracks");
+            
+            mpdSend("clear");
+
+            $initialCount = 0;
+            $toAddMpd = array_splice($tracks, 0, 3);
+            
+            foreach ($toAddMpd as $t) {
+                $url = $api->getDirectLink($t['id']);
+                if ($url) {
+                    mpdSend("add \"$url\"");
+                    cacheTrackMeta($url, $t);
+                    $initialCount++;
+                }
+            }
+
+            mpdSend("play");
+
+            saveState([
+                'active' => true,
+                'mode' => 'playlist_extend',
+                'station_id' => 'custom_list',
+                'queue_buffer' => $tracks
+            ]);
+
+            echo json_encode(['status' => 'ok', 'added_now' => $initialCount]);
+            break;
+
         case 'play_track':
             $id = $_REQUEST['id'];
             $append = ($_REQUEST['append'] ?? '0') === '1';

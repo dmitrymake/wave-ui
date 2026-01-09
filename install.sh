@@ -34,6 +34,13 @@ git clone "$REPO_URL" "$TEMP_DIR"
 # 3. Setup Backend Files (PHP)
 echo ">>> [3/7] Installing API & Backend Logic..."
 
+sudo systemctl stop wave-yandex.service || true
+
+echo ">>> Cleaning up old state files..."
+sudo rm -f /tmp/wave_daemon.log
+sudo rm -f /dev/shm/yandex_state.json
+sudo rm -f /dev/shm/yandex_meta_cache.json
+
 # Copy API endpoints
 sudo cp "$TEMP_DIR/src/api/wave-api.php" "$WEB_ROOT/"
 sudo cp "$TEMP_DIR/src/api/wave-yandex-api.php" "$WEB_ROOT/"
@@ -57,7 +64,7 @@ sudo mkdir -p /var/local/www
 sudo chown www-data:www-data /var/local/www
 sudo chmod 755 /var/local/www
 
-# Setup Logging for Daemon (ensuring it's writable)
+# Setup Logging for Daemon
 sudo touch /tmp/wave_daemon.log
 sudo chown www-data:www-data /tmp/wave_daemon.log
 sudo chmod 666 /tmp/wave_daemon.log
@@ -71,7 +78,6 @@ else
   echo "ERROR: /dist folder not found in repository!"
   exit 1
 fi
-# Grant Nginx access
 sudo chown -R www-data:www-data "$FINAL_WEB_DIR"
 sudo chmod -R 755 "$FINAL_WEB_DIR"
 
@@ -106,6 +112,7 @@ After=network.target mpd.service
 [Service]
 Type=simple
 User=www-data
+Group=www-data
 ExecStart=/usr/bin/php $BIN_DIR/yandex-daemon.php
 Restart=always
 RestartSec=5
@@ -118,7 +125,12 @@ EOF
 
 sudo systemctl daemon-reload
 sudo systemctl enable wave-yandex.service
-sudo systemctl restart wave-yandex.service
+sudo systemctl start wave-yandex.service
+
+sudo -u www-data touch /dev/shm/yandex_state.json
+sudo -u www-data touch /dev/shm/yandex_meta_cache.json
+sudo chmod 777 /dev/shm/yandex_state.json
+sudo chmod 777 /dev/shm/yandex_meta_cache.json
 
 # 7. Configure Nginx for Port 3000
 echo ">>> [7/7] Configuring Nginx..."

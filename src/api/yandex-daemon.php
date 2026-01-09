@@ -1,5 +1,4 @@
 <?php
-// /var/www/bin/yandex-daemon.php
 
 define('INC', '/var/www/inc');
 require_once INC . '/yandex-music.php';
@@ -9,12 +8,11 @@ define('META_CACHE_FILE', '/dev/shm/yandex_meta_cache.json');
 define('TOKEN_FILE', '/var/local/www/yandex_token.dat');
 define('LOG_FILE', '/tmp/wave_daemon.log');
 
-$minQueueSize = 3; 
+$minQueueSize = 5; 
 $pollInterval = 5; 
 
 function logMsg($msg) {
     $str = "[" . date('H:i:s') . "] $msg\n";
-    // Пишем в лог так, чтобы все могли читать
     file_put_contents(LOG_FILE, $str, FILE_APPEND);
     chmod(LOG_FILE, 0666); 
     echo $str;
@@ -73,7 +71,7 @@ function saveState($state) {
 
 function updateMetaCache($url, $track) {
     $cache = file_exists(META_CACHE_FILE) ? json_decode(file_get_contents(META_CACHE_FILE), true) : [];
-    if (count($cache) > 100) $cache = array_slice($cache, -100, 100, true);
+    if (count($cache) > 200) $cache = array_slice($cache, -100, 100, true);
     $key = md5($url);
     
     $cover = null;
@@ -81,7 +79,7 @@ function updateMetaCache($url, $track) {
         $cover = "https://" . str_replace('%%', '400x400', $track['coverUri']);
     }
 
-    $artistName = 'Unknown';
+    $artistName = 'Unknown Artist';
     if (isset($track['artists'])) {
         $artistName = implode(', ', array_column($track['artists'], 'name'));
     }
@@ -90,7 +88,7 @@ function updateMetaCache($url, $track) {
         'id' => $track['id'],
         'title' => $track['title'],
         'artist' => $artistName,
-        'album' => $track['albums'][0]['title'] ?? '',
+        'album' => $track['albums'][0]['title'] ?? 'Single',
         'image' => $cover,
         'isYandex' => true,
         'time' => ($track['durationMs'] ?? 0) / 1000
@@ -98,7 +96,7 @@ function updateMetaCache($url, $track) {
     file_put_contents(META_CACHE_FILE, json_encode($cache));
 }
 
-logMsg("Daemon Started (Robust Polling)");
+logMsg("Daemon Started (Auto-Extend Logic)");
 
 $lastTokenTime = 0;
 $api = null;
@@ -127,33 +125,38 @@ while (true) {
     if ($api && $state && !empty($state['active'])) {
         $totalQueue = getQueueLength();
         $currentPos = getCurrentSongPos();
-        $tracksAhead = $totalQueue - ($currentPos + 1);
+        $tracksRemaining = $totalQueue - ($currentPos + 1);
 
-        if ($tracksAhead < $minQueueSize) {
-            logMsg("Status: Queue has $tracksAhead ahead. Minimum is $minQueueSize.");
-
+        if ($tracksRemaining < $minQueueSize) {
             if (empty($state['queue_buffer'])) {
-                logMsg("Fetching more tracks from Yandex...");
-                try {
-                    $stationId = $state['station_id'] ?? 'user:onetwo';
-                    $tracksData = $api->getStationTracks($stationId, false);
-                    
-                    if ($tracksData && is_array($tracksData)) {
-                        $cleanTracks = [];
-                        foreach ($tracksData as $item) {
-                            $cleanTracks[] = $item['track'];
+                if ($state['mode'] === 'station') {
+                    logMsg("Fetching batch from Yandex...");
+                    try {
+                        $stationId = $state['station_id'] ?? 'user:onetwo';
+                        $tracksData = $api->getStationTracks($stationId, false);
+                        
+                        if ($tracksData && is_array($tracksData)) {
+                            $cleanTracks = [];
+                            foreach ($tracksData as $item) {
+                                $cleanTracks[] = $item['track'];
+                            }
+                            $state['queue_buffer'] = $cleanTracks;
+                            saveState($state);
+                            logMsg("Fetched " . count($cleanTracks) . " tracks.");
+                        } else {
+                            logMsg("No tracks returned. Retrying later.");
+                            sleep(10);
+                            continue;
                         }
-                        $state['queue_buffer'] = $cleanTracks;
-                        saveState($state);
-                        logMsg("Got " . count($cleanTracks) . " tracks from Yandex.");
-                    } else {
-                        logMsg("Yandex returned no tracks. Waiting 10s.");
+                    } catch (Exception $e) {
+                        logMsg("Fetch Error: " . $e->getMessage());
                         sleep(10);
                         continue;
                     }
-                } catch (Exception $e) {
-                    logMsg("Fetch Error: " . $e->getMessage());
-                    sleep(10);
+                } else {
+                    logMsg("Playlist ended. Deactivating daemon.");
+                    $state['active'] = false;
+                    saveState($state);
                     continue;
                 }
             }
@@ -167,14 +170,16 @@ while (true) {
                     if ($url) {
                         mpdSend("add \"$url\"");
                         updateMetaCache($url, $nextTrack);
-                        logMsg(">>> Added to MPD: " . $nextTrack['title']);
+                        logMsg("Added: " . $nextTrack['title']);
                         
-                        if (getMpdState() !== 'play') mpdSend("play");
+                        if (getMpdState() === 'stop') {
+                            mpdSend("play");
+                        }
                     } else {
-                        logMsg("Skipping track (no URL): " . $nextTrack['title']);
+                        logMsg("Direct link failed for: " . $nextTrack['title']);
                     }
                 } catch (Exception $e) {
-                    logMsg("Add Error: " . $e->getMessage());
+                    logMsg("Add Track Error: " . $e->getMessage());
                 }
             }
         }

@@ -191,16 +191,21 @@
 
     isLoading = true;
     try {
-      // Очищаем очередь и добавляем первый трек через play_track
-      await YandexApi.request("play_track", { id: tracks[0].id, append: "0" });
-      // Остальные треки добавляем в очередь
-      for (let i = 1; i < tracks.length; i++) {
-        await YandexApi.request("play_track", {
-          id: tracks[i].id,
-          append: "1",
-        });
-      }
-      showToast(`Playing ${tracks.length} tracks`, "success");
+      const res = await fetch(
+        window.location.origin + "/wave-yandex-api.php?action=play_playlist",
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ tracks: tracks }),
+        },
+      );
+
+      if (!res.ok) throw new Error("Server error");
+
+      showToast(`Started playing ${tracks.length} tracks`, "success");
+    } catch (e) {
+      console.error(e);
+      showToast("Failed to start playlist", "error");
     } finally {
       isLoading = false;
     }

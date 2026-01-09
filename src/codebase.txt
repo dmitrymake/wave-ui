@@ -860,16 +860,16 @@ export function createPlaylistDrag({ tracksStore, onMoveTrack }) {
 === ./lib/api.js ===
 import { get } from "svelte/store";
 import { API_ENDPOINTS } from "./constants";
-import { isSyncingLibrary, showToast, isLoadingRadio, stations } from "./store";
+import {
+  isSyncingLibrary,
+  showToast,
+  isLoadingRadio,
+  stations,
+  yandexAuthStatus,
+} from "./store";
 import SyncWorker from "./workers/sync.worker.js?worker";
 
-/**
- * Actions for interacting with the wave-api.php backend.
- */
 export const ApiActions = {
-  /**
-   * Starts library synchronization via Web Worker to prevent UI blocking during large JSON parsing.
-   */
   async syncLibrary() {
     if (get(isSyncingLibrary)) return;
 
@@ -920,9 +920,6 @@ export const ApiActions = {
     };
   },
 
-  /**
-   * Loads radio station list and normalizes it for the player.
-   */
   async loadRadioStations() {
     if (get(isLoadingRadio)) return;
 
@@ -946,7 +943,6 @@ export const ApiActions = {
         genre: item.genre || "Radio",
       }));
 
-      // Sort alphabetically by name
       normalized.sort((a, b) =>
         a.name.localeCompare(b.name, undefined, { sensitivity: "base" }),
       );
@@ -960,13 +956,9 @@ export const ApiActions = {
     }
   },
 
-  /**
-   * Set or clear the alarm via Backend cron
-   */
   async setAlarm(enabled, time, playlistName) {
     const isDev = import.meta.env.DEV;
     if (isDev) {
-      console.log(`[DEV] Setting Alarm: ${enabled}, ${time}, ${playlistName}`);
       return;
     }
 
@@ -993,9 +985,6 @@ export const ApiActions = {
     }
   },
 
-  /**
-   * Get server time for display
-   */
   async getServerTime() {
     try {
       const res = await fetch(`${API_ENDPOINTS.SYNC}?action=get_time`);
@@ -1006,6 +995,57 @@ export const ApiActions = {
     } catch (e) {
       console.error("Failed to get server time", e);
     }
+    return null;
+  },
+
+  async checkYandexAuth() {
+    try {
+      const res = await fetch(API_ENDPOINTS.YANDEX + "?action=status");
+      const data = await res.json();
+
+      yandexAuthStatus.set(data.authorized);
+      return data.authorized;
+    } catch (e) {
+      console.error("Yandex Auth Check Failed", e);
+      yandexAuthStatus.set(false);
+      return false;
+    }
+  },
+
+  async saveYandexToken(token) {
+    try {
+      const res = await fetch(API_ENDPOINTS.YANDEX + "?action=save_token", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ token }),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        throw new Error(data.error || "Failed to save");
+      }
+
+      showToast("Yandex connected successfully", "success");
+      yandexAuthStatus.set(true);
+      return true;
+    } catch (e) {
+      console.error(e);
+      showToast("Invalid token or server error", "error");
+      yandexAuthStatus.set(false);
+      return false;
+    }
+  },
+
+  async getYandexMeta(url) {
+    try {
+      const res = await fetch(
+        API_ENDPOINTS.YANDEX +
+          "?action=get_meta&url=" +
+          encodeURIComponent(url),
+      );
+      if (res.ok) return await res.json();
+    } catch (e) {}
     return null;
   },
 };
@@ -1601,15 +1641,7 @@ import { get } from "svelte/store";
 import { mpdClient } from "./client";
 import { PlayerActions, startStatusPoller } from "./player";
 import { LibraryActions } from "./library";
-import {
-  currentSong,
-  stations,
-  selectedStationName,
-  status,
-  yandexContext,
-  showToast,
-} from "../store";
-import { YandexApi } from "../yandex";
+import { currentSong, stations, selectedStationName } from "../store";
 
 export function connect() {
   mpdClient.connect();
@@ -1654,56 +1686,6 @@ export function nav(cmd) {
   const stationList = get(stations);
   const selStation = get(selectedStationName);
   const isRadioMode = song.file && song.file.startsWith("http");
-  const yCtx = get(yandexContext);
-  const playerStatus = get(status);
-
-  if (
-    yCtx.active &&
-    yCtx.tracks.length > 0 &&
-    (song.isYandex || (song.file && song.file === yCtx.currentTrackFile))
-  ) {
-    let nextIndex;
-
-    if (cmd === "next") {
-      if (playerStatus.random) {
-        let attempts = 0;
-        do {
-          nextIndex = Math.floor(Math.random() * yCtx.tracks.length);
-          attempts++;
-        } while (
-          nextIndex === yCtx.currentIndex &&
-          attempts < 5 &&
-          yCtx.tracks.length > 1
-        );
-      } else {
-        nextIndex = yCtx.currentIndex + 1;
-      }
-
-      if (nextIndex >= yCtx.tracks.length) {
-        const lastTrack = yCtx.tracks[yCtx.tracks.length - 1];
-        if (lastTrack && lastTrack.id) {
-          showToast("Playlist ended. Starting My Vibe...", "info");
-          startYandexRadio(lastTrack.id);
-        } else {
-          resolveAndQueueYandexTrack(yCtx.tracks[0], 0, true);
-        }
-        return;
-      }
-    } else {
-      if (playerStatus.random) {
-        nextIndex = Math.floor(Math.random() * yCtx.tracks.length);
-      } else {
-        nextIndex = yCtx.currentIndex - 1;
-        if (nextIndex < 0) nextIndex = yCtx.tracks.length - 1;
-      }
-    }
-
-    const nextTrack = yCtx.tracks[nextIndex];
-    if (nextTrack) {
-      resolveAndQueueYandexTrack(nextTrack, nextIndex, true);
-      return;
-    }
-  }
 
   if (
     isRadioMode &&
@@ -1731,7 +1713,6 @@ export function nav(cmd) {
 
 export function playStation(station) {
   if (!station) return;
-  yandexContext.update((ctx) => ({ ...ctx, active: false }));
 
   selectedStationName.set(station.name);
   const streamUrl =
@@ -1747,7 +1728,6 @@ export function playStation(station) {
 
 export function playTrackOptimistic(track) {
   if (!track) return;
-  yandexContext.update((ctx) => ({ ...ctx, active: false }));
   selectedStationName.set(null);
   PlayerActions.playUri(track.file, {
     title: track.title,
@@ -1755,135 +1735,6 @@ export function playTrackOptimistic(track) {
     album: track.album,
     stationName: null,
   });
-}
-
-async function resolveAndQueueYandexTrack(
-  track,
-  index,
-  playImmediately = true,
-) {
-  if (!track.id) return;
-
-  try {
-    const streamUrl = await YandexApi.getStreamUrl(track.id);
-    if (!streamUrl) throw new Error("No Stream");
-
-    yandexContext.update((ctx) => {
-      const newCache = { ...ctx.streamCache };
-      newCache[streamUrl] = {
-        ...track,
-        isYandex: true,
-        file: streamUrl,
-      };
-
-      return {
-        ...ctx,
-        active: true,
-        currentIndex: index,
-        currentTrackId: track.id,
-        currentTrackFile: streamUrl,
-        streamCache: newCache,
-      };
-    });
-
-    if (playImmediately) {
-      await PlayerActions.playUri(streamUrl, {
-        title: track.title,
-        artist: track.artist,
-        album: track.album,
-      });
-
-      prefetchNextYandexTracks(index + 1);
-    } else {
-      await PlayerActions.addToQueue(streamUrl);
-    }
-  } catch (e) {
-    showToast("Failed to play Yandex track", "error");
-    console.error(e);
-  }
-}
-
-async function prefetchNextYandexTracks(startIndex) {
-  const yCtx = get(yandexContext);
-  if (!yCtx.active || !yCtx.tracks) return;
-
-  const BATCH_SIZE = 3;
-  const tracksToQueue = [];
-
-  for (let i = 0; i < BATCH_SIZE; i++) {
-    const idx = startIndex + i;
-    if (idx < yCtx.tracks.length) {
-      tracksToQueue.push(yCtx.tracks[idx]);
-    }
-  }
-
-  if (tracksToQueue.length === 0) return;
-
-  for (const track of tracksToQueue) {
-    try {
-      const url = await YandexApi.getStreamUrl(track.id);
-
-      if (url) {
-        yandexContext.update((ctx) => {
-          const newCache = { ...ctx.streamCache };
-          newCache[url] = { ...track, isYandex: true, file: url };
-          return { ...ctx, streamCache: newCache };
-        });
-
-        await mpdClient.send(`add "${url}"`);
-      }
-    } catch (e) {
-      console.warn("Failed to prefetch", track.title);
-    }
-  }
-}
-
-export async function playYandexContext(tracks, startIndex = 0) {
-  if (!tracks || tracks.length === 0) return;
-
-  yandexContext.set({
-    active: true,
-    tracks: tracks,
-    currentIndex: startIndex,
-    currentTrackFile: null,
-    currentTrackId: tracks[startIndex].id,
-    streamCache: {},
-  });
-
-  await mpdClient.send("stop");
-  await mpdClient.send("clear");
-
-  const startTrack = tracks[startIndex];
-  resolveAndQueueYandexTrack(startTrack, startIndex, true);
-}
-
-export async function playPlaylistContext(playlistName, index = 0) {
-  if (!playlistName) return;
-  yandexContext.update((ctx) => ({ ...ctx, active: false }));
-  selectedStationName.set(null);
-  const safeName = playlistName.replace(/"/g, '\\"');
-  try {
-    await mpdClient.send("stop");
-    await mpdClient.send("clear");
-    await mpdClient.send(`load "${safeName}"`);
-    await mpdClient.send(`play ${index}`);
-  } catch (e) {
-    console.error("Failed to play playlist context", e);
-  }
-}
-
-export async function startYandexRadio(trackId) {
-  showToast("Starting My Vibe...", "info");
-  try {
-    const tracks = await YandexApi.getSimilarTracks(trackId);
-    if (tracks.length > 0) {
-      playYandexContext(tracks, 0);
-    } else {
-      showToast("No similar tracks found", "error");
-    }
-  } catch (e) {
-    showToast("Radio error", "error");
-  }
 }
 
 === ./lib/mpd/player.js ===
@@ -1901,6 +1752,7 @@ import {
   yandexContext,
 } from "../store";
 import { db } from "../db";
+import { ApiActions } from "../api";
 
 const POLLER_INTERVAL = 1000;
 const TICKER_INTERVAL = 250;
@@ -1978,7 +1830,7 @@ async function syncQueue(newVersion) {
     if (get(isQueueLocked)) return;
 
     const rawTracks = MpdParser.parseTracks(text);
-    const yCtx = get(yandexContext); // Получаем контекст
+    const yCtx = get(yandexContext);
 
     const filesToLookup = rawTracks
       .map((t) => t.file)
@@ -2012,6 +1864,10 @@ async function syncQueue(newVersion) {
         };
       }
 
+      if (fileUrl.includes("yandex.net") || fileUrl.includes("get-mp3")) {
+        fetchYandexMetaForTrack(fileUrl);
+      }
+
       const lookupKey = fileUrl.normalize("NFC");
       const cached = cachedMap.get(lookupKey);
 
@@ -2027,7 +1883,6 @@ async function syncQueue(newVersion) {
         };
       }
 
-      // 3. ФОЛЛБЭК
       return {
         ...t,
         _uid: String(t.id || t.pos + t.file),
@@ -2038,6 +1893,27 @@ async function syncQueue(newVersion) {
     queueVersion.set(newVersion);
   } catch (e) {
     console.error("Queue sync error", e);
+  }
+}
+
+async function fetchYandexMetaForTrack(url) {
+  const meta = await ApiActions.getYandexMeta(url);
+  if (meta) {
+    yandexContext.update((ctx) => {
+      const newCache = { ...ctx.streamCache };
+      newCache[url] = { ...meta, isYandex: true, file: url };
+      return { ...ctx, streamCache: newCache };
+    });
+    const song = get(currentSong);
+    if (song.file === url) {
+      currentSong.update((s) => ({ ...s, ...meta, isYandex: true }));
+    }
+    queue.update((q) =>
+      q.map((t) => {
+        if (t.file === url) return { ...t, ...meta, isYandex: true };
+        return t;
+      }),
+    );
   }
 }
 
@@ -2052,13 +1928,12 @@ function updateStores(serverStatus, serverSong) {
     yCtx.streamCache[serverSong.file]
   ) {
     const yMeta = yCtx.streamCache[serverSong.file];
-
     serverSong.title = yMeta.title;
     serverSong.artist = yMeta.artist;
     serverSong.album = yMeta.album;
     serverSong.image = yMeta.image;
     serverSong.isYandex = true;
-    serverSong.id = yMeta.id; // Yandex ID
+    serverSong.id = yMeta.id;
 
     if (
       yMeta.time > 0 &&
@@ -2066,22 +1941,12 @@ function updateStores(serverStatus, serverSong) {
     ) {
       serverStatus.duration = yMeta.time;
     }
-  } else if (yCtx.active && yCtx.tracks.length > 0) {
-    const isHashTitle =
-      serverSong.title && /^[a-f0-9]{32,128}$/i.test(serverSong.title);
-
-    if (serverSong.file === yCtx.currentTrackFile || isHashTitle) {
-      // Пытаемся угадать по текущему индексу (менее надежно, но лучше чем хэш)
-      const yTrack = yCtx.tracks[yCtx.currentIndex];
-      if (yTrack) {
-        serverSong.title = yTrack.title;
-        serverSong.artist = yTrack.artist;
-        serverSong.album = yTrack.album;
-        serverSong.image = yTrack.image;
-        serverSong.isYandex = true;
-        serverSong.id = yTrack.id;
-      }
-    }
+  } else if (
+    serverSong.file &&
+    (serverSong.file.includes("yandex.net") ||
+      serverSong.file.includes("get-mp3"))
+  ) {
+    fetchYandexMetaForTrack(serverSong.file);
   }
 
   const isRadio = serverSong.file && serverSong.file.startsWith("http");
@@ -2741,307 +2606,54 @@ export const MpdParser = {
 };
 
 === ./lib/yandex.js ===
-import { get } from "svelte/store";
-import { yandexToken, yandexFavorites } from "./store"; // Импортируем новый store
-import md5 from "md5";
+import { API_ENDPOINTS } from "./constants";
 
 export const YandexApi = {
-  async request(path, options = {}) {
-    const token = get(yandexToken);
-    if (!token) throw new Error("No token provided");
+  async request(action, params = {}) {
+    const url = new URL(window.location.origin + API_ENDPOINTS.YANDEX);
+    url.searchParams.append("action", action);
 
-    const proxyUrl = `/wave-api.php?action=yandex_proxy&path=${encodeURIComponent(path)}&token=${encodeURIComponent(token)}`;
-
-    const headers = {
-      Authorization: `OAuth ${token}`,
-      "Accept-Language": "en",
-      ...(options.headers || {}),
-    };
-
-    const res = await fetch(proxyUrl, {
-      method: options.method || "GET",
-      headers: headers,
-      body: options.body,
-    });
-
-    if (!res.ok) {
-      let errorMsg = `Yandex API Error: ${res.status}`;
-      try {
-        const errJson = await res.json();
-        if (errJson.error) errorMsg = errJson.error;
-      } catch (e) {}
-      throw new Error(errorMsg);
+    for (const key in params) {
+      url.searchParams.append(key, params[key]);
     }
 
-    if (options.isXml) {
-      return await res.text();
-    }
-
+    const res = await fetch(url);
+    if (!res.ok) throw new Error("API Error");
     return await res.json();
   },
 
-  async getUserId() {
-    const data = await this.request("/account/status");
-    if (!data.result || !data.result.account) {
-      throw new Error("Invalid response from Yandex: " + JSON.stringify(data));
-    }
-    return data.result.account.uid;
+  async search(query) {
+    return await this.request("search", { query });
   },
 
   async getUserPlaylists() {
-    try {
-      const uid = await this.getUserId();
-      const data = await this.request(`/users/${uid}/playlists/list`);
-      return data.result || [];
-    } catch (e) {
-      console.error("Yandex Playlists Error:", e);
-      return [];
-    }
+    return await this.request("get_playlists");
   },
 
-  async getPlaylistTracks(kind, uid = null, page = 0) {
-    try {
-      if (!uid) uid = await this.getUserId();
-      const data = await this.request(`/users/${uid}/playlists/${kind}`);
-      const res = data.result;
-      if (!res || !res.tracks) return { tracks: [], total: 0 };
-      const ids = res.tracks.map((t) => t.id);
-      const PAGE_SIZE = 50;
-      const start = page * PAGE_SIZE;
-      const slice = ids.slice(start, start + PAGE_SIZE);
-      const tracks = await this.getTracksByIds(slice);
-      return {
-        tracks,
-        total: ids.length,
-      };
-    } catch (e) {
-      console.error("Yandex Playlist Tracks Error:", e);
-      return { tracks: [], total: 0 };
-    }
+  async getPlaylistTracks(uid, kind) {
+    return await this.request("get_playlist_tracks", { uid, kind });
   },
 
-  async getFavorites(page = 0) {
-    try {
-      const uid = await this.getUserId();
-      const data = await this.request(`/users/${uid}/likes/tracks`);
-      let ids = [];
-      const res = data.result;
-      if (!res) return { tracks: [], total: 0 };
-
-      if (res.ids && Array.isArray(res.ids)) {
-        ids = res.ids;
-      } else if (res.library && Array.isArray(res.library)) {
-        ids = res.library.map((t) => t.id);
-      } else if (
-        res.library &&
-        res.library.tracks &&
-        Array.isArray(res.library.tracks)
-      ) {
-        ids = res.library.tracks.map((t) => t.id);
-      } else if (Array.isArray(res)) {
-        ids = res.map((t) => t.id);
-      }
-      ids = ids.filter((id) => id);
-
-      if (page === 0) {
-        yandexFavorites.set(new Set(ids.map(String)));
-      }
-      // ------------------------------------------------------------------
-
-      if (ids.length === 0) return { tracks: [], total: 0 };
-      const PAGE_SIZE = 50;
-      const start = page * PAGE_SIZE;
-      const slice = ids.slice(start, start + PAGE_SIZE);
-      const tracks = await this.getTracksByIds(slice);
-      return {
-        tracks,
-        total: ids.length,
-      };
-    } catch (e) {
-      console.error("Yandex Favorites Error:", e);
-      return { tracks: [], total: 0 };
+  async playRadio(trackId) {
+    if (trackId) {
+      return await this.request("play_station", {
+        station: "track:" + trackId,
+      });
     }
+    return await this.request("play_station", { station: "user:onetwo" });
+  },
+
+  async playStation(stationId) {
+    return await this.request("play_station", { station: stationId });
+  },
+
+  async playTrack(trackId) {
+    return await this.request("play_track", { id: trackId });
   },
 
   async toggleLike(trackId, isLiked) {
-    const uid = await this.getUserId();
-    const action = isLiked ? "remove" : "add";
-
-    // Оптимистичное обновление UI
-    yandexFavorites.update((s) => {
-      const n = new Set(s);
-      if (isLiked) n.delete(String(trackId));
-      else n.add(String(trackId));
-      return n;
-    });
-
-    try {
-      await this.request(`/users/${uid}/likes/tracks/${action}`, {
-        method: "POST",
-        body: `track-id=${trackId}`,
-      });
-    } catch (e) {
-      console.error("Failed to toggle like", e);
-      // Откат при ошибке
-      yandexFavorites.update((s) => {
-        const n = new Set(s);
-        if (isLiked) n.add(String(trackId));
-        else n.delete(String(trackId));
-        return n;
-      });
-      throw e;
-    }
-  },
-  // ------------------------------------
-
-  // ... (остальные методы search, getAlbumTracks, getArtistTracks, getSimilarTracks, getTracksByIds, getStreamUrl, normalizeTracks оставляем как есть)
-  async search(query, type = "all", page = 0) {
-    if (!query) return { tracks: [], albums: [], artists: [] };
-    try {
-      const p = page;
-      const data = await this.request(
-        `/search?text=${encodeURIComponent(query)}&type=${type}&page=${p}&nocorrect=false`,
-      );
-      const res = data.result;
-      let tracks = [];
-      let albums = [];
-      let artists = [];
-      if (res.tracks && res.tracks.results) {
-        tracks = this.normalizeTracks(res.tracks.results);
-      }
-      if (res.albums && res.albums.results) {
-        albums = res.albums.results.map((a) => ({
-          ...a,
-          isAlbum: true,
-          image: a.coverUri
-            ? `https://${a.coverUri.replace("%%", "200x200")}`
-            : null,
-          artist:
-            a.artists && a.artists.length > 0 ? a.artists[0].name : "Unknown",
-        }));
-      }
-      if (res.artists && res.artists.results) {
-        artists = res.artists.results.map((a) => ({
-          ...a,
-          isArtist: true,
-          name: a.name,
-          image:
-            a.cover && a.cover.uri
-              ? `https://${a.cover.uri.replace("%%", "200x200")}`
-              : null,
-        }));
-      }
-      return { tracks, albums, artists };
-    } catch (e) {
-      console.error("Yandex Search Error:", e);
-      return { tracks: [], albums: [], artists: [] };
-    }
-  },
-
-  async getAlbumTracks(albumId) {
-    try {
-      const data = await this.request(`/albums/${albumId}/with-tracks`);
-      if (!data.result || !data.result.volumes) return [];
-
-      const rawTracks = [];
-      data.result.volumes.forEach((vol) => {
-        if (Array.isArray(vol)) {
-          rawTracks.push(...vol);
-        }
-      });
-      return this.normalizeTracks(rawTracks);
-    } catch (e) {
-      console.error("Yandex Album Error:", e);
-      return [];
-    }
-  },
-
-  async getArtistTracks(artistId) {
-    try {
-      const data = await this.request(
-        `/artists/${artistId}/tracks?page=0&page-size=50`,
-      );
-      if (!data.result || !data.result.tracks) return [];
-      return this.normalizeTracks(data.result.tracks);
-    } catch (e) {
-      console.error("Yandex Artist Error:", e);
-      return [];
-    }
-  },
-
-  async getSimilarTracks(trackId) {
-    try {
-      const data = await this.request(`/tracks/${trackId}/similar`);
-      if (!data.result || !data.result.similarTracks) return [];
-      return this.normalizeTracks(data.result.similarTracks);
-    } catch (e) {
-      console.error("Yandex Similar Tracks Error:", e);
-      return [];
-    }
-  },
-
-  async getTracksByIds(ids) {
-    if (!ids.length) return [];
-    const data = await this.request("/tracks", {
-      method: "POST",
-      body: `track-ids=${ids.join(",")}`,
-    });
-    return this.normalizeTracks(data.result);
-  },
-
-  async getStreamUrl(trackId) {
-    try {
-      const data = await this.request(`/tracks/${trackId}/download-info`);
-      if (!data.result || !data.result[0]) throw new Error("No download info");
-
-      const sorted = data.result.sort(
-        (a, b) => b.bitrate_in_kbps - a.bitrate_in_kbps,
-      );
-      const target = sorted[0];
-
-      const srcUrl = target.downloadInfoUrl;
-      const xmlText = await this.request(srcUrl, { isXml: true });
-
-      const parser = new DOMParser();
-      const xmlDoc = parser.parseFromString(xmlText, "text/xml");
-
-      const host = xmlDoc.getElementsByTagName("host")[0]?.textContent;
-      const path = xmlDoc.getElementsByTagName("path")[0]?.textContent;
-      const ts = xmlDoc.getElementsByTagName("ts")[0]?.textContent;
-      const s = xmlDoc.getElementsByTagName("s")[0]?.textContent;
-
-      if (!host || !path || !ts || !s) throw new Error("Invalid XML format");
-
-      const SALT = "XGRlBW9FXlekgbPrRHuSiA";
-      const sign = md5(SALT + path.substring(1) + s);
-
-      return `https://${host}/get-mp3/${sign}/${ts}${path}`;
-    } catch (e) {
-      console.error("Failed to get Yandex Stream URL", e);
-      return null;
-    }
-  },
-
-  normalizeTracks(rawTracks) {
-    if (!Array.isArray(rawTracks)) return [];
-
-    return rawTracks.map((t) => ({
-      title: t.title,
-      artist:
-        t.artists && t.artists.length > 0
-          ? t.artists.map((a) => a.name).join(", ")
-          : "Unknown",
-      album: t.albums && t.albums.length > 0 ? t.albums[0].title : "Single",
-      file: `https://music.yandex.ru/album/${t.albums && t.albums[0] ? t.albums[0].id : 0}/track/${t.id}`,
-      id: t.id,
-      image: t.coverUri
-        ? `https://${t.coverUri.replace("%%", "200x200")}`
-        : null,
-      time: t.durationMs ? t.durationMs / 1000 : 0,
-      genre: "Yandex Music",
-      isYandex: true,
-      stationName: null,
-    }));
+    const action = isLiked ? "dislike" : "like";
+    return await this.request(action, { track_id: trackId });
   },
 };
 
@@ -3357,6 +2969,7 @@ export const DATABASE = {
 
 export const API_ENDPOINTS = {
   SYNC: `/wave-api.php`,
+  YANDEX: `/wave-yandex-api.php`,
   STATIONS: (isDev) => `/wave-api.php?action=stations`,
   COVER_ART: (file) => `/coverart.php?u=${encodeURIComponent(file)}`,
   RADIO_LOGOS: (filename) => `/imagesw/radio-logos/thumbs/${filename}`,
@@ -3381,6 +2994,7 @@ import { THEMES } from "./theme";
 import md5 from "md5";
 
 export const connectionStatus = writable("Disconnected");
+export const yandexAuthStatus = writable(false);
 
 export const toastMessage = writable(null);
 let toastTimer;
@@ -3722,7 +3336,7 @@ export function getTrackThumbUrl(
 function isRadioTrack(file) {
   if (!file) return false;
   // If it's explicitly marked as Yandex (which uses http stream), don't treat as generic radio
-  if (file.includes("yandex.ru") || file.includes("get-mp3")) return false;
+  if (file.includes("yandex.net") || file.includes("get-mp3")) return false;
 
   return (
     file.startsWith("http") || file.includes("://") || file.includes("RADIO")
@@ -3789,15 +3403,6 @@ isAlarmEnabled.subscribe((val) =>
   localStorage.setItem("alarmEnabled", String(val)),
 );
 alarmPlaylist.subscribe((val) => localStorage.setItem("alarmPlaylist", val));
-
-const savedYandexToken = localStorage.getItem("yandex_token") || "";
-export const yandexToken = writable(savedYandexToken);
-
-yandexToken.subscribe((val) => {
-  if (typeof localStorage !== "undefined") {
-    localStorage.setItem("yandex_token", val);
-  }
-});
 
 const savedYandexEnabled = localStorage.getItem("yandex_enabled") === "true";
 export const isYandexEnabled = writable(savedYandexEnabled);
@@ -4244,7 +3849,7 @@ self.addEventListener("fetch", (event) => {
   import { PlayerActions } from "../lib/mpd/player";
   import { LibraryActions } from "../lib/mpd/library";
   import { mpdClient } from "../lib/mpd/client";
-  import { startYandexRadio } from "../lib/mpd/index";
+  import { YandexApi } from "../lib/yandex"; // Импорт API вместо старой функции
 
   let innerWidth;
   let innerHeight;
@@ -4382,10 +3987,15 @@ self.addEventListener("fetch", (event) => {
     });
   }
 
-  function handleMyVibe() {
+  async function handleMyVibe() {
     const t = $contextMenu.track;
     if (t && t.isYandex && t.id) {
-      startYandexRadio(t.id);
+      showToast("Starting My Vibe...", "info");
+      try {
+        await YandexApi.playRadio(t.id);
+      } catch (e) {
+        showToast("Failed to start radio", "error");
+      }
     }
     closeContextMenu();
   }
@@ -7229,11 +6839,10 @@ self.addEventListener("fetch", (event) => {
 === ./components/views/YandexView.svelte ===
 <script>
   import { onMount } from "svelte";
-  import { fade, fly } from "svelte/transition";
+  import { fade } from "svelte/transition";
   import { YandexApi } from "../../lib/yandex";
-  import { yandexToken, showToast, yandexContext } from "../../lib/store";
+  import { yandexAuthStatus, showToast } from "../../lib/store";
   import { ICONS } from "../../lib/icons";
-  import { playYandexContext } from "../../lib/mpd/index";
   import TrackRow from "../TrackRow.svelte";
   import BaseList from "./BaseList.svelte";
   import Skeleton from "../Skeleton.svelte";
@@ -7244,132 +6853,110 @@ self.addEventListener("fetch", (event) => {
   let playlists = [];
   let isLoading = false;
   let viewMode = "dashboard";
-  let activePlaylistName = "";
-  let activePlaylistData = null;
+
+  // Хлебные крошки и заголовок
+  let activeTitle = "";
+  let activeSubtitle = "";
 
   let searchQuery = "";
   let searchType = "all";
   let searchResults = { tracks: [], albums: [], artists: [] };
   let searchTimer;
 
-  let page = 0;
-  let hasMore = true;
-  let showLoadMoreButton = false;
-  let observer;
-  let sentinel;
-
-  $: isTokenSet = !!$yandexToken;
+  $: isTokenSet = $yandexAuthStatus;
 
   onMount(() => {
     if (isTokenSet) {
       loadDashboard();
     }
-    return () => {
-      if (observer) observer.disconnect();
-    };
   });
-
-  // Setup observer for the sentinel element
-  function setupObserver(node) {
-    sentinel = node;
-    if (observer) observer.disconnect();
-
-    observer = new IntersectionObserver(
-      (entries) => {
-        const entry = entries[0];
-        // If sentinel is visible, user is at bottom
-        showLoadMoreButton = entry.isIntersecting && hasMore && !isLoading;
-      },
-      {
-        root: null, // viewport
-        rootMargin: "0px",
-        threshold: 0.1,
-      },
-    );
-
-    observer.observe(sentinel);
-
-    return {
-      destroy() {
-        if (observer) observer.disconnect();
-      },
-    };
-  }
 
   async function loadDashboard() {
     isLoading = true;
     try {
-      const userPlaylists = await YandexApi.getUserPlaylists();
+      const userPls = await YandexApi.getUserPlaylists();
+
       playlists = [
         {
-          kind: "favorites",
-          title: "Favorites",
-          cover: { uri: null },
-          trackCount: "♥",
+          title: "My Vibe",
+          kind: "my_vibe",
+          cover: null,
+          isStation: true,
         },
-        ...userPlaylists,
+        ...userPls,
       ];
     } catch (e) {
       console.error(e);
+      showToast("Failed to load playlists", "error");
     } finally {
       isLoading = false;
     }
   }
 
   async function openPlaylist(pl) {
-    isLoading = true;
-    viewMode = "playlist";
-    activePlaylistName = pl.title;
-    activePlaylistData = pl;
+    if (pl.kind === "my_vibe") {
+      showToast("Starting My Vibe...", "info");
+      try {
+        await YandexApi.playRadio();
+      } catch (e) {
+        showToast("Failed to start radio", "error");
+      }
+      return;
+    }
+
+    viewMode = "list";
+    activeTitle = pl.title;
+    activeSubtitle = pl.trackCount + " tracks";
     tracksStore.set([]);
-    page = 0;
-    hasMore = true;
-    showLoadMoreButton = false;
-
-    await loadMoreTracks();
-  }
-
-  async function loadMoreTracks() {
-    if (!hasMore && page > 0) return;
     isLoading = true;
-    showLoadMoreButton = false;
 
     try {
-      let res;
-      if (activePlaylistData.kind === "favorites") {
-        res = await YandexApi.getFavorites(page);
-      } else if (activePlaylistData.kind === "album") {
-        if (page === 0) {
-          const tracks = await YandexApi.getAlbumTracks(activePlaylistData.id);
-          res = { tracks, total: tracks.length };
-        } else {
-          res = { tracks: [], total: 0 };
-        }
-      } else if (activePlaylistData.kind === "artist") {
-        if (page === 0) {
-          const tracks = await YandexApi.getArtistTracks(activePlaylistData.id);
-          res = { tracks, total: tracks.length };
-        } else {
-          res = { tracks: [], total: 0 };
-        }
-      } else {
-        res = await YandexApi.getPlaylistTracks(
-          activePlaylistData.kind,
-          activePlaylistData.uid,
-          page,
-        );
-      }
-
-      if (res.tracks.length === 0) {
-        hasMore = false;
-      } else {
-        tracksStore.update((curr) => [...curr, ...res.tracks]);
-        page++;
-        if (res.tracks.length < 50) hasMore = false;
+      const res = await YandexApi.getPlaylistTracks(pl.uid, pl.kind);
+      if (res && res.tracks) {
+        tracksStore.set(res.tracks);
       }
     } catch (e) {
       showToast("Failed to load tracks", "error");
-      hasMore = false;
+    } finally {
+      isLoading = false;
+    }
+  }
+
+  async function openAlbum(album) {
+    viewMode = "list";
+    activeTitle = album.title;
+    activeSubtitle = album.artist;
+    tracksStore.set([]);
+    isLoading = true;
+
+    try {
+      const res = await YandexApi.request("get_album_tracks", { id: album.id });
+      if (res && res.tracks) {
+        tracksStore.set(res.tracks);
+      }
+    } catch (e) {
+      showToast("Failed to load album", "error");
+    } finally {
+      isLoading = false;
+    }
+  }
+
+  async function openArtist(artist) {
+    viewMode = "list";
+    activeTitle = artist.title;
+    activeSubtitle = "Popular Tracks";
+    tracksStore.set([]);
+    isLoading = true;
+
+    try {
+      const res = await YandexApi.request("get_artist_tracks", {
+        id: artist.id,
+      });
+      if (res && res.tracks) {
+        tracksStore.set(res.tracks);
+      }
+    } catch (e) {
+      showToast("Failed to load artist", "error");
     } finally {
       isLoading = false;
     }
@@ -7399,70 +6986,50 @@ self.addEventListener("fetch", (event) => {
     searchResults = { tracks: [], albums: [], artists: [] };
 
     try {
-      const res = await YandexApi.search(
-        searchQuery,
-        searchType === "all" ? "all" : searchType,
-        0,
-      );
-      searchResults = res;
-      if (searchType === "track" || searchType === "all") {
-        tracksStore.set(res.tracks);
-      } else {
-        tracksStore.set([]);
+      const res = await YandexApi.search(searchQuery);
+      if (res) {
+        searchResults = res;
+        if (searchType === "track" || searchType === "all") {
+          tracksStore.set(res.tracks || []);
+        }
       }
     } catch (e) {
+      console.error(e);
       showToast("Search failed", "error");
     } finally {
       isLoading = false;
     }
   }
 
-  async function openAlbum(album) {
-    isLoading = true;
-    viewMode = "playlist";
-    activePlaylistName = album.title;
-    activePlaylistData = { kind: "album", id: album.id };
-    tracksStore.set([]);
-    page = 0;
-    hasMore = true;
-    await loadMoreTracks();
-  }
-
-  async function openArtist(artist) {
-    isLoading = true;
-    viewMode = "playlist";
-    activePlaylistName = artist.name;
-    activePlaylistData = { kind: "artist", id: artist.id };
-    tracksStore.set([]);
-    page = 0;
-    hasMore = true;
-    await loadMoreTracks();
-  }
-
   function goBack() {
-    viewMode = "dashboard";
-    searchQuery = "";
-    tracksStore.set([]);
-  }
-
-  async function handlePlay(index) {
-    playYandexContext($tracksStore, index);
-  }
-
-  function getCover(pl) {
-    if (pl.kind === "favorites") return null;
-    if (pl.cover && pl.cover.uri) {
-      return `https://${pl.cover.uri.replace("%%", "200x200")}`;
+    if (viewMode === "list") {
+      if (searchQuery.length > 0) viewMode = "search";
+      else viewMode = "dashboard";
+    } else {
+      viewMode = "dashboard";
+      searchQuery = "";
+      tracksStore.set([]);
     }
-    return null;
+  }
+
+  async function handlePlayTrack(track) {
+    if (track.id) {
+      showToast(`Playing ${track.title}...`, "info");
+      try {
+        await YandexApi.playTrack(track.id);
+      } catch (e) {
+        console.error(e);
+        showToast("Error playing track", "error");
+      }
+    }
   }
 </script>
 
 <div class="view-container scrollable relative-parent">
   {#if !isTokenSet}
     <div class="token-alert content-padded">
-      <h3>Yandex Music Token Required</h3>
-      <p>Please go to Settings and enter your OAuth token.</p>
+      <h3>Yandex Music Not Connected</h3>
+      <p>Please go to Settings and connect your account.</p>
     </div>
   {:else}
     <div class="content-padded no-bottom-pad">
@@ -7483,7 +7050,13 @@ self.addEventListener("fetch", (event) => {
         />
 
         {#if searchQuery}
-          <button class="clear-btn" on:click={goBack}>
+          <button
+            class="clear-btn"
+            on:click={() => {
+              searchQuery = "";
+              viewMode = "dashboard";
+            }}
+          >
             {@html ICONS.CLOSE}
           </button>
         {/if}
@@ -7498,14 +7071,6 @@ self.addEventListener("fetch", (event) => {
           <button
             class:active={searchType === "track"}
             on:click={() => setSearchType("track")}>Tracks</button
-          >
-          <button
-            class:active={searchType === "album"}
-            on:click={() => setSearchType("album")}>Albums</button
-          >
-          <button
-            class:active={searchType === "artist"}
-            on:click={() => setSearchType("artist")}>Artists</button
           >
         </div>
       {/if}
@@ -7533,21 +7098,25 @@ self.addEventListener("fetch", (event) => {
               <div class="music-card" on:click={() => openPlaylist(pl)}>
                 <div
                   class="card-img-container"
-                  class:is-fav={pl.kind === "favorites"}
+                  class:is-vibe={pl.kind === "my_vibe"}
                 >
-                  {#if pl.kind === "favorites"}
-                    <div class="icon-wrap">{@html ICONS.HEART_FILLED}</div>
-                  {:else if getCover(pl)}
-                    <img src={getCover(pl)} alt={pl.title} loading="lazy" />
+                  {#if pl.kind === "my_vibe"}
+                    <div class="icon-wrap">{@html ICONS.RADIO}</div>
                   {:else}
-                    <div class="icon-wrap">{@html ICONS.PLAYLISTS}</div>
+                    <ImageLoader src={pl.cover} alt={pl.title} radius="8px">
+                      <div slot="fallback" class="icon-fallback">
+                        {@html ICONS.PLAYLISTS}
+                      </div>
+                    </ImageLoader>
                   {/if}
                   <div class="play-overlay">
                     <span class="overlay-icon">{@html ICONS.PLAY}</span>
                   </div>
                 </div>
                 <div class="card-title">{pl.title}</div>
-                <div class="card-sub">{pl.trackCount} tracks</div>
+                {#if pl.trackCount}<div class="card-sub">
+                    {pl.trackCount} tracks
+                  </div>{/if}
               </div>
             {/each}
           </div>
@@ -7557,7 +7126,29 @@ self.addEventListener("fetch", (event) => {
 
     {#if viewMode === "search"}
       <div class="content-padded">
-        {#if searchResults.albums.length > 0 && (searchType === "all" || searchType === "album")}
+        {#if searchResults.artists && searchResults.artists.length > 0 && searchType === "all"}
+          <h3 class="header-label">Artists</h3>
+          <div class="music-grid horizontal section-mb">
+            {#each searchResults.artists as artist}
+              <div class="music-card" on:click={() => openArtist(artist)}>
+                <div class="card-img-container rounded">
+                  <ImageLoader
+                    src={artist.image}
+                    alt={artist.title}
+                    radius="50%"
+                  >
+                    <div slot="fallback" class="icon-fallback">
+                      {@html ICONS.ARTISTS}
+                    </div>
+                  </ImageLoader>
+                </div>
+                <div class="card-title center">{artist.title}</div>
+              </div>
+            {/each}
+          </div>
+        {/if}
+
+        {#if searchResults.albums && searchResults.albums.length > 0 && searchType === "all"}
           <h3 class="header-label">Albums</h3>
           <div class="music-grid horizontal section-mb">
             {#each searchResults.albums as album}
@@ -7575,72 +7166,32 @@ self.addEventListener("fetch", (event) => {
             {/each}
           </div>
         {/if}
-
-        {#if searchResults.artists.length > 0 && (searchType === "all" || searchType === "artist")}
-          <h3 class="header-label">Artists</h3>
-          <div class="music-grid horizontal section-mb">
-            {#each searchResults.artists as artist}
-              <div class="music-card" on:click={() => openArtist(artist)}>
-                <div class="card-img-container rounded">
-                  <ImageLoader
-                    src={artist.image}
-                    alt={artist.name}
-                    radius="50%"
-                  >
-                    <div slot="fallback" class="icon-fallback">
-                      {@html ICONS.ARTISTS}
-                    </div>
-                  </ImageLoader>
-                </div>
-                <div class="card-title center">{artist.name}</div>
-              </div>
-            {/each}
-          </div>
-        {/if}
       </div>
     {/if}
 
-    {#if viewMode === "playlist" || (viewMode === "search" && (searchType === "all" || searchType === "track"))}
+    {#if viewMode === "list" || (viewMode === "search" && (searchType === "all" || searchType === "track"))}
       <BaseList
         itemsStore={tracksStore}
         {isLoading}
         emptyText={viewMode === "search" ? "No results" : "Playlist is empty"}
       >
         <div slot="header" class="content-padded">
-          <div class="playlist-header">
-            <h1 class="header-title">{activePlaylistName}</h1>
-            <div class="meta-tag">
-              {$tracksStore.length}{hasMore ? "+" : ""} tracks
+          {#if viewMode === "list"}
+            <div class="playlist-header">
+              <h1>{activeTitle}</h1>
+              <div class="card-sub">{activeSubtitle}</div>
             </div>
-          </div>
+          {/if}
         </div>
-
         <div slot="row" let:item let:index>
           <TrackRow
             track={item}
             {index}
             isEditable={false}
-            on:play={() => handlePlay(index)}
+            on:play={() => handlePlayTrack(item)}
           />
         </div>
-
-        <div slot="footer">
-          {#if hasMore && !isLoading}
-            <div
-              use:setupObserver
-              style="height: 20px; width: 100%; margin-top: 20px;"
-            ></div>
-          {/if}
-        </div>
       </BaseList>
-
-      {#if showLoadMoreButton}
-        <div class="floating-fab-container" transition:fly={{ y: 20 }}>
-          <button class="fab-load-more" on:click={loadMoreTracks}>
-            Load More
-          </button>
-        </div>
-      {/if}
     {/if}
   {/if}
 </div>
@@ -7649,7 +7200,7 @@ self.addEventListener("fetch", (event) => {
   @import "./MusicViews.css";
 
   .relative-parent {
-    position: relative; /* Needed for absolute positioning of FAB */
+    position: relative;
   }
 
   .token-alert {
@@ -7741,12 +7292,20 @@ self.addEventListener("fetch", (event) => {
     color: var(--c-text-primary);
   }
 
-  .card-img-container.is-fav {
-    background: linear-gradient(135deg, var(--c-heart), #9e1a1a);
+  .playlist-header h1 {
+    margin: 0;
+    font-size: 24px;
+    color: var(--c-text-primary);
   }
 
+  .card-img-container.is-vibe {
+    background: linear-gradient(135deg, #a4508b, #5f0a87);
+  }
   .card-img-container.rounded {
     border-radius: 50%;
+  }
+  .card-title.center {
+    text-align: center;
   }
 
   .icon-wrap {
@@ -7777,53 +7336,15 @@ self.addEventListener("fetch", (event) => {
     opacity: 0.5;
   }
 
-  .playlist-header {
-    margin-bottom: 10px;
-  }
-
   .section-mb {
     margin-bottom: 24px;
-  }
-
-  .card-title.center {
-    text-align: center;
-  }
-
-  /* Floating Action Button for Load More */
-  .floating-fab-container {
-    position: absolute;
-    bottom: 20px;
-    left: 0;
-    width: 100%;
-    display: flex;
-    justify-content: center;
-    pointer-events: none; /* Let clicks pass through empty space */
-    z-index: 100;
-  }
-
-  .fab-load-more {
-    pointer-events: auto;
-    background: var(--c-accent);
-    color: white;
-    border: none;
-    padding: 10px 24px;
-    border-radius: 30px;
-    font-weight: 600;
-    font-size: 14px;
-    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
-    cursor: pointer;
-    transition: transform 0.2s;
-  }
-
-  .fab-load-more:active {
-    transform: scale(0.95);
   }
 </style>
 
 === ./components/views/SettingsView.svelte ===
 <script>
-  import { fade } from "svelte/transition";
   import { onMount, onDestroy } from "svelte";
+  import { fade } from "svelte/transition";
   import { CONFIG } from "../../config";
   import {
     showToast,
@@ -7833,8 +7354,8 @@ self.addEventListener("fetch", (event) => {
     isAlarmEnabled,
     alarmPlaylist,
     playlists,
-    yandexToken,
     isYandexEnabled,
+    yandexAuthStatus,
   } from "../../lib/store";
   import { ApiActions } from "../../lib/api";
   import { THEMES } from "../../lib/theme";
@@ -7843,6 +7364,8 @@ self.addEventListener("fetch", (event) => {
   let ipAddress = CONFIG.MOODE_IP;
   let serverTime = "--:--";
   let timeInterval;
+  let inputToken = "";
+  let isChecking = false;
 
   function saveConnection() {
     CONFIG.setMoodeIp(ipAddress);
@@ -7857,10 +7380,6 @@ self.addEventListener("fetch", (event) => {
       ? __BUILD_DATE__
       : new Date().toISOString();
   const buildDate = new Date(buildDateRaw).toLocaleString();
-
-  function handleFeatureNotReady() {
-    showToast("Coming soon in next update", "info");
-  }
 
   function openThemeSelector() {
     const options = THEMES.map((t) => ({ label: t.label, value: t.id }));
@@ -7886,6 +7405,7 @@ self.addEventListener("fetch", (event) => {
   onMount(() => {
     fetchServerTime();
     timeInterval = setInterval(fetchServerTime, 60000);
+    ApiActions.checkYandexAuth();
   });
 
   onDestroy(() => {
@@ -7912,6 +7432,16 @@ self.addEventListener("fetch", (event) => {
     isYandexEnabled.update((v) => !v);
   }
 
+  async function handleSaveToken() {
+    if (!inputToken) return;
+    isChecking = true;
+    const success = await ApiActions.saveYandexToken(inputToken);
+    isChecking = false;
+    if (success) {
+      inputToken = "";
+    }
+  }
+
   $: activeThemeLabel =
     THEMES.find((t) => t.id === $currentTheme)?.label || "Default";
 </script>
@@ -7919,6 +7449,60 @@ self.addEventListener("fetch", (event) => {
 <div class="view-container scrollable" in:fade={{ duration: 200 }}>
   <div class="content-padded">
     <h1 class="header-title big">Settings</h1>
+
+    <div class="section">
+      <div class="section-header">
+        <span>Services</span>
+      </div>
+      <div class="card">
+        <div class="row space-between">
+          <label>Enable Yandex Music (Beta)</label>
+          <button
+            class="toggle-btn"
+            class:active={$isYandexEnabled}
+            on:click={toggleYandex}
+          >
+            <div class="toggle-circle"></div>
+          </button>
+        </div>
+
+        {#if $isYandexEnabled}
+          <div class="separator" in:fade></div>
+
+          <div class="row space-between" in:fade>
+            <label>Connection Status</label>
+            {#if $yandexAuthStatus}
+              <span class="status-badge connected">Connected</span>
+            {:else}
+              <span class="status-badge disconnected">Not Connected</span>
+            {/if}
+          </div>
+
+          <div class="separator" in:fade></div>
+
+          <div class="row" in:fade>
+            <label for="yandex-token">OAuth Token</label>
+            <div class="input-group">
+              <input
+                id="yandex-token"
+                type="password"
+                bind:value={inputToken}
+                placeholder="Paste token here..."
+              />
+              <button
+                class="btn-primary small"
+                disabled={isChecking}
+                on:click={handleSaveToken}
+              >
+                {isChecking ? "Checking..." : "Save"}
+              </button>
+            </div>
+          </div>
+
+          <p class="hint" in:fade>Token is stored securely on the device.</p>
+        {/if}
+      </div>
+    </div>
 
     <div class="section">
       <div class="section-header">
@@ -7973,10 +7557,6 @@ self.addEventListener("fetch", (event) => {
               <div class="select-arrow">{@html ICONS.CHEVRON_DOWN}</div>
             </div>
           </div>
-
-          <p class="hint" in:fade>
-            Player will clear queue, load this playlist and play at set time.
-          </p>
         {/if}
       </div>
     </div>
@@ -7993,49 +7573,6 @@ self.addEventListener("fetch", (event) => {
             <span class="chevron">{@html ICONS.NEXT}</span>
           </div>
         </div>
-      </div>
-    </div>
-
-    <div class="section">
-      <div class="section-header">
-        <span>Services</span>
-      </div>
-      <div class="card">
-        <div class="row space-between">
-          <label>Enable Yandex Music (Beta)</label>
-          <button
-            class="toggle-btn"
-            class:active={$isYandexEnabled}
-            on:click={toggleYandex}
-          >
-            <div class="toggle-circle"></div>
-          </button>
-        </div>
-
-        {#if $isYandexEnabled}
-          <div class="separator" in:fade></div>
-
-          <div class="row" in:fade>
-            <label for="yandex-token">OAuth Token</label>
-            <div class="input-group">
-              <input
-                id="yandex-token"
-                type="password"
-                bind:value={$yandexToken}
-                placeholder="Enter token..."
-              />
-            </div>
-          </div>
-
-          <p class="hint" in:fade>
-            Required to access your library and stream music.
-            <a
-              href="https://github.com/MarshalX/yandex-music-api/discussions/513"
-              target="_blank"
-              style="color: var(--c-accent);">How to get token</a
-            >
-          </p>
-        {/if}
       </div>
     </div>
 
@@ -8075,11 +7612,6 @@ self.addEventListener("fetch", (event) => {
         <div class="info-row">
           <span>Build Date</span>
           <span class="mono small">{buildDate}</span>
-        </div>
-        <div class="separator"></div>
-        <div class="info-row">
-          <span>Developer</span>
-          <span>Moode WaveUI</span>
         </div>
       </div>
     </div>
@@ -8308,6 +7840,21 @@ self.addEventListener("fetch", (event) => {
   .select-arrow :global(svg) {
     width: 100%;
     height: 100%;
+  }
+
+  .status-badge {
+    font-size: 12px;
+    padding: 4px 8px;
+    border-radius: 4px;
+    font-weight: bold;
+  }
+  .connected {
+    background: rgba(46, 204, 113, 0.2);
+    color: #2ecc71;
+  }
+  .disconnected {
+    background: rgba(231, 76, 60, 0.2);
+    color: #e74c3c;
   }
 </style>
 
@@ -12066,16 +11613,16 @@ export function createPlaylistDrag({ tracksStore, onMoveTrack }) {
 === lib/api.js ===
 import { get } from "svelte/store";
 import { API_ENDPOINTS } from "./constants";
-import { isSyncingLibrary, showToast, isLoadingRadio, stations } from "./store";
+import {
+  isSyncingLibrary,
+  showToast,
+  isLoadingRadio,
+  stations,
+  yandexAuthStatus,
+} from "./store";
 import SyncWorker from "./workers/sync.worker.js?worker";
 
-/**
- * Actions for interacting with the wave-api.php backend.
- */
 export const ApiActions = {
-  /**
-   * Starts library synchronization via Web Worker to prevent UI blocking during large JSON parsing.
-   */
   async syncLibrary() {
     if (get(isSyncingLibrary)) return;
 
@@ -12126,9 +11673,6 @@ export const ApiActions = {
     };
   },
 
-  /**
-   * Loads radio station list and normalizes it for the player.
-   */
   async loadRadioStations() {
     if (get(isLoadingRadio)) return;
 
@@ -12152,7 +11696,6 @@ export const ApiActions = {
         genre: item.genre || "Radio",
       }));
 
-      // Sort alphabetically by name
       normalized.sort((a, b) =>
         a.name.localeCompare(b.name, undefined, { sensitivity: "base" }),
       );
@@ -12166,13 +11709,9 @@ export const ApiActions = {
     }
   },
 
-  /**
-   * Set or clear the alarm via Backend cron
-   */
   async setAlarm(enabled, time, playlistName) {
     const isDev = import.meta.env.DEV;
     if (isDev) {
-      console.log(`[DEV] Setting Alarm: ${enabled}, ${time}, ${playlistName}`);
       return;
     }
 
@@ -12199,9 +11738,6 @@ export const ApiActions = {
     }
   },
 
-  /**
-   * Get server time for display
-   */
   async getServerTime() {
     try {
       const res = await fetch(`${API_ENDPOINTS.SYNC}?action=get_time`);
@@ -12212,6 +11748,57 @@ export const ApiActions = {
     } catch (e) {
       console.error("Failed to get server time", e);
     }
+    return null;
+  },
+
+  async checkYandexAuth() {
+    try {
+      const res = await fetch(API_ENDPOINTS.YANDEX + "?action=status");
+      const data = await res.json();
+
+      yandexAuthStatus.set(data.authorized);
+      return data.authorized;
+    } catch (e) {
+      console.error("Yandex Auth Check Failed", e);
+      yandexAuthStatus.set(false);
+      return false;
+    }
+  },
+
+  async saveYandexToken(token) {
+    try {
+      const res = await fetch(API_ENDPOINTS.YANDEX + "?action=save_token", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ token }),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        throw new Error(data.error || "Failed to save");
+      }
+
+      showToast("Yandex connected successfully", "success");
+      yandexAuthStatus.set(true);
+      return true;
+    } catch (e) {
+      console.error(e);
+      showToast("Invalid token or server error", "error");
+      yandexAuthStatus.set(false);
+      return false;
+    }
+  },
+
+  async getYandexMeta(url) {
+    try {
+      const res = await fetch(
+        API_ENDPOINTS.YANDEX +
+          "?action=get_meta&url=" +
+          encodeURIComponent(url),
+      );
+      if (res.ok) return await res.json();
+    } catch (e) {}
     return null;
   },
 };
@@ -12807,15 +12394,7 @@ import { get } from "svelte/store";
 import { mpdClient } from "./client";
 import { PlayerActions, startStatusPoller } from "./player";
 import { LibraryActions } from "./library";
-import {
-  currentSong,
-  stations,
-  selectedStationName,
-  status,
-  yandexContext,
-  showToast,
-} from "../store";
-import { YandexApi } from "../yandex";
+import { currentSong, stations, selectedStationName } from "../store";
 
 export function connect() {
   mpdClient.connect();
@@ -12860,56 +12439,6 @@ export function nav(cmd) {
   const stationList = get(stations);
   const selStation = get(selectedStationName);
   const isRadioMode = song.file && song.file.startsWith("http");
-  const yCtx = get(yandexContext);
-  const playerStatus = get(status);
-
-  if (
-    yCtx.active &&
-    yCtx.tracks.length > 0 &&
-    (song.isYandex || (song.file && song.file === yCtx.currentTrackFile))
-  ) {
-    let nextIndex;
-
-    if (cmd === "next") {
-      if (playerStatus.random) {
-        let attempts = 0;
-        do {
-          nextIndex = Math.floor(Math.random() * yCtx.tracks.length);
-          attempts++;
-        } while (
-          nextIndex === yCtx.currentIndex &&
-          attempts < 5 &&
-          yCtx.tracks.length > 1
-        );
-      } else {
-        nextIndex = yCtx.currentIndex + 1;
-      }
-
-      if (nextIndex >= yCtx.tracks.length) {
-        const lastTrack = yCtx.tracks[yCtx.tracks.length - 1];
-        if (lastTrack && lastTrack.id) {
-          showToast("Playlist ended. Starting My Vibe...", "info");
-          startYandexRadio(lastTrack.id);
-        } else {
-          resolveAndQueueYandexTrack(yCtx.tracks[0], 0, true);
-        }
-        return;
-      }
-    } else {
-      if (playerStatus.random) {
-        nextIndex = Math.floor(Math.random() * yCtx.tracks.length);
-      } else {
-        nextIndex = yCtx.currentIndex - 1;
-        if (nextIndex < 0) nextIndex = yCtx.tracks.length - 1;
-      }
-    }
-
-    const nextTrack = yCtx.tracks[nextIndex];
-    if (nextTrack) {
-      resolveAndQueueYandexTrack(nextTrack, nextIndex, true);
-      return;
-    }
-  }
 
   if (
     isRadioMode &&
@@ -12937,7 +12466,6 @@ export function nav(cmd) {
 
 export function playStation(station) {
   if (!station) return;
-  yandexContext.update((ctx) => ({ ...ctx, active: false }));
 
   selectedStationName.set(station.name);
   const streamUrl =
@@ -12953,7 +12481,6 @@ export function playStation(station) {
 
 export function playTrackOptimistic(track) {
   if (!track) return;
-  yandexContext.update((ctx) => ({ ...ctx, active: false }));
   selectedStationName.set(null);
   PlayerActions.playUri(track.file, {
     title: track.title,
@@ -12961,135 +12488,6 @@ export function playTrackOptimistic(track) {
     album: track.album,
     stationName: null,
   });
-}
-
-async function resolveAndQueueYandexTrack(
-  track,
-  index,
-  playImmediately = true,
-) {
-  if (!track.id) return;
-
-  try {
-    const streamUrl = await YandexApi.getStreamUrl(track.id);
-    if (!streamUrl) throw new Error("No Stream");
-
-    yandexContext.update((ctx) => {
-      const newCache = { ...ctx.streamCache };
-      newCache[streamUrl] = {
-        ...track,
-        isYandex: true,
-        file: streamUrl,
-      };
-
-      return {
-        ...ctx,
-        active: true,
-        currentIndex: index,
-        currentTrackId: track.id,
-        currentTrackFile: streamUrl,
-        streamCache: newCache,
-      };
-    });
-
-    if (playImmediately) {
-      await PlayerActions.playUri(streamUrl, {
-        title: track.title,
-        artist: track.artist,
-        album: track.album,
-      });
-
-      prefetchNextYandexTracks(index + 1);
-    } else {
-      await PlayerActions.addToQueue(streamUrl);
-    }
-  } catch (e) {
-    showToast("Failed to play Yandex track", "error");
-    console.error(e);
-  }
-}
-
-async function prefetchNextYandexTracks(startIndex) {
-  const yCtx = get(yandexContext);
-  if (!yCtx.active || !yCtx.tracks) return;
-
-  const BATCH_SIZE = 3;
-  const tracksToQueue = [];
-
-  for (let i = 0; i < BATCH_SIZE; i++) {
-    const idx = startIndex + i;
-    if (idx < yCtx.tracks.length) {
-      tracksToQueue.push(yCtx.tracks[idx]);
-    }
-  }
-
-  if (tracksToQueue.length === 0) return;
-
-  for (const track of tracksToQueue) {
-    try {
-      const url = await YandexApi.getStreamUrl(track.id);
-
-      if (url) {
-        yandexContext.update((ctx) => {
-          const newCache = { ...ctx.streamCache };
-          newCache[url] = { ...track, isYandex: true, file: url };
-          return { ...ctx, streamCache: newCache };
-        });
-
-        await mpdClient.send(`add "${url}"`);
-      }
-    } catch (e) {
-      console.warn("Failed to prefetch", track.title);
-    }
-  }
-}
-
-export async function playYandexContext(tracks, startIndex = 0) {
-  if (!tracks || tracks.length === 0) return;
-
-  yandexContext.set({
-    active: true,
-    tracks: tracks,
-    currentIndex: startIndex,
-    currentTrackFile: null,
-    currentTrackId: tracks[startIndex].id,
-    streamCache: {},
-  });
-
-  await mpdClient.send("stop");
-  await mpdClient.send("clear");
-
-  const startTrack = tracks[startIndex];
-  resolveAndQueueYandexTrack(startTrack, startIndex, true);
-}
-
-export async function playPlaylistContext(playlistName, index = 0) {
-  if (!playlistName) return;
-  yandexContext.update((ctx) => ({ ...ctx, active: false }));
-  selectedStationName.set(null);
-  const safeName = playlistName.replace(/"/g, '\\"');
-  try {
-    await mpdClient.send("stop");
-    await mpdClient.send("clear");
-    await mpdClient.send(`load "${safeName}"`);
-    await mpdClient.send(`play ${index}`);
-  } catch (e) {
-    console.error("Failed to play playlist context", e);
-  }
-}
-
-export async function startYandexRadio(trackId) {
-  showToast("Starting My Vibe...", "info");
-  try {
-    const tracks = await YandexApi.getSimilarTracks(trackId);
-    if (tracks.length > 0) {
-      playYandexContext(tracks, 0);
-    } else {
-      showToast("No similar tracks found", "error");
-    }
-  } catch (e) {
-    showToast("Radio error", "error");
-  }
 }
 
 === lib/mpd/player.js ===
@@ -13107,6 +12505,7 @@ import {
   yandexContext,
 } from "../store";
 import { db } from "../db";
+import { ApiActions } from "../api";
 
 const POLLER_INTERVAL = 1000;
 const TICKER_INTERVAL = 250;
@@ -13184,7 +12583,7 @@ async function syncQueue(newVersion) {
     if (get(isQueueLocked)) return;
 
     const rawTracks = MpdParser.parseTracks(text);
-    const yCtx = get(yandexContext); // Получаем контекст
+    const yCtx = get(yandexContext);
 
     const filesToLookup = rawTracks
       .map((t) => t.file)
@@ -13218,6 +12617,10 @@ async function syncQueue(newVersion) {
         };
       }
 
+      if (fileUrl.includes("yandex.net") || fileUrl.includes("get-mp3")) {
+        fetchYandexMetaForTrack(fileUrl);
+      }
+
       const lookupKey = fileUrl.normalize("NFC");
       const cached = cachedMap.get(lookupKey);
 
@@ -13233,7 +12636,6 @@ async function syncQueue(newVersion) {
         };
       }
 
-      // 3. ФОЛЛБЭК
       return {
         ...t,
         _uid: String(t.id || t.pos + t.file),
@@ -13244,6 +12646,27 @@ async function syncQueue(newVersion) {
     queueVersion.set(newVersion);
   } catch (e) {
     console.error("Queue sync error", e);
+  }
+}
+
+async function fetchYandexMetaForTrack(url) {
+  const meta = await ApiActions.getYandexMeta(url);
+  if (meta) {
+    yandexContext.update((ctx) => {
+      const newCache = { ...ctx.streamCache };
+      newCache[url] = { ...meta, isYandex: true, file: url };
+      return { ...ctx, streamCache: newCache };
+    });
+    const song = get(currentSong);
+    if (song.file === url) {
+      currentSong.update((s) => ({ ...s, ...meta, isYandex: true }));
+    }
+    queue.update((q) =>
+      q.map((t) => {
+        if (t.file === url) return { ...t, ...meta, isYandex: true };
+        return t;
+      }),
+    );
   }
 }
 
@@ -13258,13 +12681,12 @@ function updateStores(serverStatus, serverSong) {
     yCtx.streamCache[serverSong.file]
   ) {
     const yMeta = yCtx.streamCache[serverSong.file];
-
     serverSong.title = yMeta.title;
     serverSong.artist = yMeta.artist;
     serverSong.album = yMeta.album;
     serverSong.image = yMeta.image;
     serverSong.isYandex = true;
-    serverSong.id = yMeta.id; // Yandex ID
+    serverSong.id = yMeta.id;
 
     if (
       yMeta.time > 0 &&
@@ -13272,22 +12694,12 @@ function updateStores(serverStatus, serverSong) {
     ) {
       serverStatus.duration = yMeta.time;
     }
-  } else if (yCtx.active && yCtx.tracks.length > 0) {
-    const isHashTitle =
-      serverSong.title && /^[a-f0-9]{32,128}$/i.test(serverSong.title);
-
-    if (serverSong.file === yCtx.currentTrackFile || isHashTitle) {
-      // Пытаемся угадать по текущему индексу (менее надежно, но лучше чем хэш)
-      const yTrack = yCtx.tracks[yCtx.currentIndex];
-      if (yTrack) {
-        serverSong.title = yTrack.title;
-        serverSong.artist = yTrack.artist;
-        serverSong.album = yTrack.album;
-        serverSong.image = yTrack.image;
-        serverSong.isYandex = true;
-        serverSong.id = yTrack.id;
-      }
-    }
+  } else if (
+    serverSong.file &&
+    (serverSong.file.includes("yandex.net") ||
+      serverSong.file.includes("get-mp3"))
+  ) {
+    fetchYandexMetaForTrack(serverSong.file);
   }
 
   const isRadio = serverSong.file && serverSong.file.startsWith("http");
@@ -13947,307 +13359,54 @@ export const MpdParser = {
 };
 
 === lib/yandex.js ===
-import { get } from "svelte/store";
-import { yandexToken, yandexFavorites } from "./store"; // Импортируем новый store
-import md5 from "md5";
+import { API_ENDPOINTS } from "./constants";
 
 export const YandexApi = {
-  async request(path, options = {}) {
-    const token = get(yandexToken);
-    if (!token) throw new Error("No token provided");
+  async request(action, params = {}) {
+    const url = new URL(window.location.origin + API_ENDPOINTS.YANDEX);
+    url.searchParams.append("action", action);
 
-    const proxyUrl = `/wave-api.php?action=yandex_proxy&path=${encodeURIComponent(path)}&token=${encodeURIComponent(token)}`;
-
-    const headers = {
-      Authorization: `OAuth ${token}`,
-      "Accept-Language": "en",
-      ...(options.headers || {}),
-    };
-
-    const res = await fetch(proxyUrl, {
-      method: options.method || "GET",
-      headers: headers,
-      body: options.body,
-    });
-
-    if (!res.ok) {
-      let errorMsg = `Yandex API Error: ${res.status}`;
-      try {
-        const errJson = await res.json();
-        if (errJson.error) errorMsg = errJson.error;
-      } catch (e) {}
-      throw new Error(errorMsg);
+    for (const key in params) {
+      url.searchParams.append(key, params[key]);
     }
 
-    if (options.isXml) {
-      return await res.text();
-    }
-
+    const res = await fetch(url);
+    if (!res.ok) throw new Error("API Error");
     return await res.json();
   },
 
-  async getUserId() {
-    const data = await this.request("/account/status");
-    if (!data.result || !data.result.account) {
-      throw new Error("Invalid response from Yandex: " + JSON.stringify(data));
-    }
-    return data.result.account.uid;
+  async search(query) {
+    return await this.request("search", { query });
   },
 
   async getUserPlaylists() {
-    try {
-      const uid = await this.getUserId();
-      const data = await this.request(`/users/${uid}/playlists/list`);
-      return data.result || [];
-    } catch (e) {
-      console.error("Yandex Playlists Error:", e);
-      return [];
-    }
+    return await this.request("get_playlists");
   },
 
-  async getPlaylistTracks(kind, uid = null, page = 0) {
-    try {
-      if (!uid) uid = await this.getUserId();
-      const data = await this.request(`/users/${uid}/playlists/${kind}`);
-      const res = data.result;
-      if (!res || !res.tracks) return { tracks: [], total: 0 };
-      const ids = res.tracks.map((t) => t.id);
-      const PAGE_SIZE = 50;
-      const start = page * PAGE_SIZE;
-      const slice = ids.slice(start, start + PAGE_SIZE);
-      const tracks = await this.getTracksByIds(slice);
-      return {
-        tracks,
-        total: ids.length,
-      };
-    } catch (e) {
-      console.error("Yandex Playlist Tracks Error:", e);
-      return { tracks: [], total: 0 };
-    }
+  async getPlaylistTracks(uid, kind) {
+    return await this.request("get_playlist_tracks", { uid, kind });
   },
 
-  async getFavorites(page = 0) {
-    try {
-      const uid = await this.getUserId();
-      const data = await this.request(`/users/${uid}/likes/tracks`);
-      let ids = [];
-      const res = data.result;
-      if (!res) return { tracks: [], total: 0 };
-
-      if (res.ids && Array.isArray(res.ids)) {
-        ids = res.ids;
-      } else if (res.library && Array.isArray(res.library)) {
-        ids = res.library.map((t) => t.id);
-      } else if (
-        res.library &&
-        res.library.tracks &&
-        Array.isArray(res.library.tracks)
-      ) {
-        ids = res.library.tracks.map((t) => t.id);
-      } else if (Array.isArray(res)) {
-        ids = res.map((t) => t.id);
-      }
-      ids = ids.filter((id) => id);
-
-      if (page === 0) {
-        yandexFavorites.set(new Set(ids.map(String)));
-      }
-      // ------------------------------------------------------------------
-
-      if (ids.length === 0) return { tracks: [], total: 0 };
-      const PAGE_SIZE = 50;
-      const start = page * PAGE_SIZE;
-      const slice = ids.slice(start, start + PAGE_SIZE);
-      const tracks = await this.getTracksByIds(slice);
-      return {
-        tracks,
-        total: ids.length,
-      };
-    } catch (e) {
-      console.error("Yandex Favorites Error:", e);
-      return { tracks: [], total: 0 };
+  async playRadio(trackId) {
+    if (trackId) {
+      return await this.request("play_station", {
+        station: "track:" + trackId,
+      });
     }
+    return await this.request("play_station", { station: "user:onetwo" });
+  },
+
+  async playStation(stationId) {
+    return await this.request("play_station", { station: stationId });
+  },
+
+  async playTrack(trackId) {
+    return await this.request("play_track", { id: trackId });
   },
 
   async toggleLike(trackId, isLiked) {
-    const uid = await this.getUserId();
-    const action = isLiked ? "remove" : "add";
-
-    // Оптимистичное обновление UI
-    yandexFavorites.update((s) => {
-      const n = new Set(s);
-      if (isLiked) n.delete(String(trackId));
-      else n.add(String(trackId));
-      return n;
-    });
-
-    try {
-      await this.request(`/users/${uid}/likes/tracks/${action}`, {
-        method: "POST",
-        body: `track-id=${trackId}`,
-      });
-    } catch (e) {
-      console.error("Failed to toggle like", e);
-      // Откат при ошибке
-      yandexFavorites.update((s) => {
-        const n = new Set(s);
-        if (isLiked) n.add(String(trackId));
-        else n.delete(String(trackId));
-        return n;
-      });
-      throw e;
-    }
-  },
-  // ------------------------------------
-
-  // ... (остальные методы search, getAlbumTracks, getArtistTracks, getSimilarTracks, getTracksByIds, getStreamUrl, normalizeTracks оставляем как есть)
-  async search(query, type = "all", page = 0) {
-    if (!query) return { tracks: [], albums: [], artists: [] };
-    try {
-      const p = page;
-      const data = await this.request(
-        `/search?text=${encodeURIComponent(query)}&type=${type}&page=${p}&nocorrect=false`,
-      );
-      const res = data.result;
-      let tracks = [];
-      let albums = [];
-      let artists = [];
-      if (res.tracks && res.tracks.results) {
-        tracks = this.normalizeTracks(res.tracks.results);
-      }
-      if (res.albums && res.albums.results) {
-        albums = res.albums.results.map((a) => ({
-          ...a,
-          isAlbum: true,
-          image: a.coverUri
-            ? `https://${a.coverUri.replace("%%", "200x200")}`
-            : null,
-          artist:
-            a.artists && a.artists.length > 0 ? a.artists[0].name : "Unknown",
-        }));
-      }
-      if (res.artists && res.artists.results) {
-        artists = res.artists.results.map((a) => ({
-          ...a,
-          isArtist: true,
-          name: a.name,
-          image:
-            a.cover && a.cover.uri
-              ? `https://${a.cover.uri.replace("%%", "200x200")}`
-              : null,
-        }));
-      }
-      return { tracks, albums, artists };
-    } catch (e) {
-      console.error("Yandex Search Error:", e);
-      return { tracks: [], albums: [], artists: [] };
-    }
-  },
-
-  async getAlbumTracks(albumId) {
-    try {
-      const data = await this.request(`/albums/${albumId}/with-tracks`);
-      if (!data.result || !data.result.volumes) return [];
-
-      const rawTracks = [];
-      data.result.volumes.forEach((vol) => {
-        if (Array.isArray(vol)) {
-          rawTracks.push(...vol);
-        }
-      });
-      return this.normalizeTracks(rawTracks);
-    } catch (e) {
-      console.error("Yandex Album Error:", e);
-      return [];
-    }
-  },
-
-  async getArtistTracks(artistId) {
-    try {
-      const data = await this.request(
-        `/artists/${artistId}/tracks?page=0&page-size=50`,
-      );
-      if (!data.result || !data.result.tracks) return [];
-      return this.normalizeTracks(data.result.tracks);
-    } catch (e) {
-      console.error("Yandex Artist Error:", e);
-      return [];
-    }
-  },
-
-  async getSimilarTracks(trackId) {
-    try {
-      const data = await this.request(`/tracks/${trackId}/similar`);
-      if (!data.result || !data.result.similarTracks) return [];
-      return this.normalizeTracks(data.result.similarTracks);
-    } catch (e) {
-      console.error("Yandex Similar Tracks Error:", e);
-      return [];
-    }
-  },
-
-  async getTracksByIds(ids) {
-    if (!ids.length) return [];
-    const data = await this.request("/tracks", {
-      method: "POST",
-      body: `track-ids=${ids.join(",")}`,
-    });
-    return this.normalizeTracks(data.result);
-  },
-
-  async getStreamUrl(trackId) {
-    try {
-      const data = await this.request(`/tracks/${trackId}/download-info`);
-      if (!data.result || !data.result[0]) throw new Error("No download info");
-
-      const sorted = data.result.sort(
-        (a, b) => b.bitrate_in_kbps - a.bitrate_in_kbps,
-      );
-      const target = sorted[0];
-
-      const srcUrl = target.downloadInfoUrl;
-      const xmlText = await this.request(srcUrl, { isXml: true });
-
-      const parser = new DOMParser();
-      const xmlDoc = parser.parseFromString(xmlText, "text/xml");
-
-      const host = xmlDoc.getElementsByTagName("host")[0]?.textContent;
-      const path = xmlDoc.getElementsByTagName("path")[0]?.textContent;
-      const ts = xmlDoc.getElementsByTagName("ts")[0]?.textContent;
-      const s = xmlDoc.getElementsByTagName("s")[0]?.textContent;
-
-      if (!host || !path || !ts || !s) throw new Error("Invalid XML format");
-
-      const SALT = "XGRlBW9FXlekgbPrRHuSiA";
-      const sign = md5(SALT + path.substring(1) + s);
-
-      return `https://${host}/get-mp3/${sign}/${ts}${path}`;
-    } catch (e) {
-      console.error("Failed to get Yandex Stream URL", e);
-      return null;
-    }
-  },
-
-  normalizeTracks(rawTracks) {
-    if (!Array.isArray(rawTracks)) return [];
-
-    return rawTracks.map((t) => ({
-      title: t.title,
-      artist:
-        t.artists && t.artists.length > 0
-          ? t.artists.map((a) => a.name).join(", ")
-          : "Unknown",
-      album: t.albums && t.albums.length > 0 ? t.albums[0].title : "Single",
-      file: `https://music.yandex.ru/album/${t.albums && t.albums[0] ? t.albums[0].id : 0}/track/${t.id}`,
-      id: t.id,
-      image: t.coverUri
-        ? `https://${t.coverUri.replace("%%", "200x200")}`
-        : null,
-      time: t.durationMs ? t.durationMs / 1000 : 0,
-      genre: "Yandex Music",
-      isYandex: true,
-      stationName: null,
-    }));
+    const action = isLiked ? "dislike" : "like";
+    return await this.request(action, { track_id: trackId });
   },
 };
 
@@ -14563,6 +13722,7 @@ export const DATABASE = {
 
 export const API_ENDPOINTS = {
   SYNC: `/wave-api.php`,
+  YANDEX: `/wave-yandex-api.php`,
   STATIONS: (isDev) => `/wave-api.php?action=stations`,
   COVER_ART: (file) => `/coverart.php?u=${encodeURIComponent(file)}`,
   RADIO_LOGOS: (filename) => `/imagesw/radio-logos/thumbs/${filename}`,
@@ -14587,6 +13747,7 @@ import { THEMES } from "./theme";
 import md5 from "md5";
 
 export const connectionStatus = writable("Disconnected");
+export const yandexAuthStatus = writable(false);
 
 export const toastMessage = writable(null);
 let toastTimer;
@@ -14928,7 +14089,7 @@ export function getTrackThumbUrl(
 function isRadioTrack(file) {
   if (!file) return false;
   // If it's explicitly marked as Yandex (which uses http stream), don't treat as generic radio
-  if (file.includes("yandex.ru") || file.includes("get-mp3")) return false;
+  if (file.includes("yandex.net") || file.includes("get-mp3")) return false;
 
   return (
     file.startsWith("http") || file.includes("://") || file.includes("RADIO")
@@ -14995,15 +14156,6 @@ isAlarmEnabled.subscribe((val) =>
   localStorage.setItem("alarmEnabled", String(val)),
 );
 alarmPlaylist.subscribe((val) => localStorage.setItem("alarmPlaylist", val));
-
-const savedYandexToken = localStorage.getItem("yandex_token") || "";
-export const yandexToken = writable(savedYandexToken);
-
-yandexToken.subscribe((val) => {
-  if (typeof localStorage !== "undefined") {
-    localStorage.setItem("yandex_token", val);
-  }
-});
 
 const savedYandexEnabled = localStorage.getItem("yandex_enabled") === "true";
 export const isYandexEnabled = writable(savedYandexEnabled);
