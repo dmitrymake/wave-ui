@@ -25,7 +25,7 @@ class YandexMusic {
         curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
         curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
         curl_setopt($ch, CURLOPT_USERAGENT, $this->userAgent);
-        curl_setopt($ch, CURLOPT_TIMEOUT, 15);
+        curl_setopt($ch, CURLOPT_TIMEOUT, 20); // Чуть увеличили таймаут для тяжелых запросов
 
         if ($postData) {
             curl_setopt($ch, CURLOPT_POST, true);
@@ -42,10 +42,6 @@ class YandexMusic {
         }
         
         curl_close($ch);
-
-        if ($httpCode !== 200) {
-            $this->log("HTTP $httpCode on $url: " . substr($response, 0, 100));
-        }
 
         if ($isXml) return $response;
         return json_decode($response, true);
@@ -71,14 +67,25 @@ class YandexMusic {
 
     public function getPlaylistTracks($uid, $kind) {
         $data = $this->request("/users/{$uid}/playlists/{$kind}");
-        if (!isset($data['result']['tracks'])) return [];
         
-        $tracks = [];
-        foreach ($data['result']['tracks'] as $item) {
-            $track = $item['track'] ?? $item;
-            if (isset($track['id'])) $tracks[] = $track;
+        if (isset($data['result']['tracks']) && count($data['result']['tracks']) == $data['result']['trackCount']) {
+            $tracks = [];
+            foreach ($data['result']['tracks'] as $item) {
+                $track = $item['track'] ?? $item;
+                if (isset($track['id'])) $tracks[] = $track;
+            }
+            return $tracks;
         }
-        return $tracks;
+
+        if (isset($data['result']['trackIds'])) {
+            $ids = array_map(function($item) {
+                return is_array($item) ? $item['id'] : $item;
+            }, $data['result']['trackIds']);
+
+            return $this->getTracksByIds($ids);
+        }
+
+        return [];
     }
 
     public function getAlbum($albumId) {
@@ -125,14 +132,12 @@ class YandexMusic {
     public function toggleLike($trackId, $isLike = true) {
         $uid = $this->getUserId();
         $action = $isLike ? 'add' : 'remove';
-        $this->log("Liking track $trackId: $action");
         return $this->request("/users/{$uid}/likes/tracks/{$action}", ['track-id' => $trackId]);
     }
 
-    public function getFavorites() {
+    public function getFavoritesIds() {
         $uid = $this->getUserId();
         $data = $this->request("/users/{$uid}/likes/tracks");
-        
         $ids = [];
         $res = $data['result'] ?? [];
 
@@ -143,17 +148,31 @@ class YandexMusic {
         } elseif (isset($res['ids'])) {
             $ids = $res['ids'];
         }
-        
-        $ids = array_slice($ids, 0, 100);
+        return $ids;
+    }
+
+    public function getFavorites() {
+        $ids = $this->getFavoritesIds();
+        $ids = array_slice($ids, 0, 200); 
         if (empty($ids)) return [];
-        
         return $this->getTracksByIds($ids);
     }
 
     public function getTracksByIds($ids) {
-        if (is_array($ids)) $ids = implode(',', $ids);
-        $data = $this->request("/tracks", ['track-ids' => $ids]);
-        return $data['result'] ?? [];
+        if (empty($ids)) return [];
+        
+        $chunks = array_chunk($ids, 200);
+        $allTracks = [];
+
+        foreach ($chunks as $chunk) {
+            $chunkStr = implode(',', $chunk);
+            $data = $this->request("/tracks", ['track-ids' => $chunkStr]);
+            if (isset($data['result']) && is_array($data['result'])) {
+                $allTracks = array_merge($allTracks, $data['result']);
+            }
+        }
+        
+        return $allTracks;
     }
 
     public function getTrackInfo($trackId) {

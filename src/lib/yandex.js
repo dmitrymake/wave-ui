@@ -38,6 +38,10 @@ export const YandexApi = {
     return await this.request("get_playlist_tracks", { uid, kind });
   },
 
+  async getFavoritesIds() {
+    return await this.request("get_favorites_ids");
+  },
+
   async playRadio(trackId) {
     if (trackId) {
       return await this.request("play_station", {

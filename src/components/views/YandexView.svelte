@@ -2,7 +2,11 @@
   import { onMount } from "svelte";
   import { fade } from "svelte/transition";
   import { YandexApi } from "../../lib/yandex";
-  import { yandexAuthStatus, showToast } from "../../lib/store";
+  import {
+    yandexAuthStatus,
+    showToast,
+    yandexFavorites,
+  } from "../../lib/store";
   import { ICONS } from "../../lib/icons";
   import TrackRow from "../TrackRow.svelte";
   import BaseList from "./BaseList.svelte";
@@ -29,8 +33,23 @@
   $: isTokenSet = $yandexAuthStatus;
 
   onMount(() => {
-    if (isTokenSet) loadDashboard();
+    if (isTokenSet) {
+      loadDashboard();
+      syncLikes();
+    }
   });
+
+  async function syncLikes() {
+    try {
+      const res = await YandexApi.getFavoritesIds();
+      if (res && res.ids) {
+        // Обновляем Set в сторе
+        yandexFavorites.set(new Set(res.ids.map(String)));
+      }
+    } catch (e) {
+      console.error("Sync likes failed", e);
+    }
+  }
 
   async function loadDashboard() {
     isLoading = true;
@@ -195,8 +214,9 @@
   function handleTrackRowArtistClick(e) {
     const track = e.detail;
     if (track.artistId) {
-      openArtist({ id: track.artistId, title: track.artist });
+      openArtist({ id: track.artistId, title: track.artist, image: null });
     } else {
+      // Fallback: если нет ID, ищем по имени
       searchQuery = track.artist;
       performSearch();
     }

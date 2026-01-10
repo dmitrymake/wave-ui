@@ -70,12 +70,8 @@
   function handleGoToAlbum() {
     const t = $contextMenu.track;
     if (t && t.album) {
-      if (t.isYandex && t.album) {
-        // Yandex navigation handled via store/logic elsewhere or standard nav if mapped
-        // Ideally we navigate to search or detail view.
-        // Since nav logic is in MusicViews, we might need a global signal or just ignore for now if not implemented globally.
-        // For now, let's close. Real implementation depends on global router.
-      } else {
+      // Yandex navigation handled via callback in view or ignored here
+      if (!t.isYandex) {
         navigateTo("tracks_by_album", { name: t.album, artist: t.artist });
       }
     }
@@ -85,9 +81,7 @@
   function handleGoToArtist() {
     const t = $contextMenu.track;
     if (t && t.artist) {
-      if (t.isYandex) {
-        // See note above
-      } else {
+      if (!t.isYandex) {
         navigateTo("albums_by_artist", { name: t.artist });
       }
     }
@@ -161,16 +155,6 @@
         LibraryActions.deletePlaylist(pl.name);
       },
     });
-  }
-
-  async function handleMyVibe() {
-    showToast("Starting My Vibe...", "info");
-    try {
-      await YandexApi.playRadio();
-    } catch (e) {
-      showToast("Failed to start radio", "error");
-    }
-    closeContextMenu();
   }
 
   async function handleRadioByTrack() {
@@ -374,14 +358,9 @@
 
           {#if isYandexTrack}
             <div class="sep"></div>
-            <button class="menu-row" on:click={handleMyVibe}>
-              <span class="icon">{@html ICONS.RADIO}</span>
-              <span>My Vibe</span>
-            </button>
-
             <button class="menu-row" on:click={handleRadioByTrack}>
               <span class="icon">{@html ICONS.RADIO}</span>
-              <span>Radio by Track</span>
+              <span>Vibe by Track</span>
             </button>
           {/if}
 

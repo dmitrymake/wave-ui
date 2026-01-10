@@ -31,10 +31,7 @@ function saveState($data) {
 
 function mpdSend($cmd) {
     $fp = @fsockopen("localhost", 6600, $errno, $errstr, 5);
-    if (!$fp) {
-        debug("MPD Connect Error: $errstr");
-        return false;
-    }
+    if (!$fp) return false;
     fgets($fp); 
     fwrite($fp, "$cmd\n");
     $resp = "";
@@ -49,7 +46,9 @@ function mpdSend($cmd) {
 
 function formatTrack($t) {
     $cover = null;
-    if (!empty($t['coverUri'])) {
+    if (!empty($t['ogImage'])) {
+        $cover = $t['ogImage'];
+    } elseif (!empty($t['coverUri'])) {
         $cover = $t['coverUri'];
     } elseif (!empty($t['album']['coverUri'])) {
         $cover = $t['album']['coverUri'];
@@ -57,17 +56,26 @@ function formatTrack($t) {
         $cover = $t['albums'][0]['coverUri'];
     }
 
+    if ($cover) {
+        $cover = str_replace('%%', '200x200', $cover);
+        if (strpos($cover, 'http') !== 0) {
+            $cover = 'https://' . $cover;
+        }
+    }
+
     $artistName = isset($t['artists']) ? implode(', ', array_column($t['artists'], 'name')) : 'Unknown Artist';
     $artistId = isset($t['artists'][0]['id']) ? $t['artists'][0]['id'] : null;
+
+    $albumTitle = $t['albums'][0]['title'] ?? $t['album']['title'] ?? 'Single';
 
     return [
         'title' => $t['title'] ?? 'Unknown Title',
         'artist' => $artistName,
         'artistId' => $artistId,
-        'album' => $t['albums'][0]['title'] ?? $t['album']['title'] ?? 'Single',
+        'album' => $albumTitle,
         'id' => (string)$t['id'],
         'file' => "yandex:".$t['id'],
-        'image' => $cover ? "https://" . str_replace('%%', '200x200', $cover) : null,
+        'image' => $cover,
         'isYandex' => true,
         'service' => 'yandex',
         'time' => ($t['durationMs'] ?? 0) / 1000
@@ -79,10 +87,7 @@ function cacheTrackMeta($url, $track) {
     $cache = [];
     if (file_exists(META_CACHE_FILE)) {
         $content = @file_get_contents(META_CACHE_FILE);
-        if ($content) {
-            $decoded = json_decode($content, true);
-            if (is_array($decoded)) $cache = $decoded;
-        }
+        if ($content) $cache = json_decode($content, true) ?: [];
     }
     if (count($cache) > 200) {
         $cache = array_slice($cache, -100, 100, true);
@@ -116,6 +121,7 @@ try {
     $api = new YandexMusic($token);
 
     switch ($action) {
+        // --- DATA FETCHING ---
         case 'get_landing':
             $blocks = $api->getLandingBlocks();
             $result = ['personal' => [], 'moods' => []];
@@ -217,6 +223,46 @@ try {
             $rawTracks = ($kind === 'favorites') ? $api->getFavorites() : $api->getPlaylistTracks($uid, $kind);
             echo json_encode(['tracks' => array_map('formatTrack', $rawTracks)]);
             break;
+            
+        case 'get_favorites_ids':
+            echo json_encode(['ids' => $api->getFavoritesIds()]);
+            break;
+
+        case 'search':
+            $q = $_GET['query'] ?? '';
+            $raw = $api->search($q);
+            $res = $raw['result'] ?? [];
+            
+            $tracks = isset($res['tracks']['results']) ? array_map('formatTrack', $res['tracks']['results']) : [];
+            
+            $albums = [];
+            if (isset($res['albums']['results'])) {
+                foreach ($res['albums']['results'] as $a) {
+                    $albums[] = [
+                        'title' => $a['title'],
+                        'artist' => $a['artists'][0]['name'] ?? 'Unknown',
+                        'id' => $a['id'],
+                        'image' => isset($a['coverUri']) ? "https://" . str_replace('%%', '200x200', $a['coverUri']) : null,
+                        'kind' => 'album',
+                        'service' => 'yandex'
+                    ];
+                }
+            }
+            
+            $artists = [];
+            if (isset($res['artists']['results'])) {
+                foreach ($res['artists']['results'] as $a) {
+                    $artists[] = [
+                        'title' => $a['name'],
+                        'id' => $a['id'],
+                        'image' => isset($a['cover']['uri']) ? "https://" . str_replace('%%', '200x200', $a['cover']['uri']) : null,
+                        'kind' => 'artist',
+                        'service' => 'yandex'
+                    ];
+                }
+            }
+            echo json_encode(['tracks' => $tracks, 'albums' => $albums, 'artists' => $artists]);
+            break;
 
         case 'play_station':
             $stationId = $_REQUEST['station'] ?? 'user:onetwo';
@@ -293,45 +339,6 @@ try {
             }
             break;
 
-        case 'search':
-            $q = $_GET['query'] ?? '';
-            $raw = $api->search($q);
-            $res = $raw['result'] ?? [];
-            $tracks = isset($res['tracks']['results']) ? array_map('formatTrack', $res['tracks']['results']) : [];
-            $albums = [];
-            if (isset($res['albums']['results'])) {
-                foreach ($res['albums']['results'] as $a) {
-                    $albums[] = [
-                        'title' => $a['title'],
-                        'artist' => $a['artists'][0]['name'] ?? 'Unknown',
-                        'id' => $a['id'],
-                        'image' => isset($a['coverUri']) ? "https://" . str_replace('%%', '200x200', $a['coverUri']) : null,
-                        'kind' => 'album',
-                        'service' => 'yandex'
-                    ];
-                }
-            }
-            $artists = [];
-            if (isset($res['artists']['results'])) {
-                foreach ($res['artists']['results'] as $a) {
-                    $artists[] = [
-                        'title' => $a['name'],
-                        'id' => $a['id'],
-                        'image' => isset($a['cover']['uri']) ? "https://" . str_replace('%%', '200x200', $a['cover']['uri']) : null,
-                        'kind' => 'artist',
-                        'service' => 'yandex'
-                    ];
-                }
-            }
-            echo json_encode(['tracks' => $tracks, 'albums' => $albums, 'artists' => $artists]);
-            break;
-
-        case 'get_meta':
-            $url = $_GET['url'] ?? '';
-            $cache = file_exists(META_CACHE_FILE) ? json_decode(file_get_contents(META_CACHE_FILE), true) : [];
-            echo json_encode($cache[md5($url)] ?? null);
-            break;
-
         case 'like':
             $api->toggleLike($_REQUEST['track_id'] ?? '', true);
             echo json_encode(['status' => 'liked']);
@@ -341,6 +348,12 @@ try {
             $api->toggleLike($_REQUEST['track_id'] ?? '', false);
             mpdSend("next");
             echo json_encode(['status' => 'disliked']);
+            break;
+            
+        case 'get_meta':
+            $url = $_GET['url'] ?? '';
+            $cache = file_exists(META_CACHE_FILE) ? json_decode(file_get_contents(META_CACHE_FILE), true) : [];
+            echo json_encode($cache[md5($url)] ?? null);
             break;
 
         default:
