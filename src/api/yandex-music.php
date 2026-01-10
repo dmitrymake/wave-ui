@@ -10,12 +10,17 @@ class YandexMusic {
     }
 
     private function log($msg) {
-        file_put_contents('/tmp/wave_debug.log', "[Lib] $msg\n", FILE_APPEND);
+        // Логируем библиотеку отдельно для ясности
+        $time = date('H:i:s');
+        @file_put_contents('/tmp/wave_yandex_lib.log', "[$time] $msg\n", FILE_APPEND);
     }
 
     private function request($path, $postData = null, $isXml = false) {
         $url = strpos($path, 'http') === 0 ? $path : "https://api.music.yandex.net" . $path;
         
+        // Логируем запрос
+        $this->log("REQ: $url" . ($postData ? " DATA: " . json_encode($postData) : ""));
+
         $headers = [
             "Authorization: OAuth " . $this->token,
             "Accept-Language: ru"
@@ -25,7 +30,7 @@ class YandexMusic {
         curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
         curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
         curl_setopt($ch, CURLOPT_USERAGENT, $this->userAgent);
-        curl_setopt($ch, CURLOPT_TIMEOUT, 20); // Чуть увеличили таймаут для тяжелых запросов
+        curl_setopt($ch, CURLOPT_TIMEOUT, 20);
 
         if ($postData) {
             curl_setopt($ch, CURLOPT_POST, true);
@@ -36,12 +41,18 @@ class YandexMusic {
         curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
         $response = curl_exec($ch);
         $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-        
-        if (curl_errno($ch)) {
-            $this->log("Curl Error ($url): " . curl_error($ch));
-        }
+        $err = curl_error($ch);
         
         curl_close($ch);
+
+        if ($err) {
+            $this->log("CURL ERROR: $err");
+            return null;
+        }
+
+        // Логируем ответ (первые 200 символов, чтобы не забивать диск)
+        $shortResp = substr(str_replace(["\r", "\n"], '', $response), 0, 200);
+        $this->log("RESP [$httpCode]: $shortResp...");
 
         if ($isXml) return $response;
         return json_decode($response, true);
@@ -121,12 +132,21 @@ class YandexMusic {
     }
 
     public function search($text, $type = 'all', $page = 0) {
-        return $this->request("/search", [
+        // Логируем входящие параметры поиска
+        $this->log("SEARCH START: query='$text' type='$type'");
+        
+        $data = $this->request("/search", [
             'text' => $text,
             'type' => $type,
             'page' => $page,
             'nocorrect' => 'false'
         ]);
+
+        if (!isset($data['result'])) {
+            $this->log("SEARCH FAIL: No result field in response");
+        }
+
+        return $data;
     }
 
     public function toggleLike($trackId, $isLike = true) {
@@ -160,10 +180,8 @@ class YandexMusic {
 
     public function getTracksByIds($ids) {
         if (empty($ids)) return [];
-        
         $chunks = array_chunk($ids, 200);
         $allTracks = [];
-
         foreach ($chunks as $chunk) {
             $chunkStr = implode(',', $chunk);
             $data = $this->request("/tracks", ['track-ids' => $chunkStr]);
@@ -171,7 +189,6 @@ class YandexMusic {
                 $allTracks = array_merge($allTracks, $data['result']);
             }
         }
-        
         return $allTracks;
     }
 

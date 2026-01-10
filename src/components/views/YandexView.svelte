@@ -43,7 +43,6 @@
     try {
       const res = await YandexApi.getFavoritesIds();
       if (res && res.ids) {
-        // Обновляем Set в сторе
         yandexFavorites.set(new Set(res.ids.map(String)));
       }
     } catch (e) {
@@ -166,11 +165,13 @@
   }
 
   async function performSearch() {
+    console.log("Starting search for:", searchQuery); // DEBUG
     isLoading = true;
     viewMode = "search";
     searchResults = { tracks: [], albums: [], artists: [] };
     try {
       const res = await YandexApi.search(searchQuery);
+      console.log("Search results:", res); // DEBUG
       if (res) {
         searchResults = res;
         if (searchType === "track" || searchType === "all") {
@@ -178,6 +179,7 @@
         }
       }
     } catch (e) {
+      console.error("Search error", e);
       showToast("Search failed", "error");
     } finally {
       isLoading = false;
@@ -216,7 +218,6 @@
     if (track.artistId) {
       openArtist({ id: track.artistId, title: track.artist, image: null });
     } else {
-      // Fallback: если нет ID, ищем по имени
       searchQuery = track.artist;
       performSearch();
     }

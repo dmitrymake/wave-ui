@@ -31,7 +31,10 @@ function saveState($data) {
 
 function mpdSend($cmd) {
     $fp = @fsockopen("localhost", 6600, $errno, $errstr, 5);
-    if (!$fp) return false;
+    if (!$fp) {
+        debug("MPD Connect Error: $errstr");
+        return false;
+    }
     fgets($fp); 
     fwrite($fp, "$cmd\n");
     $resp = "";
@@ -65,7 +68,6 @@ function formatTrack($t) {
 
     $artistName = isset($t['artists']) ? implode(', ', array_column($t['artists'], 'name')) : 'Unknown Artist';
     $artistId = isset($t['artists'][0]['id']) ? $t['artists'][0]['id'] : null;
-
     $albumTitle = $t['albums'][0]['title'] ?? $t['album']['title'] ?? 'Single';
 
     return [
@@ -121,11 +123,57 @@ try {
     $api = new YandexMusic($token);
 
     switch ($action) {
-        // --- DATA FETCHING ---
+        case 'search':
+            $q = $_GET['query'] ?? '';
+            debug("SEARCH ACTION: query='$q'"); // LOGGING
+
+            if (empty($q)) {
+                echo json_encode(['tracks' => [], 'albums' => [], 'artists' => []]);
+                break;
+            }
+
+            $raw = $api->search($q);
+            debug("SEARCH RAW: " . json_encode($raw)); // LOGGING
+
+            $res = $raw['result'] ?? [];
+            
+            $tracks = isset($res['tracks']['results']) ? array_map('formatTrack', $res['tracks']['results']) : [];
+            
+            $albums = [];
+            if (isset($res['albums']['results'])) {
+                foreach ($res['albums']['results'] as $a) {
+                    $albums[] = [
+                        'title' => $a['title'],
+                        'artist' => $a['artists'][0]['name'] ?? 'Unknown',
+                        'id' => $a['id'],
+                        'image' => isset($a['coverUri']) ? "https://" . str_replace('%%', '200x200', $a['coverUri']) : null,
+                        'kind' => 'album',
+                        'service' => 'yandex'
+                    ];
+                }
+            }
+            
+            $artists = [];
+            if (isset($res['artists']['results'])) {
+                foreach ($res['artists']['results'] as $a) {
+                    $artists[] = [
+                        'title' => $a['name'],
+                        'id' => $a['id'],
+                        'image' => isset($a['cover']['uri']) ? "https://" . str_replace('%%', '200x200', $a['cover']['uri']) : null,
+                        'kind' => 'artist',
+                        'service' => 'yandex'
+                    ];
+                }
+            }
+            
+            $final = ['tracks' => $tracks, 'albums' => $albums, 'artists' => $artists];
+            debug("SEARCH FINAL: " . json_encode($final)); // LOGGING
+            echo json_encode($final);
+            break;
+
         case 'get_landing':
             $blocks = $api->getLandingBlocks();
             $result = ['personal' => [], 'moods' => []];
-            
             foreach($blocks as $block) {
                 if ($block['type'] === 'personal-playlists') {
                     $result['personal'] = array_map(function($ent) {
@@ -158,7 +206,6 @@ try {
             $id = $_GET['id'] ?? '';
             $artist = $api->getArtist($id);
             $tracks = $api->getArtistTracks($id);
-            
             $info = [
                 'name' => $artist['name'],
                 'cover' => isset($artist['cover']['uri']) ? "https://" . str_replace('%%', '400x400', $artist['cover']['uri']) : null,
@@ -171,10 +218,8 @@ try {
         case 'get_album_details':
             $id = $_GET['id'] ?? '';
             $raw = $api->getAlbum($id);
-            
             $tracks = [];
             foreach ($raw['volumes'] as $vol) $tracks = array_merge($tracks, $vol);
-            
             $info = [
                 'title' => $raw['title'],
                 'artist' => $raw['artists'][0]['name'] ?? 'Unknown',
@@ -226,42 +271,6 @@ try {
             
         case 'get_favorites_ids':
             echo json_encode(['ids' => $api->getFavoritesIds()]);
-            break;
-
-        case 'search':
-            $q = $_GET['query'] ?? '';
-            $raw = $api->search($q);
-            $res = $raw['result'] ?? [];
-            
-            $tracks = isset($res['tracks']['results']) ? array_map('formatTrack', $res['tracks']['results']) : [];
-            
-            $albums = [];
-            if (isset($res['albums']['results'])) {
-                foreach ($res['albums']['results'] as $a) {
-                    $albums[] = [
-                        'title' => $a['title'],
-                        'artist' => $a['artists'][0]['name'] ?? 'Unknown',
-                        'id' => $a['id'],
-                        'image' => isset($a['coverUri']) ? "https://" . str_replace('%%', '200x200', $a['coverUri']) : null,
-                        'kind' => 'album',
-                        'service' => 'yandex'
-                    ];
-                }
-            }
-            
-            $artists = [];
-            if (isset($res['artists']['results'])) {
-                foreach ($res['artists']['results'] as $a) {
-                    $artists[] = [
-                        'title' => $a['name'],
-                        'id' => $a['id'],
-                        'image' => isset($a['cover']['uri']) ? "https://" . str_replace('%%', '200x200', $a['cover']['uri']) : null,
-                        'kind' => 'artist',
-                        'service' => 'yandex'
-                    ];
-                }
-            }
-            echo json_encode(['tracks' => $tracks, 'albums' => $albums, 'artists' => $artists]);
             break;
 
         case 'play_station':
