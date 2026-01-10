@@ -76,24 +76,29 @@ class YandexMusic {
         return $data['result']['blocks'] ?? [];
     }
 
-    public function getPlaylistTracks($uid, $kind) {
+    public function getPlaylistTracks($uid, $kind, $offset = 0, $limit = 100) {
         $data = $this->request("/users/{$uid}/playlists/{$kind}");
         
+        // Strategy 1: Small playlist, tracks inside
         if (isset($data['result']['tracks']) && count($data['result']['tracks']) == $data['result']['trackCount']) {
             $tracks = [];
             foreach ($data['result']['tracks'] as $item) {
                 $track = $item['track'] ?? $item;
                 if (isset($track['id'])) $tracks[] = $track;
             }
-            return $tracks;
+            // Manual slice if tracks are already here
+            return array_slice($tracks, $offset, $limit);
         }
 
+        // Strategy 2: Big playlist, use trackIds
         if (isset($data['result']['trackIds'])) {
-            $ids = array_map(function($item) {
+            $allIds = array_map(function($item) {
                 return is_array($item) ? $item['id'] : $item;
             }, $data['result']['trackIds']);
 
-            return $this->getTracksByIds($ids);
+            $slice = array_slice($allIds, $offset, $limit);
+            if (empty($slice)) return [];
+            return $this->getTracksByIds($slice);
         }
 
         return [];
@@ -107,6 +112,12 @@ class YandexMusic {
     public function getArtist($artistId) {
         $data = $this->request("/artists/{$artistId}");
         return $data['result']['artist'] ?? null;
+    }
+
+    // Get actual Albums of an Artist (for Carousel)
+    public function getArtistDirectAlbums($artistId) {
+        $data = $this->request("/artists/{$artistId}/direct-albums?page-size=50");
+        return $data['result']['albums'] ?? [];
     }
 
     public function getAlbumTracks($albumId) {
@@ -164,11 +175,11 @@ class YandexMusic {
         return $ids;
     }
 
-    public function getFavorites() {
+    public function getFavorites($offset = 0, $limit = 50) {
         $ids = $this->getFavoritesIds();
-        $ids = array_slice($ids, 0, 200); 
-        if (empty($ids)) return [];
-        return $this->getTracksByIds($ids);
+        $slice = array_slice($ids, $offset, $limit);
+        if (empty($slice)) return [];
+        return $this->getTracksByIds($slice);
     }
 
     public function getTracksByIds($ids) {
@@ -184,7 +195,6 @@ class YandexMusic {
                 $allTracks = array_merge($allTracks, $data['result']);
             }
         }
-        
         return $allTracks;
     }
 

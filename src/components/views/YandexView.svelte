@@ -15,15 +15,18 @@
   import { writable } from "svelte/store";
 
   const tracksStore = writable([]);
+  const albumsStore = writable([]); // Для карусели альбомов
 
   let playlists = [];
   let moodStations = [];
   let smartPlaylists = [];
 
   let isLoading = false;
+  let isLoadingMore = false;
   let viewMode = "dashboard";
 
   let headerInfo = { title: "", sub: "", cover: null, description: "" };
+  let currentPlaylistContext = { uid: null, kind: null, offset: 0 };
 
   let searchQuery = "";
   let searchType = "all";
@@ -92,6 +95,7 @@
     viewMode = "list";
     headerInfo = { title: pl.title, sub: "Playlist", cover: pl.cover };
     tracksStore.set([]);
+    albumsStore.set([]);
     isLoading = true;
 
     try {
@@ -102,8 +106,8 @@
         [uid, kind] = pl.id.split(":");
       }
 
-      const res = await YandexApi.getPlaylistTracks(uid, kind);
-      if (res && res.tracks) tracksStore.set(res.tracks);
+      currentPlaylistContext = { uid, kind, offset: 0 };
+      await loadPlaylistTracks(uid, kind, 0);
     } catch (e) {
       console.error(e);
     } finally {
@@ -111,10 +115,40 @@
     }
   }
 
+  async function loadPlaylistTracks(uid, kind, offset) {
+    const res = await YandexApi.getPlaylistTracks(uid, kind, offset);
+    if (res && res.tracks) {
+      if (offset === 0) tracksStore.set(res.tracks);
+      else {
+        tracksStore.update((curr) => [...curr, ...res.tracks]);
+      }
+    }
+    return res?.tracks?.length || 0;
+  }
+
+  async function loadMore() {
+    if (isLoadingMore) return;
+    isLoadingMore = true;
+    try {
+      currentPlaylistContext.offset += 50; // Грузим пачками по 50 (как в API)
+      const count = await loadPlaylistTracks(
+        currentPlaylistContext.uid,
+        currentPlaylistContext.kind,
+        currentPlaylistContext.offset,
+      );
+      if (count === 0) showToast("No more tracks", "info");
+    } catch (e) {
+      showToast("Failed to load more", "error");
+    } finally {
+      isLoadingMore = false;
+    }
+  }
+
   async function openArtist(artist) {
     viewMode = "artist_details";
     headerInfo = { title: artist.title, sub: "Artist", cover: artist.image };
     tracksStore.set([]);
+    albumsStore.set([]);
     isLoading = true;
 
     try {
@@ -126,6 +160,7 @@
         description: res.description,
       };
       tracksStore.set(res.tracks || []);
+      albumsStore.set(res.albums || []);
     } catch (e) {
       showToast("Failed to load artist", "error");
     } finally {
@@ -137,6 +172,7 @@
     viewMode = "album_details";
     headerInfo = { title: album.title, sub: album.artist, cover: album.image };
     tracksStore.set([]);
+    albumsStore.set([]);
     isLoading = true;
 
     try {
@@ -165,13 +201,11 @@
   }
 
   async function performSearch() {
-    console.log("Starting search for:", searchQuery); // DEBUG
     isLoading = true;
     viewMode = "search";
     searchResults = { tracks: [], albums: [], artists: [] };
     try {
       const res = await YandexApi.search(searchQuery);
-      console.log("Search results:", res); // DEBUG
       if (res) {
         searchResults = res;
         if (searchType === "track" || searchType === "all") {
@@ -425,6 +459,26 @@
               </div>
             </div>
           {/if}
+
+          {#if viewMode === "artist_details" && $albumsStore.length > 0}
+            <h3 class="header-label" style="margin-top:20px;">Albums</h3>
+            <div class="music-grid horizontal section-mb">
+              {#each $albumsStore as album}
+                <div class="music-card" on:click={() => openAlbum(album)}>
+                  <div class="card-img-container">
+                    <ImageLoader
+                      src={album.image}
+                      alt={album.title}
+                      radius="8px"
+                    />
+                  </div>
+                  <div class="card-title">{album.title}</div>
+                  <div class="card-sub">{album.year}</div>
+                </div>
+              {/each}
+            </div>
+            <h3 class="header-label">Popular Tracks</h3>
+          {/if}
         </div>
 
         <div slot="row" let:item let:index>
@@ -434,6 +488,18 @@
             on:play={() => YandexApi.playTrack(item.id)}
             on:artistclick={handleTrackRowArtistClick}
           />
+        </div>
+
+        <div slot="footer" style="padding: 20px; text-align: center;">
+          {#if viewMode === "list" && $tracksStore.length >= 50 && !isLoading}
+            <button
+              class="btn-secondary"
+              on:click={loadMore}
+              disabled={isLoadingMore}
+            >
+              {isLoadingMore ? "Loading..." : "Load More"}
+            </button>
+          {/if}
         </div>
       </BaseList>
     {/if}

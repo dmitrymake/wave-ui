@@ -110,6 +110,7 @@ logMsg("Daemon Started");
 
 $api = null;
 $lastToken = "";
+$lastAddedId = "";
 
 while (true) {
     if (file_exists(TOKEN_FILE)) {
@@ -143,16 +144,25 @@ while (true) {
                         
                         foreach ($tracksData as $item) {
                             $t = $item['track'];
-                            if (!in_array($t['id'], $history)) {
-                                $newBuffer[] = $t;
-                            }
+                            
+                            // Check against full history AND immediate duplicate
+                            if (in_array($t['id'], $history)) continue;
+                            if ($t['id'] === $lastAddedId) continue;
+
+                            $newBuffer[] = $t;
                         }
                         
+                        // Force new queue if filters killed everything
                         if (empty($newBuffer) && !empty($tracksData)) {
                              logMsg("Loop detected. Forcing new queue.");
                              $tracksData = $api->getStationTracks($state['station_id'] ?? 'user:onetwo', true);
                              if ($tracksData) {
-                                $newBuffer = array_column($tracksData, 'track');
+                                foreach ($tracksData as $item) {
+                                    $t = $item['track'];
+                                    if ($t['id'] !== $lastAddedId) {
+                                        $newBuffer[] = $t;
+                                    }
+                                }
                              }
                         }
 
@@ -171,10 +181,12 @@ while (true) {
                 
                 $history = $state['played_history'] ?? [];
                 $history[] = $nextTrack['id'];
-                if (count($history) > 100) $history = array_slice($history, -100);
-                $state['played_history'] = $history;
+                if (count($history) > 200) $history = array_slice($history, -200);
                 
+                $state['played_history'] = $history;
                 saveState($state);
+
+                $lastAddedId = $nextTrack['id'];
 
                 if ($url = $api->getDirectLink($nextTrack['id'])) {
                     mpdSend("add \"$url\"");

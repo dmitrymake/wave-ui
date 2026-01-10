@@ -96,7 +96,6 @@ function cacheTrackMeta($url, $track) {
         $content = @file_get_contents(META_CACHE_FILE);
         if ($content) $cache = json_decode($content, true) ?: [];
     }
-    // Ограничиваем размер кэша
     if (count($cache) > 200) {
         $cache = array_slice($cache, -100, 100, true);
     }
@@ -131,6 +130,10 @@ try {
     switch ($action) {
         case 'search':
             $q = $_GET['query'] ?? '';
+            if (empty($q)) {
+                echo json_encode(['tracks' => [], 'albums' => [], 'artists' => []]);
+                break;
+            }
             $raw = $api->search($q);
             $res = $raw['result'] ?? [];
             
@@ -200,11 +203,27 @@ try {
             $id = $_GET['id'] ?? '';
             $artist = $api->getArtist($id);
             $tracks = $api->getArtistTracks($id);
+            
+            $rawAlbums = $api->getArtistDirectAlbums($id);
+            $albums = [];
+            foreach ($rawAlbums as $a) {
+                $albums[] = [
+                    'title' => $a['title'],
+                    'id' => (string)$a['id'],
+                    'year' => $a['year'] ?? '',
+                    'image' => isset($a['coverUri']) ? "https://" . str_replace('%%', '200x200', $a['coverUri']) : null,
+                    'artist' => $artist['name'] ?? '',
+                    'kind' => 'album',
+                    'service' => 'yandex'
+                ];
+            }
+
             $info = [
                 'name' => $artist['name'],
                 'cover' => isset($artist['cover']['uri']) ? "https://" . str_replace('%%', '400x400', $artist['cover']['uri']) : null,
                 'description' => $artist['description']['text'] ?? '',
-                'tracks' => array_map('formatTrack', $tracks)
+                'tracks' => array_map('formatTrack', $tracks),
+                'albums' => $albums
             ];
             echo json_encode($info);
             break;
@@ -259,7 +278,14 @@ try {
         case 'get_playlist_tracks':
             $uid = $_GET['uid'] ?? '';
             $kind = $_GET['kind'] ?? '';
-            $rawTracks = ($kind === 'favorites') ? $api->getFavorites() : $api->getPlaylistTracks($uid, $kind);
+            $offset = intval($_GET['offset'] ?? 0);
+            
+            if ($kind === 'favorites') {
+                $rawTracks = $api->getFavorites($offset, 50); // Грузим пачками по 50
+            } else {
+                $rawTracks = $api->getPlaylistTracks($uid, $kind, $offset, 50);
+            }
+            
             echo json_encode(['tracks' => array_map('formatTrack', $rawTracks)]);
             break;
             
@@ -349,7 +375,6 @@ try {
 
         case 'dislike':
             $api->toggleLike($_REQUEST['track_id'] ?? '', false);
-            mpdSend("next");
             echo json_encode(['status' => 'disliked']);
             break;
             

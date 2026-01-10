@@ -33,7 +33,9 @@
 
   $: if (track) imgError = false;
 
-  $: isLiked = track.isYandex
+  $: isYandexTrack = track.isYandex || track.service === "yandex";
+
+  $: isLiked = isYandexTrack
     ? $yandexFavorites.has(String(track.id))
     : $favorites.has(track.file);
 
@@ -51,8 +53,9 @@
 
   $: isRadio =
     track.file &&
-    (track.file.startsWith("http") || track.file.includes("RADIO")) &&
-    !track.isYandex;
+    (String(track.file).startsWith("http") ||
+      String(track.file).includes("RADIO")) &&
+    !isYandexTrack;
 
   $: showPause = isExactActive && isPlaying && isHovering;
   $: showEq = isExactActive && isPlaying && !isHovering;
@@ -62,7 +65,8 @@
 
   $: title = track.title || track.file?.split("/").pop();
   $: artist = track.artist || "Unknown";
-  $: duration = formatDuration(track.time);
+
+  $: duration = formatDuration(track.time || track.duration);
 
   $: quality = track.qualityBadge ? track.qualityBadge.split(" ")[0] : null;
 
@@ -74,10 +78,11 @@
 
   function formatDuration(time) {
     if (isRadio) return "∞";
-    if (!time) return "0:00";
-    const sec = parseInt(time, 10);
-    const m = Math.floor(sec / 60);
-    const s = sec % 60;
+    const val = parseFloat(time);
+    if (!val || isNaN(val) || val === 0) return "0:00";
+    const totalSeconds = Math.round(val);
+    const m = Math.floor(totalSeconds / 60);
+    const s = totalSeconds % 60;
     return `${m}:${s.toString().padStart(2, "0")}`;
   }
 
@@ -109,7 +114,7 @@
 
   function handleArtistClick(e) {
     e.stopPropagation();
-    if (track.isYandex) {
+    if (isYandexTrack) {
       dispatch("artistclick", track);
     } else if (!isRadio && track.artist) {
       activeMenuTab.set("artists");
@@ -119,13 +124,26 @@
 
   async function handleToggleLike(e) {
     e.stopPropagation();
-    if (track.isYandex) {
+    if (isYandexTrack) {
       try {
         await YandexApi.toggleLike(track.id, isLiked);
-        showToast(
-          isLiked ? "Removed from Yandex Likes" : "Added to Yandex Likes",
-          "success",
-        );
+        if (isLiked) {
+          yandexFavorites.update((s) => {
+            s.delete(String(track.id));
+            return s;
+          });
+          showToast("Removed from Yandex Likes", "success");
+
+          if (isPlayingFile) {
+            MPD.playNext();
+          }
+        } else {
+          yandexFavorites.update((s) => {
+            s.add(String(track.id));
+            return s;
+          });
+          showToast("Added to Yandex Likes", "success");
+        }
       } catch (err) {
         showToast("Failed to update Yandex like", "error");
       }
@@ -211,7 +229,7 @@
   </div>
 
   <div class="right">
-    {#if track.service === "yandex" || track.isYandex}
+    {#if isYandexTrack}
       <span class="yandex-icon-inline" title="Yandex Music">
         {@html ICONS.YANDEX}
       </span>
