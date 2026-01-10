@@ -14,7 +14,7 @@
   import { PlayerActions } from "../lib/mpd/player";
   import { LibraryActions } from "../lib/mpd/library";
   import { mpdClient } from "../lib/mpd/client";
-  import { YandexApi } from "../lib/yandex"; // Импорт API вместо старой функции
+  import { YandexApi } from "../lib/yandex";
 
   let innerWidth;
   let innerHeight;
@@ -70,7 +70,14 @@
   function handleGoToAlbum() {
     const t = $contextMenu.track;
     if (t && t.album) {
-      navigateTo("tracks_by_album", { name: t.album, artist: t.artist });
+      if (t.isYandex && t.album) {
+        // Yandex navigation handled via store/logic elsewhere or standard nav if mapped
+        // Ideally we navigate to search or detail view.
+        // Since nav logic is in MusicViews, we might need a global signal or just ignore for now if not implemented globally.
+        // For now, let's close. Real implementation depends on global router.
+      } else {
+        navigateTo("tracks_by_album", { name: t.album, artist: t.artist });
+      }
     }
     closeContextMenu();
   }
@@ -78,7 +85,11 @@
   function handleGoToArtist() {
     const t = $contextMenu.track;
     if (t && t.artist) {
-      navigateTo("albums_by_artist", { name: t.artist });
+      if (t.isYandex) {
+        // See note above
+      } else {
+        navigateTo("albums_by_artist", { name: t.artist });
+      }
     }
     closeContextMenu();
   }
@@ -153,13 +164,24 @@
   }
 
   async function handleMyVibe() {
+    showToast("Starting My Vibe...", "info");
+    try {
+      await YandexApi.playRadio();
+    } catch (e) {
+      showToast("Failed to start radio", "error");
+    }
+    closeContextMenu();
+  }
+
+  async function handleRadioByTrack() {
     const t = $contextMenu.track;
     if (t && t.isYandex && t.id) {
-      showToast("Starting My Vibe...", "info");
+      showToast(`Starting radio based on "${t.title}"...`, "info");
       try {
         await YandexApi.playRadio(t.id);
       } catch (e) {
-        showToast("Failed to start radio", "error");
+        console.error(e);
+        showToast("Error starting radio", "error");
       }
     }
     closeContextMenu();
@@ -191,10 +213,12 @@
   $: isLiked = $contextMenu.track && $favorites.has($contextMenu.track.file);
   $: isRadio =
     $contextMenu.track &&
-    ($contextMenu.track.file.includes("http") ||
-      $contextMenu.track.file.includes("://"));
+    (String($contextMenu.track.file).includes("http") ||
+      String($contextMenu.track.file).includes("://"));
 
-  $: isYandexTrack = $contextMenu.track && $contextMenu.track.isYandex;
+  $: isYandexTrack =
+    $contextMenu.track &&
+    ($contextMenu.track.isYandex || $contextMenu.track.service === "yandex");
 
   $: isPlaylistContext = $contextMenu.context?.type === "playlist";
   $: isQueueContext = $contextMenu.context?.type === "queue";
@@ -349,13 +373,19 @@
           </button>
 
           {#if isYandexTrack}
+            <div class="sep"></div>
             <button class="menu-row" on:click={handleMyVibe}>
               <span class="icon">{@html ICONS.RADIO}</span>
               <span>My Vibe</span>
             </button>
+
+            <button class="menu-row" on:click={handleRadioByTrack}>
+              <span class="icon">{@html ICONS.RADIO}</span>
+              <span>Radio by Track</span>
+            </button>
           {/if}
 
-          {#if !isRadio}
+          {#if !isRadio && !isYandexTrack}
             <button class="menu-row" on:click={handleGoToAlbum}>
               <span class="icon">{@html ICONS.ALBUM_LINK || ICONS.ALBUMS}</span>
               <span>Go to Album</span>

@@ -22,6 +22,18 @@ export const YandexApi = {
     return await this.request("get_playlists");
   },
 
+  async getLanding() {
+    return await this.request("get_landing");
+  },
+
+  async getArtistDetails(id) {
+    return await this.request("get_artist_details", { id });
+  },
+
+  async getAlbumDetails(id) {
+    return await this.request("get_album_details", { id });
+  },
+
   async getPlaylistTracks(uid, kind) {
     return await this.request("get_playlist_tracks", { uid, kind });
   },

@@ -109,7 +109,9 @@
 
   function handleArtistClick(e) {
     e.stopPropagation();
-    if (!isRadio && track.artist) {
+    if (track.isYandex) {
+      dispatch("artistclick", track);
+    } else if (!isRadio && track.artist) {
       activeMenuTab.set("artists");
       navigateTo("albums_by_artist", { name: track.artist });
     }
@@ -201,15 +203,15 @@
 
     <div
       class="artist text-ellipsis"
-      class:link={!isRadio && !track.isYandex}
-      on:click={!track.isYandex ? handleArtistClick : undefined}
+      class:link={!isRadio}
+      on:click={handleArtistClick}
     >
       {artist}
     </div>
   </div>
 
   <div class="right">
-    {#if track.isYandex}
+    {#if track.service === "yandex" || track.isYandex}
       <span class="yandex-icon-inline" title="Yandex Music">
         {@html ICONS.YANDEX}
       </span>

@@ -61,15 +61,12 @@ class YandexMusic {
     public function getUserPlaylists() {
         $uid = $this->getUserId();
         $data = $this->request("/users/{$uid}/playlists/list");
-        $userPlaylists = $data['result'] ?? [];
+        return $data['result'] ?? [];
+    }
 
-        $feed = $this->request("/landing3?blocks=personal-playlists");
-        $smartPlaylists = [];
-        if (isset($feed['result']['blocks'][0]['entities'])) {
-            $smartPlaylists = $feed['result']['blocks'][0]['entities'];
-        }
-
-        return array_merge($smartPlaylists, $userPlaylists);
+    public function getLandingBlocks() {
+        $data = $this->request("/landing3?blocks=personal-playlists,stations,mixes");
+        return $data['result']['blocks'] ?? [];
     }
 
     public function getPlaylistTracks($uid, $kind) {
@@ -82,6 +79,16 @@ class YandexMusic {
             if (isset($track['id'])) $tracks[] = $track;
         }
         return $tracks;
+    }
+
+    public function getAlbum($albumId) {
+        $data = $this->request("/albums/{$albumId}/with-tracks");
+        return $data['result'] ?? null;
+    }
+
+    public function getArtist($artistId) {
+        $data = $this->request("/artists/{$artistId}");
+        return $data['result']['artist'] ?? null;
     }
 
     public function getAlbumTracks($albumId) {

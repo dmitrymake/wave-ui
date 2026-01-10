@@ -57,14 +57,19 @@ function formatTrack($t) {
         $cover = $t['albums'][0]['coverUri'];
     }
 
+    $artistName = isset($t['artists']) ? implode(', ', array_column($t['artists'], 'name')) : 'Unknown Artist';
+    $artistId = isset($t['artists'][0]['id']) ? $t['artists'][0]['id'] : null;
+
     return [
         'title' => $t['title'] ?? 'Unknown Title',
-        'artist' => isset($t['artists']) ? implode(', ', array_column($t['artists'], 'name')) : 'Unknown Artist',
+        'artist' => $artistName,
+        'artistId' => $artistId,
         'album' => $t['albums'][0]['title'] ?? $t['album']['title'] ?? 'Single',
         'id' => (string)$t['id'],
         'file' => "yandex:".$t['id'],
         'image' => $cover ? "https://" . str_replace('%%', '200x200', $cover) : null,
         'isYandex' => true,
+        'service' => 'yandex',
         'time' => ($t['durationMs'] ?? 0) / 1000
     ];
 }
@@ -111,6 +116,69 @@ try {
     $api = new YandexMusic($token);
 
     switch ($action) {
+        case 'get_landing':
+            $blocks = $api->getLandingBlocks();
+            $result = ['personal' => [], 'moods' => []];
+            
+            foreach($blocks as $block) {
+                if ($block['type'] === 'personal-playlists') {
+                    $result['personal'] = array_map(function($ent) {
+                        return [
+                            'title' => $ent['data']['data']['title'],
+                            'cover' => 'https://' . str_replace('%%', '200x200', $ent['data']['data']['cover']['uri']),
+                            'id' => $ent['data']['data']['uid'] . ':' . $ent['data']['data']['kind'],
+                            'kind' => 'playlist',
+                            'service' => 'yandex'
+                        ];
+                    }, $block['entities']);
+                }
+                if ($block['type'] === 'stations') {
+                    $result['moods'] = array_map(function($ent) {
+                        return [
+                            'title' => $ent['data']['station']['name'],
+                            'cover' => 'https://' . str_replace('%%', '200x200', $ent['data']['station']['icon']['imageUrl']),
+                            'id' => $ent['data']['station']['id']['type'] . ':' . $ent['data']['station']['id']['tag'],
+                            'kind' => 'station',
+                            'service' => 'yandex',
+                            'bgColor' => $ent['data']['station']['icon']['backgroundColor'] ?? '#000'
+                        ];
+                    }, $block['entities']);
+                }
+            }
+            echo json_encode($result);
+            break;
+
+        case 'get_artist_details':
+            $id = $_GET['id'] ?? '';
+            $artist = $api->getArtist($id);
+            $tracks = $api->getArtistTracks($id);
+            
+            $info = [
+                'name' => $artist['name'],
+                'cover' => isset($artist['cover']['uri']) ? "https://" . str_replace('%%', '400x400', $artist['cover']['uri']) : null,
+                'description' => $artist['description']['text'] ?? '',
+                'tracks' => array_map('formatTrack', $tracks)
+            ];
+            echo json_encode($info);
+            break;
+
+        case 'get_album_details':
+            $id = $_GET['id'] ?? '';
+            $raw = $api->getAlbum($id);
+            
+            $tracks = [];
+            foreach ($raw['volumes'] as $vol) $tracks = array_merge($tracks, $vol);
+            
+            $info = [
+                'title' => $raw['title'],
+                'artist' => $raw['artists'][0]['name'] ?? 'Unknown',
+                'cover' => isset($raw['coverUri']) ? "https://" . str_replace('%%', '400x400', $raw['coverUri']) : null,
+                'year' => $raw['year'] ?? '',
+                'tracks' => array_map('formatTrack', $tracks)
+            ];
+            echo json_encode($info);
+            break;
+
         case 'get_playlists':
             $playlists = $api->getUserPlaylists();
             $result = [];
@@ -120,7 +188,8 @@ try {
                 'uid' => $api->getUserId(),
                 'cover' => 'https://music.yandex.ru/blocks/playlist-cover/playlist-cover_like.png',
                 'trackCount' => '♥',
-                'isStation' => false
+                'isStation' => false,
+                'service' => 'yandex'
             ];
             foreach ($playlists as $pl) {
                 if (empty($pl['title'])) continue;
@@ -135,7 +204,8 @@ try {
                     'kind' => $pl['kind'],
                     'uid' => $pl['owner']['uid'] ?? $pl['uid'] ?? null,
                     'cover' => $cover,
-                    'trackCount' => $pl['trackCount'] ?? 0
+                    'trackCount' => $pl['trackCount'] ?? 0,
+                    'service' => 'yandex'
                 ];
             }
             echo json_encode($result);
@@ -146,16 +216,6 @@ try {
             $kind = $_GET['kind'] ?? '';
             $rawTracks = ($kind === 'favorites') ? $api->getFavorites() : $api->getPlaylistTracks($uid, $kind);
             echo json_encode(['tracks' => array_map('formatTrack', $rawTracks)]);
-            break;
-
-        case 'get_artist_tracks':
-            $id = $_GET['id'] ?? '';
-            echo json_encode(['tracks' => array_map('formatTrack', $api->getArtistTracks($id))]);
-            break;
-
-        case 'get_album_tracks':
-            $id = $_GET['id'] ?? '';
-            echo json_encode(['tracks' => array_map('formatTrack', $api->getAlbumTracks($id))]);
             break;
 
         case 'play_station':
@@ -185,7 +245,8 @@ try {
                 'active' => true,
                 'mode' => 'station',
                 'station_id' => $stationId,
-                'queue_buffer' => $initialBuffer
+                'queue_buffer' => $initialBuffer,
+                'played_history' => []
             ]);
             echo json_encode(['status' => 'started', 'added' => $count]);
             break;
@@ -245,7 +306,8 @@ try {
                         'artist' => $a['artists'][0]['name'] ?? 'Unknown',
                         'id' => $a['id'],
                         'image' => isset($a['coverUri']) ? "https://" . str_replace('%%', '200x200', $a['coverUri']) : null,
-                        'kind' => 'album'
+                        'kind' => 'album',
+                        'service' => 'yandex'
                     ];
                 }
             }
@@ -256,7 +318,8 @@ try {
                         'title' => $a['name'],
                         'id' => $a['id'],
                         'image' => isset($a['cover']['uri']) ? "https://" . str_replace('%%', '200x200', $a['cover']['uri']) : null,
-                        'kind' => 'artist'
+                        'kind' => 'artist',
+                        'service' => 'yandex'
                     ];
                 }
             }
@@ -288,3 +351,4 @@ try {
     http_response_code(500);
     echo json_encode(['error' => $e->getMessage()]);
 }
+?>
