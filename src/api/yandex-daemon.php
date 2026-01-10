@@ -52,24 +52,57 @@ function saveState($state) {
     file_put_contents(STATE_FILE, json_encode($state));
 }
 
+function formatTrackForCache($t) {
+    if (!$t) return null;
+
+    $cover = null;
+    if (!empty($t['ogImage'])) {
+        $cover = $t['ogImage'];
+    } elseif (!empty($t['coverUri'])) {
+        $cover = $t['coverUri'];
+    } elseif (!empty($t['album']['coverUri'])) {
+        $cover = $t['album']['coverUri'];
+    } elseif (!empty($t['albums'][0]['coverUri'])) {
+        $cover = $t['albums'][0]['coverUri'];
+    }
+
+    if ($cover) {
+        $cover = str_replace('%%', '200x200', $cover);
+        if (strpos($cover, 'http') !== 0) {
+            $cover = 'https://' . $cover;
+        }
+    }
+
+    $artistName = 'Unknown Artist';
+    $artistId = null;
+    if (isset($t['artists']) && is_array($t['artists']) && count($t['artists']) > 0) {
+        $names = array_column($t['artists'], 'name');
+        $artistName = implode(', ', $names);
+        $artistId = $t['artists'][0]['id'] ?? null;
+    }
+
+    $albumTitle = $t['albums'][0]['title'] ?? $t['album']['title'] ?? 'Single';
+
+    return [
+        'title' => $t['title'] ?? 'Unknown Title',
+        'artist' => $artistName,
+        'artistId' => $artistId,
+        'album' => $albumTitle,
+        'id' => (string)$t['id'],
+        'file' => "yandex:".$t['id'],
+        'image' => $cover,
+        'isYandex' => true,
+        'service' => 'yandex',
+        'time' => isset($t['durationMs']) ? ($t['durationMs'] / 1000) : 0
+    ];
+}
+
 function updateMetaCache($url, $track) {
     $cache = file_exists(META_CACHE_FILE) ? json_decode(file_get_contents(META_CACHE_FILE), true) : [];
     if (count($cache) > 200) $cache = array_slice($cache, -100, 100, true);
     
-    $artistName = isset($track['artists']) ? implode(', ', array_column($track['artists'], 'name')) : 'Unknown Artist';
-    $artistId = isset($track['artists'][0]['id']) ? $track['artists'][0]['id'] : null;
-
-    $cache[md5($url)] = [
-        'id' => (string)$track['id'],
-        'title' => $track['title'],
-        'artist' => $artistName,
-        'artistId' => $artistId,
-        'album' => $track['albums'][0]['title'] ?? 'Single',
-        'image' => isset($track['coverUri']) ? "https://" . str_replace('%%', '400x400', $track['coverUri']) : null,
-        'isYandex' => true,
-        'service' => 'yandex',
-        'time' => ($track['durationMs'] ?? 0) / 1000
-    ];
+    $formatted = formatTrackForCache($track);
+    $cache[md5($url)] = $formatted;
     file_put_contents(META_CACHE_FILE, json_encode($cache));
 }
 

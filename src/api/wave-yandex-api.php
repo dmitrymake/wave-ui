@@ -31,10 +31,7 @@ function saveState($data) {
 
 function mpdSend($cmd) {
     $fp = @fsockopen("localhost", 6600, $errno, $errstr, 5);
-    if (!$fp) {
-        debug("MPD Connect Error: $errstr");
-        return false;
-    }
+    if (!$fp) return false;
     fgets($fp); 
     fwrite($fp, "$cmd\n");
     $resp = "";
@@ -48,6 +45,8 @@ function mpdSend($cmd) {
 }
 
 function formatTrack($t) {
+    if (!$t) return null;
+
     $cover = null;
     if (!empty($t['ogImage'])) {
         $cover = $t['ogImage'];
@@ -66,8 +65,14 @@ function formatTrack($t) {
         }
     }
 
-    $artistName = isset($t['artists']) ? implode(', ', array_column($t['artists'], 'name')) : 'Unknown Artist';
-    $artistId = isset($t['artists'][0]['id']) ? $t['artists'][0]['id'] : null;
+    $artistName = 'Unknown Artist';
+    $artistId = null;
+    if (isset($t['artists']) && is_array($t['artists']) && count($t['artists']) > 0) {
+        $names = array_column($t['artists'], 'name');
+        $artistName = implode(', ', $names);
+        $artistId = $t['artists'][0]['id'] ?? null;
+    }
+
     $albumTitle = $t['albums'][0]['title'] ?? $t['album']['title'] ?? 'Single';
 
     return [
@@ -80,7 +85,7 @@ function formatTrack($t) {
         'image' => $cover,
         'isYandex' => true,
         'service' => 'yandex',
-        'time' => ($t['durationMs'] ?? 0) / 1000
+        'time' => isset($t['durationMs']) ? ($t['durationMs'] / 1000) : 0
     ];
 }
 
@@ -91,6 +96,7 @@ function cacheTrackMeta($url, $track) {
         $content = @file_get_contents(META_CACHE_FILE);
         if ($content) $cache = json_decode($content, true) ?: [];
     }
+    // Ограничиваем размер кэша
     if (count($cache) > 200) {
         $cache = array_slice($cache, -100, 100, true);
     }
@@ -125,16 +131,7 @@ try {
     switch ($action) {
         case 'search':
             $q = $_GET['query'] ?? '';
-            debug("SEARCH ACTION: query='$q'"); // LOGGING
-
-            if (empty($q)) {
-                echo json_encode(['tracks' => [], 'albums' => [], 'artists' => []]);
-                break;
-            }
-
             $raw = $api->search($q);
-            debug("SEARCH RAW: " . json_encode($raw)); // LOGGING
-
             $res = $raw['result'] ?? [];
             
             $tracks = isset($res['tracks']['results']) ? array_map('formatTrack', $res['tracks']['results']) : [];
@@ -165,10 +162,7 @@ try {
                     ];
                 }
             }
-            
-            $final = ['tracks' => $tracks, 'albums' => $albums, 'artists' => $artists];
-            debug("SEARCH FINAL: " . json_encode($final)); // LOGGING
-            echo json_encode($final);
+            echo json_encode(['tracks' => $tracks, 'albums' => $albums, 'artists' => $artists]);
             break;
 
         case 'get_landing':
