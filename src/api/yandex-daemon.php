@@ -55,6 +55,22 @@ function saveState($state) {
 function formatTrackForCache($t) {
     if (!$t) return null;
 
+    if (isset($t['artist']) && is_string($t['artist'])) {
+         return [
+            'title' => $t['title'] ?? 'Unknown Title',
+            'artist' => $t['artist'],
+            'artistId' => $t['artistId'] ?? null,
+            'album' => $t['album'] ?? '',
+            'id' => (string)($t['id'] ?? ''),
+            'file' => "yandex:" . ($t['id'] ?? ''),
+            'image' => $t['image'] ?? $t['cover'] ?? null,
+            'isYandex' => true,
+            'service' => 'yandex',
+            'time' => $t['time'] ?? 0
+        ];
+    }
+    // -------------------------------------------------------------
+
     $cover = null;
     if (!empty($t['ogImage'])) {
         $cover = $t['ogImage'];
@@ -103,6 +119,11 @@ function updateMetaCache($url, $track) {
     
     $formatted = formatTrackForCache($track);
     $cache[md5($url)] = $formatted;
+    
+    if (isset($formatted['id']) && $formatted['id']) {
+        $cache[$formatted['id']] = $formatted;
+    }
+
     file_put_contents(META_CACHE_FILE, json_encode($cache));
 }
 
@@ -144,15 +165,11 @@ while (true) {
                         
                         foreach ($tracksData as $item) {
                             $t = $item['track'];
-                            
-                            // Check against full history AND immediate duplicate
                             if (in_array($t['id'], $history)) continue;
                             if ($t['id'] === $lastAddedId) continue;
-
                             $newBuffer[] = $t;
                         }
                         
-                        // Force new queue if filters killed everything
                         if (empty($newBuffer) && !empty($tracksData)) {
                              logMsg("Loop detected. Forcing new queue.");
                              $tracksData = $api->getStationTracks($state['station_id'] ?? 'user:onetwo', true);
@@ -180,18 +197,25 @@ while (true) {
                 $nextTrack = array_shift($state['queue_buffer']);
                 
                 $history = $state['played_history'] ?? [];
-                $history[] = $nextTrack['id'];
-                if (count($history) > 200) $history = array_slice($history, -200);
                 
-                $state['played_history'] = $history;
-                saveState($state);
+                $tid = is_array($nextTrack) ? ($nextTrack['id'] ?? '') : '';
+                
+                if ($tid) {
+                    $history[] = $tid;
+                    if (count($history) > 200) $history = array_slice($history, -200);
+                    
+                    $state['played_history'] = $history;
+                    saveState($state);
 
-                $lastAddedId = $nextTrack['id'];
+                    $lastAddedId = $tid;
 
-                if ($url = $api->getDirectLink($nextTrack['id'])) {
-                    mpdSend("add \"$url\"");
-                    updateMetaCache($url, $nextTrack);
-                    logMsg("Added: " . $nextTrack['title']);
+                    if ($url = $api->getDirectLink($tid)) {
+                        mpdSend("add \"$url\"");
+                        updateMetaCache($url, $nextTrack);
+                        
+                        $tTitle = is_array($nextTrack) ? ($nextTrack['title'] ?? 'Unknown') : 'Unknown';
+                        logMsg("Added: " . $tTitle);
+                    }
                 }
             }
         }
