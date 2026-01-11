@@ -109,6 +109,7 @@ export const currentSong = writable({
   isYandex: false,
 });
 
+// Кэш метаданных стримов (чтобы в Queue были обложки и названия)
 export const yandexContext = writable({
   active: false,
   tracks: [],
@@ -146,6 +147,9 @@ export const navigationStack = writable([{ view: "root" }]);
 export const queue = writable([]);
 export const queueVersion = writable(0);
 export const searchQuery = writable("");
+
+// Специальный триггер для поиска в Яндексе
+export const yandexSearchTrigger = writable(null);
 
 export const scrollPositions = writable({});
 export function saveScrollPosition(key, pos) {
@@ -275,13 +279,19 @@ export function getTrackCoverUrl(
   stationList = [],
   selectedRadioName = null,
 ) {
-  if (!track || !track.file) return "/images/default_cover.png";
-
-  if (track.image && track.image.startsWith("http")) {
+  // ПРИОРИТЕТ 1: Явная ссылка на картинку в объекте трека
+  // Это исправляет проблему с Play All, когда метаданные есть, но грузилась заглушка
+  if (track && track.image && track.image.startsWith("http")) {
     return track.image;
   }
+  if (track && track.cover && track.cover.startsWith("http")) {
+    return track.cover;
+  }
+
+  if (!track || !track.file) return "/images/default_cover.png";
 
   if (isRadioTrack(track.file) || track.genre === "Radio") {
+    // Еще раз проверяем image, на случай если он пришел позже
     if (track.image) {
       return getStationImageUrl(track);
     }
@@ -301,26 +311,35 @@ export function getTrackThumbUrl(
   stationList = [],
   selectedRadioName = null,
 ) {
+  if (!track) return "/images/default_icon.png";
+
+  // ПРИОРИТЕТ 1: Явная ссылка (для Яндекс/Радио с метаданными)
+  if (track.image && track.image.startsWith("http")) {
+    return track.image;
+  }
+  if (track.cover && track.cover.startsWith("http")) {
+    return track.cover;
+  }
+
+  // ПРИОРИТЕТ 2: Радио/Поток без картинки
   if (
-    !track ||
-    (track.file &&
-      (isRadioTrack(track.file) ||
-        track.genre === "Radio" ||
-        Array.isArray(track)))
+    track.file &&
+    (isRadioTrack(track.file) ||
+      track.genre === "Radio" ||
+      Array.isArray(track))
   ) {
-    if (track && track.image) {
+    if (track.image) {
       return getStationImageUrl(track);
     }
+    // Если это поток и картинки нет, НЕ пытаемся хешировать файл (будет 404),
+    // возвращаем заглушку радио
     return (
       resolveRadioImage(track, stationList, selectedRadioName) ||
       "/images/radio_icon.png"
     );
   }
 
-  if (track.image && track.image.startsWith("http")) {
-    return track.image;
-  }
-
+  // ПРИОРИТЕТ 3: Локальный файл (хэширование)
   if (!track.file) return "/images/default_icon.png";
 
   if (track.thumbHash) {
@@ -345,7 +364,8 @@ export function getTrackThumbUrl(
 
 function isRadioTrack(file) {
   if (!file) return false;
-  // If it's explicitly marked as Yandex (which uses http stream), don't treat as generic radio
+  // Яндекс треки технически потоки, но мы обрабатываем их метаданные отдельно
+  // Если это явный yandex url, считаем потоком, но картинку берем из меты
   if (file.includes("yandex.net") || file.includes("get-mp3")) return false;
 
   return (

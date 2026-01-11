@@ -3,13 +3,16 @@
   import * as MPD from "../lib/mpd";
   import { ICONS } from "../lib/icons";
   import { LibraryActions } from "../lib/mpd/library";
+  import { YandexApi } from "../lib/yandex";
   import {
     currentSong,
     status,
     isFullPlayerOpen,
     favorites,
+    yandexFavorites,
     getTrackCoverUrl,
     stations,
+    showToast,
   } from "../lib/store.js";
   import ImageLoader from "./ImageLoader.svelte";
 
@@ -148,6 +151,7 @@
     window.removeEventListener("touchend", onVolEnd);
   }
 
+  // 0: Sequence, 1: Shuffle (Random), 2: Repeat (All)
   $: currentMode = $status.repeat ? 2 : $status.random ? 1 : 0;
 
   function togglePlayMode() {
@@ -167,9 +171,42 @@
   $: qualityLabel = $status.bitrate
     ? `${$status.bitrate} kbps`
     : $status.format || "";
-  $: isLiked = $currentSong.file && $favorites.has($currentSong.file);
+
+  $: isLiked =
+    $currentSong.isYandex || $currentSong.service === "yandex"
+      ? $yandexFavorites.has(String($currentSong.id))
+      : $currentSong.file && $favorites.has($currentSong.file);
 
   $: artworkRadius = isDocked ? "8px" : "var(--radius-xl)";
+
+  async function handleToggleLike() {
+    const track = $currentSong;
+    if (!track.file && !track.id) return;
+
+    if (track.isYandex || track.service === "yandex") {
+      const liked = $yandexFavorites.has(String(track.id));
+      try {
+        if (liked) {
+          yandexFavorites.update((s) => {
+            s.delete(String(track.id));
+            return s;
+          });
+          showToast("Removed from Yandex Likes", "info");
+        } else {
+          yandexFavorites.update((s) => {
+            s.add(String(track.id));
+            return s;
+          });
+          showToast("Added to Yandex Likes", "success");
+        }
+        await YandexApi.toggleLike(track.id, liked);
+      } catch (err) {
+        showToast("Error updating like", "error");
+      }
+    } else {
+      LibraryActions.toggleFavorite(track);
+    }
+  }
 </script>
 
 <div
@@ -263,7 +300,7 @@
         <button
           class="btn-icon side-btn"
           class:liked={isLiked}
-          on:click={() => LibraryActions.toggleFavorite($currentSong)}
+          on:click={handleToggleLike}
         >
           {@html isLiked ? ICONS.HEART_FILLED : ICONS.HEART}
         </button>

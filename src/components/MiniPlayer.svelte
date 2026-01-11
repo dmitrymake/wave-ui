@@ -2,11 +2,14 @@
   import * as MPD from "../lib/mpd";
   import { ICONS } from "../lib/icons";
   import { LibraryActions } from "../lib/mpd/library";
+  import { YandexApi } from "../lib/yandex";
   import {
     currentSong,
     status,
     isFullPlayerOpen,
     favorites,
+    yandexFavorites,
+    showToast,
     getTrackCoverUrl,
     stations,
     openContextMenu,
@@ -23,7 +26,7 @@
 
   const stop = (fn) => (e) => {
     e.stopPropagation();
-    fn();
+    fn(e); // передаем событие, т.к. handleToggleLike требует его
   };
 
   function formatTime(seconds) {
@@ -41,7 +44,11 @@
 
   $: displayTitle = $currentSong.title || "Not Playing";
   $: displayArtist = $currentSong.stationName || $currentSong.artist || "Moode";
-  $: isLiked = $currentSong.file && $favorites.has($currentSong.file);
+
+  $: isLiked =
+    $currentSong.isYandex || $currentSong.service === "yandex"
+      ? $yandexFavorites.has(String($currentSong.id))
+      : $currentSong.file && $favorites.has($currentSong.file);
 
   $: artSrc = getTrackCoverUrl(
     $currentSong,
@@ -118,6 +125,7 @@
     window.addEventListener("mouseup", onWinUp);
   }
 
+  // 0: Sequence, 1: Shuffle (Random), 2: Repeat (All)
   $: currentMode = $status.repeat ? 2 : $status.random ? 1 : 0;
 
   function toggleMode() {
@@ -148,6 +156,38 @@
       type: "general",
       source: "miniplayer",
     });
+  }
+
+  async function handleToggleLike(e) {
+    // e уже остановлен stop(), но на всякий случай
+    if (e && e.stopPropagation) e.stopPropagation();
+
+    const track = $currentSong;
+    if (!track.file && !track.id) return;
+
+    if (track.isYandex || track.service === "yandex") {
+      const liked = $yandexFavorites.has(String(track.id));
+      try {
+        if (liked) {
+          yandexFavorites.update((s) => {
+            s.delete(String(track.id));
+            return s;
+          });
+          showToast("Removed from Yandex Likes", "info");
+        } else {
+          yandexFavorites.update((s) => {
+            s.add(String(track.id));
+            return s;
+          });
+          showToast("Added to Yandex Likes", "success");
+        }
+        await YandexApi.toggleLike(track.id, liked);
+      } catch (err) {
+        showToast("Error updating like", "error");
+      }
+    } else {
+      LibraryActions.toggleFavorite(track);
+    }
   }
 </script>
 
@@ -228,7 +268,7 @@
         <button
           class="btn-icon desktop"
           class:liked={isLiked}
-          on:click={stop(() => LibraryActions.toggleFavorite($currentSong))}
+          on:click={stop(handleToggleLike)}
         >
           {@html isLiked ? ICONS.HEART_FILLED : ICONS.HEART}
         </button>

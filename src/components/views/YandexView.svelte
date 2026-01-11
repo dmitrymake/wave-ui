@@ -1,21 +1,25 @@
 <script>
-  import { onMount } from "svelte";
+  import { onMount, tick } from "svelte";
   import { fade } from "svelte/transition";
+  import { writable, get } from "svelte/store";
   import { YandexApi } from "../../lib/yandex";
   import {
     yandexAuthStatus,
     showToast,
     yandexFavorites,
+    yandexSearchTrigger,
+    navigationStack,
+    activeMenuTab,
+    yandexContext,
   } from "../../lib/store";
   import { ICONS } from "../../lib/icons";
   import TrackRow from "../TrackRow.svelte";
   import BaseList from "./BaseList.svelte";
-  import Skeleton from "../Skeleton.svelte";
   import ImageLoader from "../ImageLoader.svelte";
-  import { writable } from "svelte/store";
+  import * as MPD from "../../lib/mpd";
 
   const tracksStore = writable([]);
-  const albumsStore = writable([]); // Для карусели альбомов
+  const albumsStore = writable([]);
 
   let playlists = [];
   let moodStations = [];
@@ -23,24 +27,98 @@
 
   let isLoading = false;
   let isLoadingMore = false;
-  let viewMode = "dashboard";
 
-  let headerInfo = { title: "", sub: "", cover: null, description: "" };
-  let currentPlaylistContext = { uid: null, kind: null, offset: 0 };
+  let currentPlaylistContext = {
+    uid: null,
+    kind: null,
+    offset: 0,
+    type: "playlist",
+  };
+  let canLoadMore = true;
+  let loadMoreSentinel;
+  let observer;
 
   let searchQuery = "";
   let searchType = "all";
   let searchResults = { tracks: [], albums: [], artists: [] };
   let searchTimer;
 
+  $: currentView = $navigationStack[$navigationStack.length - 1];
+  $: viewMode = getModeFromStack(currentView);
   $: isTokenSet = $yandexAuthStatus;
 
+  function getModeFromStack(view) {
+    if (!view || view.view === "root") return "dashboard";
+    if (view.view.startsWith("yandex_"))
+      return view.view.replace("yandex_", "");
+    return "dashboard";
+  }
+
+  $: if (viewMode === "dashboard") {
+    searchQuery = "";
+  }
+
+  $: if (isTokenSet && playlists.length === 0 && !isLoading) {
+    loadDashboard();
+    syncLikes();
+  }
+
+  $: if ($yandexSearchTrigger) {
+    const q = $yandexSearchTrigger;
+    yandexSearchTrigger.set(null); // Сбрасываем триггер сразу
+
+    console.log("[YandexView] Auto-search triggered:", q);
+
+    searchQuery = q;
+
+    if (viewMode !== "search") {
+      navigationStack.update((s) => [...s, { view: "yandex_search" }]);
+    }
+
+    tick().then(() => {
+      performSearch();
+    });
+  }
+
   onMount(() => {
-    if (isTokenSet) {
+    if (isTokenSet && playlists.length === 0) {
       loadDashboard();
       syncLikes();
     }
+    // Fallback init
+    setTimeout(() => {
+      if ($yandexAuthStatus && playlists.length === 0 && !isLoading) {
+        loadDashboard();
+      }
+    }, 1000);
+
+    setupObserver();
   });
+
+  function setupObserver() {
+    if (observer) observer.disconnect();
+    observer = new IntersectionObserver(
+      (entries) => {
+        if (
+          entries[0].isIntersecting &&
+          !isLoading &&
+          !isLoadingMore &&
+          canLoadMore
+        ) {
+          if (
+            ["playlist", "album_details", "artist_details"].includes(viewMode)
+          ) {
+            loadMore();
+          }
+        }
+      },
+      { rootMargin: "200px" },
+    );
+  }
+
+  $: if (loadMoreSentinel && observer) {
+    observer.observe(loadMoreSentinel);
+  }
 
   async function syncLikes() {
     try {
@@ -73,7 +151,6 @@
         ...userPls,
       ];
     } catch (e) {
-      console.error(e);
       showToast("Failed to load dashboard", "error");
     } finally {
       isLoading = false;
@@ -92,11 +169,15 @@
       return;
     }
 
-    viewMode = "list";
-    headerInfo = { title: pl.title, sub: "Playlist", cover: pl.cover };
+    navigationStack.update((s) => [
+      ...s,
+      { view: "yandex_playlist", data: pl },
+    ]);
+
     tracksStore.set([]);
     albumsStore.set([]);
     isLoading = true;
+    canLoadMore = true;
 
     try {
       let uid = pl.uid;
@@ -106,7 +187,7 @@
         [uid, kind] = pl.id.split(":");
       }
 
-      currentPlaylistContext = { uid, kind, offset: 0 };
+      currentPlaylistContext = { uid, kind, offset: 0, type: "playlist" };
       await loadPlaylistTracks(uid, kind, 0);
     } catch (e) {
       console.error(e);
@@ -122,43 +203,53 @@
       else {
         tracksStore.update((curr) => [...curr, ...res.tracks]);
       }
+
+      if (res.tracks.length === 0) canLoadMore = false;
+      return res.tracks.length;
     }
-    return res?.tracks?.length || 0;
+    canLoadMore = false;
+    return 0;
   }
 
   async function loadMore() {
-    if (isLoadingMore) return;
+    if (isLoadingMore || !canLoadMore) return;
     isLoadingMore = true;
+
     try {
-      currentPlaylistContext.offset += 50; // Грузим пачками по 50 (как в API)
-      const count = await loadPlaylistTracks(
-        currentPlaylistContext.uid,
-        currentPlaylistContext.kind,
-        currentPlaylistContext.offset,
-      );
-      if (count === 0) showToast("No more tracks", "info");
+      const BATCH_SIZE = 50;
+      currentPlaylistContext.offset += BATCH_SIZE;
+
+      if (currentPlaylistContext.type === "playlist") {
+        const count = await loadPlaylistTracks(
+          currentPlaylistContext.uid,
+          currentPlaylistContext.kind,
+          currentPlaylistContext.offset,
+        );
+        if (count === 0) canLoadMore = false;
+      } else {
+        canLoadMore = false;
+      }
     } catch (e) {
-      showToast("Failed to load more", "error");
+      canLoadMore = false;
     } finally {
       isLoadingMore = false;
     }
   }
 
   async function openArtist(artist) {
-    viewMode = "artist_details";
-    headerInfo = { title: artist.title, sub: "Artist", cover: artist.image };
+    navigationStack.update((s) => [
+      ...s,
+      { view: "yandex_artist_details", data: artist },
+    ]);
+
     tracksStore.set([]);
     albumsStore.set([]);
     isLoading = true;
+    canLoadMore = false;
 
     try {
       const res = await YandexApi.getArtistDetails(artist.id);
-      headerInfo = {
-        title: res.name,
-        sub: "Popular Tracks",
-        cover: res.cover,
-        description: res.description,
-      };
+
       tracksStore.set(res.tracks || []);
       albumsStore.set(res.albums || []);
     } catch (e) {
@@ -169,19 +260,18 @@
   }
 
   async function openAlbum(album) {
-    viewMode = "album_details";
-    headerInfo = { title: album.title, sub: album.artist, cover: album.image };
+    navigationStack.update((s) => [
+      ...s,
+      { view: "yandex_album_details", data: album },
+    ]);
+
     tracksStore.set([]);
     albumsStore.set([]);
     isLoading = true;
+    canLoadMore = false;
 
     try {
       const res = await YandexApi.getAlbumDetails(album.id);
-      headerInfo = {
-        title: res.title,
-        sub: res.artist + (res.year ? ` • ${res.year}` : ""),
-        cover: res.cover,
-      };
       tracksStore.set(res.tracks || []);
     } catch (e) {
       showToast("Failed to load album", "error");
@@ -193,17 +283,22 @@
   function handleSearchInput(e) {
     searchQuery = e.target.value;
     clearTimeout(searchTimer);
-    if (searchQuery.length > 2) {
+
+    if (searchQuery.length >= 2) {
+      if (viewMode !== "search") {
+        navigationStack.update((s) => [...s, { view: "yandex_search" }]);
+      }
       searchTimer = setTimeout(performSearch, 600);
-    } else if (searchQuery.length === 0) {
-      viewMode = "dashboard";
+    } else if (searchQuery.length === 0 && viewMode === "search") {
+      window.history.back();
     }
   }
 
   async function performSearch() {
+    if (!searchQuery) return;
     isLoading = true;
-    viewMode = "search";
     searchResults = { tracks: [], albums: [], artists: [] };
+    console.log("[YandexView] Perform search:", searchQuery);
     try {
       const res = await YandexApi.search(searchQuery);
       if (res) {
@@ -214,7 +309,6 @@
       }
     } catch (e) {
       console.error("Search error", e);
-      showToast("Search failed", "error");
     } finally {
       isLoading = false;
     }
@@ -227,33 +321,97 @@
     }
   }
 
-  function goBack() {
-    if (viewMode === "search") {
-      viewMode = "dashboard";
-      searchQuery = "";
-    } else if (["list", "artist_details", "album_details"].includes(viewMode)) {
-      if (searchQuery.length > 0) viewMode = "search";
-      else viewMode = "dashboard";
-    }
+  function normalizeTracksAndCache(tracks) {
+    const normalized = tracks.map((t) => {
+      let artistName = t.artist;
+      if (!artistName && t.artists && t.artists.length > 0) {
+        artistName = t.artists.map((a) => a.name).join(", ");
+      }
+
+      let albumTitle = t.album?.title;
+      if (!albumTitle && t.albums && t.albums.length > 0) {
+        albumTitle = t.albums[0].title;
+      }
+
+      let fullCoverUrl = t.image;
+      if (!fullCoverUrl && (t.coverUri || t.cover)) {
+        let coverUri = t.coverUri || t.cover;
+        let clean = coverUri.replace("%%", "400x400");
+        if (!clean.startsWith("http") && !clean.startsWith("//")) {
+          clean = "https://" + clean;
+        } else if (clean.startsWith("//")) {
+          clean = "https:" + clean;
+        }
+        fullCoverUrl = clean;
+      }
+
+      return {
+        ...t,
+        artist: artistName || "Unknown Artist",
+        album: albumTitle || "Unknown Album",
+        title: t.title || "Unknown Title",
+        image: fullCoverUrl,
+        file: t.file,
+        id: t.id, // Ensure ID is preserved
+      };
+    });
+
+    console.log(
+      `[YandexView] Caching ${normalized.length} tracks for playback context...`,
+    );
+
+    // ГЛАВНОЕ: Записываем в глобальный кэш, чтобы Queue/MiniPlayer видели инфо
+    yandexContext.update((ctx) => {
+      const newCache = { ...ctx.streamCache };
+      normalized.forEach((t) => {
+        if (t.file) newCache[t.file] = t;
+        // Кэшируем по ID, потому что ссылка MPD может быть другой
+        if (t.id) newCache[String(t.id)] = t;
+      });
+      return { ...ctx, streamCache: newCache };
+    });
+
+    return normalized;
   }
 
   async function playAll() {
-    const tracks = $tracksStore;
-    if (!tracks.length) return;
+    const rawTracks = $tracksStore;
+    if (!rawTracks.length) return;
+
+    // Сначала нормализуем и КЭШИРУЕМ
+    const tracks = normalizeTracksAndCache(rawTracks);
+
+    showToast("Adding tracks to queue...", "info");
     const res = await fetch("/wave-yandex-api.php?action=play_playlist", {
       method: "POST",
       body: JSON.stringify({ tracks }),
     });
-    if (res.ok) showToast("Playing...", "success");
+
+    if (res.ok) {
+      showToast("Playing...", "success");
+      setTimeout(() => MPD.runMpdRequest("play"), 500);
+    } else {
+      showToast("Failed to play", "error");
+    }
   }
 
-  function handleTrackRowArtistClick(e) {
-    const track = e.detail;
-    if (track.artistId) {
-      openArtist({ id: track.artistId, title: track.artist, image: null });
-    } else {
-      searchQuery = track.artist;
-      performSearch();
+  async function addAllToQueue() {
+    const rawTracks = $tracksStore;
+    if (!rawTracks.length) return;
+
+    const tracks = normalizeTracksAndCache(rawTracks);
+
+    showToast(`Adding ${tracks.length} tracks...`, "info");
+    const res = await fetch("/wave-yandex-api.php?action=add_tracks", {
+      method: "POST",
+      body: JSON.stringify({ tracks }),
+    });
+    if (res.ok) showToast("Added to queue", "success");
+  }
+
+  function handleHorizontalScroll(e) {
+    if (e.deltaY !== 0) {
+      e.currentTarget.scrollLeft += e.deltaY;
     }
   }
 </script>
@@ -265,52 +423,51 @@
       <p>Please go to Settings and connect your account.</p>
     </div>
   {:else}
-    <div class="content-padded no-bottom-pad">
-      <div class="search-input-container">
-        {#if viewMode !== "dashboard"}
-          <button class="back-icon-btn" on:click={goBack}
-            >{@html ICONS.BACK}</button
-          >
-        {:else}
+    {#if viewMode === "dashboard" || viewMode === "search"}
+      <div class="content-padded no-bottom-pad">
+        <div class="search-input-container">
           <span class="search-icon">{@html ICONS.SEARCH}</span>
-        {/if}
-        <input
-          type="text"
-          placeholder="Search Yandex Music..."
-          bind:value={searchQuery}
-          on:input={handleSearchInput}
-        />
-        {#if searchQuery}
-          <button
-            class="clear-btn"
-            on:click={() => {
-              searchQuery = "";
-              viewMode = "dashboard";
-            }}
-          >
-            {@html ICONS.CLOSE}
-          </button>
+          <input
+            type="text"
+            placeholder="Search Yandex Music..."
+            bind:value={searchQuery}
+            on:input={handleSearchInput}
+          />
+          {#if searchQuery}
+            <button
+              class="clear-btn"
+              on:click={() => {
+                searchQuery = "";
+                if (viewMode === "search") window.history.back();
+              }}
+            >
+              {@html ICONS.CLOSE}
+            </button>
+          {/if}
+        </div>
+
+        {#if viewMode === "search"}
+          <div class="filter-tabs">
+            <button
+              class:active={searchType === "all"}
+              on:click={() => setSearchType("all")}>All</button
+            >
+            <button
+              class:active={searchType === "track"}
+              on:click={() => setSearchType("track")}>Tracks</button
+            >
+          </div>
         {/if}
       </div>
-
-      {#if viewMode === "search"}
-        <div class="filter-tabs">
-          <button
-            class:active={searchType === "all"}
-            on:click={() => setSearchType("all")}>All</button
-          >
-          <button
-            class:active={searchType === "track"}
-            on:click={() => setSearchType("track")}>Tracks</button
-          >
-        </div>
-      {/if}
-    </div>
+    {/if}
 
     {#if viewMode === "dashboard"}
       <div class="content-padded" in:fade>
         <h2 class="header-label">Library & Vibe</h2>
-        <div class="music-grid horizontal section-mb">
+        <div
+          class="music-grid horizontal section-mb"
+          on:wheel={handleHorizontalScroll}
+        >
           {#each playlists as pl}
             <div class="music-card" on:click={() => openPlaylist(pl)}>
               <div
@@ -333,7 +490,10 @@
 
         {#if moodStations.length > 0}
           <h2 class="header-label">Moods & Genres</h2>
-          <div class="music-grid horizontal section-mb">
+          <div
+            class="music-grid horizontal section-mb"
+            on:wheel={handleHorizontalScroll}
+          >
             {#each moodStations as st}
               <div class="music-card" on:click={() => openPlaylist(st)}>
                 <div
@@ -353,7 +513,10 @@
 
         {#if smartPlaylists.length > 0}
           <h2 class="header-label">Mixes for You</h2>
-          <div class="music-grid horizontal section-mb">
+          <div
+            class="music-grid horizontal section-mb"
+            on:wheel={handleHorizontalScroll}
+          >
             {#each smartPlaylists as pl}
               <div class="music-card" on:click={() => openPlaylist(pl)}>
                 <div class="card-img-container">
@@ -367,22 +530,21 @@
       </div>
     {/if}
 
-    {#if viewMode === "search"}
+    {#if viewMode === "search" && !isLoading}
       <div class="content-padded" in:fade>
-        {#if isLoading}
-          <div class="spinner"></div>
-        {/if}
-
         {#if searchResults.artists.length > 0 && searchType === "all"}
           <h3 class="header-label">Artists</h3>
-          <div class="music-grid horizontal section-mb">
+          <div
+            class="music-grid horizontal section-mb"
+            on:wheel={handleHorizontalScroll}
+          >
             {#each searchResults.artists as artist}
               <div class="music-card" on:click={() => openArtist(artist)}>
-                <div class="card-img-container rounded">
+                <div class="card-img-container">
                   <ImageLoader
                     src={artist.image}
                     alt={artist.title}
-                    radius="50%"
+                    radius="8px"
                   />
                 </div>
                 <div class="card-title center">{artist.title}</div>
@@ -393,7 +555,10 @@
 
         {#if searchResults.albums.length > 0 && searchType === "all"}
           <h3 class="header-label">Albums</h3>
-          <div class="music-grid horizontal section-mb">
+          <div
+            class="music-grid horizontal section-mb"
+            on:wheel={handleHorizontalScroll}
+          >
             {#each searchResults.albums as album}
               <div class="music-card" on:click={() => openAlbum(album)}>
                 <div class="card-img-container">
@@ -412,57 +577,81 @@
       </div>
     {/if}
 
-    {#if ["list", "search", "artist_details", "album_details"].includes(viewMode)}
+    {#if ["playlist", "search", "artist_details", "album_details"].includes(viewMode)}
       <BaseList
         itemsStore={tracksStore}
         {isLoading}
+        isEditMode={false}
         emptyText="No tracks found"
       >
         <div slot="header" class="content-padded">
-          {#if viewMode !== "search" && headerInfo.title}
-            <div
-              class="view-header"
-              style="display:flex; gap: 20px; align-items:flex-end; margin-bottom:20px;"
-            >
-              <div style="width: 140px; height: 140px; flex-shrink:0;">
-                <ImageLoader
-                  src={headerInfo.cover}
-                  radius={viewMode === "artist_details" ? "50%" : "8px"}
-                >
-                  <div slot="fallback" class="icon-fallback">
-                    {@html ICONS.ALBUMS}
-                  </div>
-                </ImageLoader>
-              </div>
-              <div style="flex: 1; min-width: 0;">
-                <div
-                  class="card-sub"
-                  style="font-size:14px; text-transform:uppercase; margin-bottom:4px;"
-                >
-                  {headerInfo.sub}
-                </div>
-                <h1 style="font-size:32px; margin:0; line-height:1.1;">
-                  {headerInfo.title}
-                </h1>
-                {#if headerInfo.description}
-                  <p
-                    style="font-size:13px; color:var(--c-text-secondary); margin-top:10px; line-clamp:2; overflow:hidden;"
+          {#if viewMode !== "search" && currentView.data}
+            {@const headerData = currentView.data}
+            <div class="view-header">
+              <div class="header-art">
+                <div style="width: 100%; height: 100%;">
+                  <ImageLoader
+                    src={headerData.cover || headerData.image}
+                    alt={headerData.title}
+                    radius="8px"
                   >
-                    {headerInfo.description}
-                  </p>
-                {/if}
-                <button
-                  class="btn-primary"
-                  style="margin-top:16px;"
-                  on:click={playAll}>Play All</button
-                >
+                    <div slot="fallback" class="icon-fallback">
+                      {@html ICONS.ALBUMS}
+                    </div>
+                  </ImageLoader>
+                </div>
+              </div>
+
+              <div class="header-info">
+                <div class="header-text-group">
+                  <div class="header-label">
+                    {viewMode.includes("artist")
+                      ? "Artist"
+                      : viewMode.includes("album")
+                        ? "Album"
+                        : "Playlist"}
+                  </div>
+                  <h1 class="header-title" title={headerData.title}>
+                    {headerData.title || headerData.name}
+                  </h1>
+
+                  {#if headerData.description || headerData.artist}
+                    <div class="header-subtitle-row">
+                      <span
+                        class="card-sub"
+                        style="font-size: 13px; line-clamp:2; overflow:hidden;"
+                      >
+                        {headerData.artist || headerData.description}
+                      </span>
+                    </div>
+                  {/if}
+
+                  <div class="meta-badges">
+                    <span class="meta-tag">{$tracksStore.length} tracks</span>
+                    <span class="meta-tag">Yandex</span>
+                  </div>
+                </div>
+
+                <div class="header-actions">
+                  <button class="btn-primary" on:click={playAll}
+                    >Play All</button
+                  >
+                  <button class="btn-secondary" on:click={addAllToQueue}
+                    >To Queue</button
+                  >
+                </div>
               </div>
             </div>
           {/if}
 
-          {#if viewMode === "artist_details" && $albumsStore.length > 0}
-            <h3 class="header-label" style="margin-top:20px;">Albums</h3>
-            <div class="music-grid horizontal section-mb">
+          {#if viewMode.includes("artist") && $albumsStore.length > 0}
+            <div class="header-label section-spacing" style="margin-top: 24px;">
+              Albums
+            </div>
+            <div
+              class="music-grid horizontal section-mb"
+              on:wheel={handleHorizontalScroll}
+            >
               {#each $albumsStore as album}
                 <div class="music-card" on:click={() => openAlbum(album)}>
                   <div class="card-img-container">
@@ -471,13 +660,16 @@
                       alt={album.title}
                       radius="8px"
                     />
+                    <div class="play-overlay">
+                      <span class="overlay-icon">{@html ICONS.PLAY}</span>
+                    </div>
                   </div>
                   <div class="card-title">{album.title}</div>
                   <div class="card-sub">{album.year}</div>
                 </div>
               {/each}
             </div>
-            <h3 class="header-label">Popular Tracks</h3>
+            <div class="header-label section-spacing">Popular Tracks</div>
           {/if}
         </div>
 
@@ -486,20 +678,18 @@
             track={item}
             {index}
             on:play={() => YandexApi.playTrack(item.id)}
-            on:artistclick={handleTrackRowArtistClick}
+            on:artistclick={() => {}}
           />
         </div>
 
-        <div slot="footer" style="padding: 20px; text-align: center;">
-          {#if viewMode === "list" && $tracksStore.length >= 50 && !isLoading}
-            <button
-              class="btn-secondary"
-              on:click={loadMore}
-              disabled={isLoadingMore}
-            >
-              {isLoadingMore ? "Loading..." : "Load More"}
-            </button>
+        <div slot="footer" class="loading-footer">
+          {#if isLoadingMore}
+            <div class="spinner"></div>
           {/if}
+          <div
+            bind:this={loadMoreSentinel}
+            style="height: 20px; width: 100%;"
+          ></div>
         </div>
       </BaseList>
     {/if}
@@ -544,7 +734,6 @@
   }
 
   .search-icon,
-  .back-icon-btn,
   .clear-btn {
     display: flex;
     align-items: center;
@@ -554,7 +743,6 @@
     height: 20px;
   }
 
-  .back-icon-btn,
   .clear-btn {
     background: none;
     border: none;
@@ -562,13 +750,8 @@
     cursor: pointer;
   }
 
-  .back-icon-btn {
-    color: var(--c-text-primary);
-  }
-
-  .back-icon-btn :global(svg),
-  .search-icon :global(svg),
-  .clear-btn :global(svg) {
+  .clear-btn :global(svg),
+  .search-icon :global(svg) {
     width: 100%;
     height: 100%;
   }
@@ -596,17 +779,13 @@
   }
 
   .header-label {
-    font-size: 18px;
+    font-size: 14px;
     font-weight: 700;
-    margin-bottom: 16px;
     color: var(--c-text-primary);
   }
 
   .card-img-container.is-vibe {
     background: linear-gradient(135deg, #a4508b, #5f0a87);
-  }
-  .card-img-container.rounded {
-    border-radius: 50%;
   }
   .card-title.center {
     text-align: center;
@@ -643,9 +822,19 @@
   .section-mb {
     margin-bottom: 24px;
   }
+  .section-spacing {
+    margin-bottom: 16px;
+  }
+
+  .loading-footer {
+    padding: 20px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+  }
 
   .spinner {
-    margin: 20px auto;
+    margin: 0 auto;
     border: 2px solid var(--c-border);
     border-top-color: var(--c-accent);
     border-radius: 50%;

@@ -273,7 +273,7 @@
 }
 
 .header-label {
-  font-size: 12px;
+  font-size: 14px;
   font-weight: 600;
   text-transform: uppercase;
   color: var(--c-accent);
@@ -470,7 +470,6 @@
 .btn-primary {
   background: var(--c-accent);
   color: var(--c-text-primary);
-  box-shadow: 0 4px 12px var(--c-shadow-glow-accent);
 }
 
 .btn-secondary {

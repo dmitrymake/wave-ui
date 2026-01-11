@@ -7,16 +7,28 @@
   import { ApiActions } from "./lib/api";
   import { db } from "./lib/db";
   import { Router } from "./lib/router";
-  import { setNavigationCallback, showToast } from "./lib/store";
+  import {
+    setNavigationCallback,
+    showToast,
+    isYandexEnabled,
+  } from "./lib/store";
   import "./styles/shared.css";
+  import { get } from "svelte/store";
 
   onMount(async () => {
     Router.init();
     setNavigationCallback((view, data) => {
       Router.updateUrl(view, data);
     });
+
     MPD.connect();
     ApiActions.loadRadioStations();
+
+    // Yandex Auto-init
+    if (get(isYandexEnabled)) {
+      ApiActions.checkYandexAuth();
+    }
+
     try {
       const artists = await db.getArtists();
       if (artists.length > 0) {

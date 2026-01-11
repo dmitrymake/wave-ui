@@ -6,7 +6,9 @@ export const YandexApi = {
     url.searchParams.append("action", action);
 
     for (const key in params) {
-      url.searchParams.append(key, params[key]);
+      if (params[key] !== undefined && params[key] !== null) {
+        url.searchParams.append(key, params[key]);
+      }
     }
 
     const res = await fetch(url);
@@ -34,8 +36,9 @@ export const YandexApi = {
     return await this.request("get_album_details", { id });
   },
 
-  async getPlaylistTracks(uid, kind) {
-    return await this.request("get_playlist_tracks", { uid, kind });
+  // ИСПРАВЛЕНО: добавлен параметр offset
+  async getPlaylistTracks(uid, kind, offset = 0) {
+    return await this.request("get_playlist_tracks", { uid, kind, offset });
   },
 
   async getFavoritesIds() {

@@ -47,6 +47,22 @@ function mpdSend($cmd) {
 function formatTrack($t) {
     if (!$t) return null;
 
+    if (isset($t['artist']) && is_string($t['artist'])) {
+        return [
+            'title' => $t['title'] ?? 'Unknown Title',
+            'artist' => $t['artist'],
+            'artistId' => $t['artistId'] ?? null,
+            'album' => $t['album'] ?? '',
+            'id' => (string)($t['id'] ?? ''),
+            'file' => "yandex:" . ($t['id'] ?? ''),
+            'image' => $t['image'] ?? $t['cover'] ?? null,
+            'isYandex' => true,
+            'service' => 'yandex',
+            'time' => $t['time'] ?? 0
+        ];
+    }
+    // ----------------------------------------
+
     $cover = null;
     if (!empty($t['ogImage'])) {
         $cover = $t['ogImage'];
@@ -99,8 +115,15 @@ function cacheTrackMeta($url, $track) {
     if (count($cache) > 200) {
         $cache = array_slice($cache, -100, 100, true);
     }
+    
     $key = md5($url);
-    $cache[$key] = formatTrack($track);
+    $formatted = formatTrack($track);
+    $cache[$key] = $formatted;
+    
+    if (isset($formatted['id']) && $formatted['id']) {
+        $cache[$formatted['id']] = $formatted;
+    }
+
     file_put_contents(META_CACHE_FILE, json_encode($cache));
 }
 
@@ -351,6 +374,41 @@ try {
             echo json_encode(['status' => 'ok', 'added_now' => $initialCount]);
             break;
 
+        case 'add_tracks':
+            $input = json_decode(file_get_contents('php://input'), true);
+            $tracks = $input['tracks'] ?? [];
+            if (empty($tracks)) throw new Exception("No tracks provided");
+            
+            $added = 0;
+            // Add first 5 immediately
+            $immediate = array_splice($tracks, 0, 5);
+            foreach ($immediate as $t) {
+                $url = $api->getDirectLink($t['id']);
+                if ($url) {
+                    mpdSend("add \"$url\"");
+                    cacheTrackMeta($url, $t);
+                    $added++;
+                }
+            }
+            
+            // Add rest to buffer if there are more
+            if (!empty($tracks)) {
+                $currentState = getState();
+                if (!$currentState) $currentState = [];
+                
+                $currentState['active'] = true;
+                $currentState['mode'] = 'playlist_extend';
+                
+                // Append to existing buffer or create new
+                $existing = $currentState['queue_buffer'] ?? [];
+                $currentState['queue_buffer'] = array_merge($existing, $tracks);
+                
+                saveState($currentState);
+            }
+            
+            echo json_encode(['status' => 'ok', 'added_immediate' => $added]);
+            break;
+
         case 'play_track':
             $id = $_REQUEST['id'] ?? '';
             $append = ($_REQUEST['append'] ?? '0') === '1';
@@ -381,7 +439,13 @@ try {
         case 'get_meta':
             $url = $_GET['url'] ?? '';
             $cache = file_exists(META_CACHE_FILE) ? json_decode(file_get_contents(META_CACHE_FILE), true) : [];
-            echo json_encode($cache[md5($url)] ?? null);
+            $res = $cache[md5($url)] ?? null;
+            
+            if (!$res) {
+              ///
+            }
+            
+            echo json_encode($res);
             break;
 
         default:

@@ -16,6 +16,7 @@
     navigationStack,
     navigateTo,
     showToast,
+    yandexSearchTrigger,
   } from "../lib/store.js";
   import { longpress } from "../lib/actions";
 
@@ -114,29 +115,31 @@
 
   function handleArtistClick(e) {
     e.stopPropagation();
-    if (isYandexTrack) {
-      dispatch("artistclick", track);
+
+    if (isYandexTrack && track.artist) {
+      // ИСПРАВЛЕНИЕ: Просто переключаем вкладку и ставим триггер
+      // Не сбрасываем navigationStack, чтобы работала кнопка Back
+      activeMenuTab.set("yandex");
+      yandexSearchTrigger.set(track.artist);
     } else if (!isRadio && track.artist) {
       activeMenuTab.set("artists");
       navigateTo("albums_by_artist", { name: track.artist });
     }
+
+    dispatch("artistclick", track);
   }
 
   async function handleToggleLike(e) {
     e.stopPropagation();
     if (isYandexTrack) {
       try {
-        await YandexApi.toggleLike(track.id, isLiked);
-        if (isLiked) {
+        const wasLiked = isLiked;
+        if (wasLiked) {
           yandexFavorites.update((s) => {
             s.delete(String(track.id));
             return s;
           });
-          showToast("Removed from Yandex Likes", "success");
-
-          if (isPlayingFile) {
-            MPD.playNext();
-          }
+          showToast("Removed from Yandex Likes", "info");
         } else {
           yandexFavorites.update((s) => {
             s.add(String(track.id));
@@ -144,8 +147,14 @@
           });
           showToast("Added to Yandex Likes", "success");
         }
+
+        await YandexApi.toggleLike(track.id, wasLiked);
       } catch (err) {
         showToast("Failed to update Yandex like", "error");
+        try {
+          const res = await YandexApi.getFavoritesIds();
+          if (res && res.ids) yandexFavorites.set(new Set(res.ids.map(String)));
+        } catch (e) {}
       }
     } else {
       MPD.toggleFavorite(track);
@@ -221,7 +230,7 @@
 
     <div
       class="artist text-ellipsis"
-      class:link={!isRadio}
+      class:link={!isRadio || isYandexTrack}
       on:click={handleArtistClick}
     >
       {artist}
