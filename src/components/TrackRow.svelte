@@ -16,7 +16,6 @@
     navigationStack,
     navigateTo,
     showToast,
-    yandexSearchTrigger,
   } from "../lib/store.js";
   import { longpress } from "../lib/actions";
 
@@ -117,12 +116,24 @@
     e.stopPropagation();
 
     if (isYandexTrack && track.artist) {
-      // ИСПРАВЛЕНИЕ: Просто переключаем вкладку и ставим триггер
-      // Не сбрасываем navigationStack, чтобы работала кнопка Back
       activeMenuTab.set("yandex");
-      yandexSearchTrigger.set(track.artist);
+
+      if (window.location.hash !== "#/yandex") {
+        history.pushState(null, "", "#/yandex");
+      }
+
+      navigationStack.set([
+        { view: "root" },
+        { view: "yandex_search", data: { query: track.artist } },
+      ]);
     } else if (!isRadio && track.artist) {
       activeMenuTab.set("artists");
+
+      if (window.location.hash !== "#/artists") {
+        history.pushState(null, "", "#/artists");
+      }
+
+      navigationStack.set([{ view: "root" }]);
       navigateTo("albums_by_artist", { name: track.artist });
     }
 

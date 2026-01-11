@@ -8,6 +8,7 @@
     isSyncingLibrary,
     isSidebarCollapsed,
     isYandexEnabled,
+    navigationStack,
   } from "../lib/store";
   import { ApiActions } from "../lib/api";
 
@@ -34,7 +35,16 @@
   });
 
   function switchTab(id) {
-    window.location.hash = `/${id}`;
+    const targetHash = `/${id}`;
+    if (
+      window.location.hash === `#${targetHash}` ||
+      window.location.hash === targetHash
+    ) {
+      activeMenuTab.set(id);
+      navigationStack.set([{ view: "root" }]);
+    } else {
+      window.location.hash = targetHash;
+    }
     dispatch("close");
   }
 

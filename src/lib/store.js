@@ -109,7 +109,6 @@ export const currentSong = writable({
   isYandex: false,
 });
 
-// Кэш метаданных стримов (чтобы в Queue были обложки и названия)
 export const yandexContext = writable({
   active: false,
   tracks: [],
@@ -148,7 +147,6 @@ export const queue = writable([]);
 export const queueVersion = writable(0);
 export const searchQuery = writable("");
 
-// Специальный триггер для поиска в Яндексе
 export const yandexSearchTrigger = writable(null);
 
 export const scrollPositions = writable({});
@@ -255,10 +253,10 @@ export function setNavigationCallback(fn) {
 export function navigateTo(view, data = null) {
   if (data) pendingRouteData = data;
 
+  navigationStack.update((stack) => [...stack, { view, data }]);
+
   if (onNavigateCallback) {
     onNavigateCallback(view, data);
-  } else {
-    console.warn("Router callback not set!");
   }
 }
 
@@ -269,18 +267,26 @@ export function consumeRouteData() {
 }
 
 export function navigateBack() {
-  window.history.back();
+  const stack = get(navigationStack);
+  if (stack.length > 1) {
+    navigationStack.update((s) => s.slice(0, -1));
+  } else {
+    window.history.back();
+  }
 }
 
-export function handleBrowserBack() {}
+export function handleBrowserBack() {
+  const stack = get(navigationStack);
+  if (stack.length > 1) {
+    navigationStack.update((s) => s.slice(0, -1));
+  }
+}
 
 export function getTrackCoverUrl(
   track,
   stationList = [],
   selectedRadioName = null,
 ) {
-  // ПРИОРИТЕТ 1: Явная ссылка на картинку в объекте трека
-  // Это исправляет проблему с Play All, когда метаданные есть, но грузилась заглушка
   if (track && track.image && track.image.startsWith("http")) {
     return track.image;
   }
@@ -291,7 +297,6 @@ export function getTrackCoverUrl(
   if (!track || !track.file) return "/images/default_cover.png";
 
   if (isRadioTrack(track.file) || track.genre === "Radio") {
-    // Еще раз проверяем image, на случай если он пришел позже
     if (track.image) {
       return getStationImageUrl(track);
     }
@@ -313,7 +318,6 @@ export function getTrackThumbUrl(
 ) {
   if (!track) return "/images/default_icon.png";
 
-  // ПРИОРИТЕТ 1: Явная ссылка (для Яндекс/Радио с метаданными)
   if (track.image && track.image.startsWith("http")) {
     return track.image;
   }
@@ -321,7 +325,6 @@ export function getTrackThumbUrl(
     return track.cover;
   }
 
-  // ПРИОРИТЕТ 2: Радио/Поток без картинки
   if (
     track.file &&
     (isRadioTrack(track.file) ||
@@ -331,15 +334,12 @@ export function getTrackThumbUrl(
     if (track.image) {
       return getStationImageUrl(track);
     }
-    // Если это поток и картинки нет, НЕ пытаемся хешировать файл (будет 404),
-    // возвращаем заглушку радио
     return (
       resolveRadioImage(track, stationList, selectedRadioName) ||
       "/images/radio_icon.png"
     );
   }
 
-  // ПРИОРИТЕТ 3: Локальный файл (хэширование)
   if (!track.file) return "/images/default_icon.png";
 
   if (track.thumbHash) {
@@ -364,8 +364,6 @@ export function getTrackThumbUrl(
 
 function isRadioTrack(file) {
   if (!file) return false;
-  // Яндекс треки технически потоки, но мы обрабатываем их метаданные отдельно
-  // Если это явный yandex url, считаем потоком, но картинку берем из меты
   if (file.includes("yandex.net") || file.includes("get-mp3")) return false;
 
   return (

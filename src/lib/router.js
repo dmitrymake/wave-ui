@@ -37,6 +37,14 @@ export const Router = {
           data = { artist: parts[1], name: parts[2] };
         } else if (route === "artist" && parts.length >= 2) {
           data = { name: parts[1] };
+        } else if (route === "yandex_playlist" && parts.length >= 3) {
+          data = { uid: parts[1], kind: parts[2], title: "Playlist" };
+        } else if (route === "yandex_album_details" && parts.length >= 2) {
+          data = { id: parts[1], title: "Album" };
+        } else if (route === "yandex_artist_details" && parts.length >= 2) {
+          data = { id: parts[1], title: "Artist" };
+        } else if (route === "yandex_search" && parts.length >= 2) {
+          data = { query: parts[1] };
         } else {
           data = { name: parts[1], displayName: parts[1] };
         }
@@ -107,6 +115,38 @@ export const Router = {
         navigationStack.set([{ view: "root" }]);
         break;
 
+      case "yandex_search":
+        activeMenuTab.set("yandex");
+        navigationStack.set([
+          { view: "root" },
+          { view: "yandex_search", data: data },
+        ]);
+        break;
+
+      case "yandex_playlist":
+        activeMenuTab.set("yandex");
+        navigationStack.set([
+          { view: "root" },
+          { view: "yandex_playlist", data: data },
+        ]);
+        break;
+
+      case "yandex_album_details":
+        activeMenuTab.set("yandex");
+        navigationStack.set([
+          { view: "root" },
+          { view: "yandex_album_details", data: data },
+        ]);
+        break;
+
+      case "yandex_artist_details":
+        activeMenuTab.set("yandex");
+        navigationStack.set([
+          { view: "root" },
+          { view: "yandex_artist_details", data: data },
+        ]);
+        break;
+
       default:
         this.setRootTab("artists");
         break;
@@ -149,6 +189,14 @@ export const Router = {
       }
     } else if (view === "queue") {
       newPath = "queue";
+    } else if (view === "yandex_playlist") {
+      newPath = `yandex_playlist/${data.uid}/${data.kind}`;
+    } else if (view === "yandex_album_details") {
+      newPath = `yandex_album_details/${data.id}`;
+    } else if (view === "yandex_artist_details") {
+      newPath = `yandex_artist_details/${data.id}`;
+    } else if (view === "yandex_search") {
+      newPath = `yandex_search/${encodeURIComponent(data.query)}`;
     }
 
     if (newPath) {
