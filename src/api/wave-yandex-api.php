@@ -348,14 +348,14 @@ try {
             break;
 
         case 'play_station':
-            $stationId = $_REQUEST['station'] ?? 'user:onetwo';
+            $stationId = $_REQUEST['station'] ?? 'user:onyourwave';
             $extraParams = [];
             $contextName = "My Vibe";
 
             if (strpos($stationId, 'vibe:') === 0) {
                 $parts = explode(':', $stationId);
                 if (count($parts) === 3) {
-                    $type = $parts[1]; 
+                    $type = $parts[1];
                     $val = $parts[2];
                     $extraParams[$type] = $val;
                     $stationId = 'user:onyourwave'; 
@@ -363,10 +363,6 @@ try {
                 }
             } elseif (strpos($stationId, 'track:') === 0) {
                 $contextName = "Track Radio";
-            } elseif ($stationId === 'user:onyourwave') {
-                $contextName = "My Vibe";
-            } else {
-                $contextName = "Station";
             }
 
             mpdSend("clear");
@@ -389,8 +385,7 @@ try {
                         }
                     } else {
                         $initialBuffer[] = $track; 
-                        $url_fake = "yandex:" . $track['id']; 
-                        cacheTrackMeta($url_fake, $track); 
+                        cacheTrackMeta("yandex:" . $track['id'], $track); 
                     }
                     if (count($initialBuffer) >= 20) break; 
                 }
@@ -408,6 +403,7 @@ try {
             ]);
             echo json_encode(['status' => 'started', 'context' => $contextName]);
             break;
+
 
         case 'play_playlist':
             $input = json_decode(file_get_contents('php://input'), true);

@@ -16,14 +16,9 @@ class YandexMusic {
         @file_put_contents($this->debugFile, "[$time] $msg\n", FILE_APPEND);
     }
 
-    private function request($path, $postData = null, $isXml = false) {
+private function request($path, $postData = null, $isXml = false, $asJson = false) {
         $url = strpos($path, 'http') === 0 ? $path : "https://api.music.yandex.net" . $path;
-        
-        $method = $postData ? "POST" : "GET";
-        // LOG EVERY REQUEST URL TO SEE IF PARAMS ARE THERE
-        if (strpos($url, '/tracks') !== false || strpos($url, '/search') !== false) {
-            $this->log("REQ: $url");
-        }
+        $this->log("REQ: $url");
 
         $headers = [
             "Authorization: OAuth " . $this->token,
@@ -38,24 +33,21 @@ class YandexMusic {
 
         if ($postData) {
             curl_setopt($ch, CURLOPT_POST, true);
-            curl_setopt($ch, CURLOPT_POSTFIELDS, http_build_query($postData));
-            $headers[] = 'Content-Type: application/x-www-form-urlencoded';
+            if ($asJson) {
+                $jsonData = json_encode($postData);
+                curl_setopt($ch, CURLOPT_POSTFIELDS, $jsonData);
+                $headers[] = 'Content-Type: application/json';
+                $this->log("BODY JSON: $jsonData");
+            } else {
+                curl_setopt($ch, CURLOPT_POSTFIELDS, http_build_query($postData));
+            }
         }
 
         curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
         $response = curl_exec($ch);
-        $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-        $err = curl_error($ch);
-        
         curl_close($ch);
 
-        if ($err) {
-            $this->log("CURL ERROR: $err");
-            return null;
-        }
-
         if ($isXml) return $response;
-        
         return json_decode($response, true);
     }
 
@@ -124,29 +116,30 @@ class YandexMusic {
         return $data['result']['tracks'] ?? [];
     }
 
-    public function getStationTracksV2($stationId, $queue = [], $extraParams = []) {
-        $url = "/rotor/station/{$stationId}/tracks"; 
-        
-        $query = $extraParams; 
-        
-        if (!empty($queue)) {
-            $slice = array_slice($queue, -50); 
-            $query['queue'] = implode(',', $slice);
+public function getStationTracksV2($stationId, $queue = [], $extraParams = []) {
+        $seeds = [$stationId]; 
+
+        foreach ($extraParams as $key => $val) {
+            if ($key === 'moodEnergy') $seeds[] = "settingMoodEnergy:$val";
+            if ($key === 'diversity') $seeds[] = "settingDiversity:$val";
+            if ($key === 'mood') $seeds[] = "settingMood:$val";
         }
-        
-        $queryString = http_build_query($query);
-        $fullUrl = $url . '?' . $queryString;
-        
-        $this->log("VIBE REQUEST FULL: $fullUrl"); 
-        
-        $data = $this->request($fullUrl);
-        $rawSequence = $data['result']['sequence'] ?? [];
-        
+
+        $body = [
+            "seeds" => $seeds,
+            "includeTracksInResponse" => true,
+            "includeWaveModel" => true,
+            "interactive" => true
+        ];
+
+        $data = $this->request("/rotor/session/new", $body, false, true);
+
+        $rawSequence = $data['result']['tracks'] ?? $data['tracks'] ?? [];
+        $this->log("VIBE SESSION: Got " . count($rawSequence) . " tracks");
+
         $cleanTracks = [];
         foreach ($rawSequence as $item) {
-            if (isset($item['track'])) {
-                $cleanTracks[] = $item['track'];
-            } elseif (isset($item['id'])) {
+            if (isset($item['id'])) {
                 $cleanTracks[] = $item;
             }
         }
