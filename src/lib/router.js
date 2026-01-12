@@ -112,39 +112,52 @@ export const Router = {
 
       case "yandex":
         activeMenuTab.set("yandex");
-        navigationStack.set([{ view: "root" }]);
+        if (!data && get(navigationStack).length === 1) {
+          navigationStack.set([{ view: "root" }]);
+        }
         break;
 
       case "yandex_search":
         activeMenuTab.set("yandex");
-        navigationStack.set([
-          { view: "root" },
-          { view: "yandex_search", data: data },
-        ]);
+        if (!data) {
+          navigationStack.set([
+            { view: "root" },
+            { view: "yandex_search", data: { query: parts[1] } },
+          ]);
+        }
         break;
 
       case "yandex_playlist":
         activeMenuTab.set("yandex");
-        navigationStack.set([
-          { view: "root" },
-          { view: "yandex_playlist", data: data },
-        ]);
+        if (!data) {
+          navigationStack.set([
+            { view: "root" },
+            {
+              view: "yandex_playlist",
+              data: { uid: parts[1], kind: parts[2] },
+            },
+          ]);
+        }
         break;
 
       case "yandex_album_details":
         activeMenuTab.set("yandex");
-        navigationStack.set([
-          { view: "root" },
-          { view: "yandex_album_details", data: data },
-        ]);
+        if (!data) {
+          navigationStack.set([
+            { view: "root" },
+            { view: "yandex_album_details", data: { id: parts[1] } },
+          ]);
+        }
         break;
 
       case "yandex_artist_details":
         activeMenuTab.set("yandex");
-        navigationStack.set([
-          { view: "root" },
-          { view: "yandex_artist_details", data: data },
-        ]);
+        if (!data) {
+          navigationStack.set([
+            { view: "root" },
+            { view: "yandex_artist_details", data: { id: parts[1] } },
+          ]);
+        }
         break;
 
       default:

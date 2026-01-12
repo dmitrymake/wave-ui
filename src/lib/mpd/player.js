@@ -82,31 +82,14 @@ async function refreshStatus() {
   } catch (e) {}
 }
 
-/**
- * Агрессивный извлекатель ID трека из URL
- * Пытается найти ID в query параметрах, в путях и т.д.
- */
 function getYandexIdFromUrl(url) {
   if (!url) return null;
-
-  // 1. Ищем track-id=12345
   let match = url.match(/[?&]track-id=([^&]+)/);
   if (match) return match[1];
-
-  // 2. Ищем id=12345
   match = url.match(/[?&]id=([^&]+)/);
   if (match) return match[1];
-
-  // 3. Ищем /track/12345
   match = url.match(/\/track\/(\d+)/);
   if (match) return match[1];
-
-  // 4. Если это прямой стрим яндекса, часто ID зашит в структуре пути, но это сложно.
-  // Попробуем найти просто последовательность цифр, если она похожа на ID (обычно 7-9 цифр)
-  // Это рискованно, но для "Unknown Artist" лучше рискнуть.
-  // const looseMatch = url.match(/\/(\d{6,10})\//);
-  // if (looseMatch) return looseMatch[1];
-
   return null;
 }
 
@@ -119,9 +102,6 @@ async function syncQueue(newVersion) {
 
     const rawTracks = MpdParser.parseTracks(text);
     const yCtx = get(yandexContext);
-
-    // LOG: Проверяем, есть ли что-то в кэше вообще
-    // console.log("[Player] SyncQueue. Cache keys count:", Object.keys(yCtx.streamCache || {}).length);
 
     const filesToLookup = rawTracks
       .map((t) => t.file)
@@ -138,36 +118,20 @@ async function syncQueue(newVersion) {
 
     const tracks = rawTracks.map((t) => {
       const fileUrl = t.file || "";
-
-      // Проверка на Яндекс
       const isYandex =
         fileUrl.includes("yandex.net") ||
         fileUrl.includes("get-mp3") ||
         fileUrl.startsWith("yandex:") ||
         fileUrl.includes("storage.yandex.net");
 
-      // ПОПЫТКА ВОССТАНОВЛЕНИЯ МЕТАДАННЫХ
       if (isYandex && yCtx.streamCache) {
-        let yMeta = yCtx.streamCache[fileUrl]; // 1. Ищем по полному URL (редко работает для стримов)
-
+        let yMeta = yCtx.streamCache[fileUrl];
         if (!yMeta) {
-          // 2. Извлекаем ID и ищем по ID
           const tId = getYandexIdFromUrl(fileUrl);
-          if (tId) {
-            yMeta = yCtx.streamCache[String(tId)];
-            if (!yMeta) {
-              // LOG: ID нашли, но в кэше его нет
-              // console.log(`[Player] Cache Miss for ID: ${tId} (URL: ${fileUrl})`);
-            }
-          } else {
-            // LOG: Не смогли извлечь ID
-            // console.log(`[Player] No ID found in URL: ${fileUrl}`);
-          }
+          if (tId) yMeta = yCtx.streamCache[String(tId)];
         }
 
         if (yMeta) {
-          // LOG: Успешное восстановление
-          // console.log(`[Player] Restored metadata for ${yMeta.title}`);
           return {
             ...t,
             title: yMeta.title || t.title,
@@ -183,7 +147,6 @@ async function syncQueue(newVersion) {
         }
       }
 
-      // Если кэш пуст или не нашли, пробуем загрузить с сервера (fallback)
       if (isYandex) {
         fetchYandexMetaForTrack(fileUrl);
       }
@@ -220,18 +183,13 @@ async function syncQueue(newVersion) {
 
 async function fetchYandexMetaForTrack(url) {
   const yCtx = get(yandexContext);
-  // Если уже закэшировано по URL, не дергаем
   if (yCtx.streamCache && yCtx.streamCache[url]) return;
 
-  // Если URL выглядит как поток с ID, проверим кэш по ID перед запросом
   const tId = getYandexIdFromUrl(url);
   if (tId && yCtx.streamCache && yCtx.streamCache[tId]) return;
 
-  console.log(`[Player] Fetching meta for: ${url}`);
-
   const meta = await ApiActions.getYandexMeta(url);
   if (meta) {
-    console.log(`[Player] Meta fetched: ${meta.artist} - ${meta.title}`);
     yandexContext.update((ctx) => {
       const newCache = { ...ctx.streamCache };
       newCache[url] = { ...meta, isYandex: true, file: url };
@@ -241,13 +199,11 @@ async function fetchYandexMetaForTrack(url) {
       return { ...ctx, streamCache: newCache };
     });
 
-    // Обновляем текущий трек сразу, если это он
     const song = get(currentSong);
     if (song.file === url) {
       currentSong.update((s) => ({ ...s, ...meta, isYandex: true }));
     }
 
-    // Триггерим обновление очереди
     queue.update((q) =>
       q.map((t) => {
         if (t.file === url) return { ...t, ...meta, isYandex: true };
@@ -265,12 +221,8 @@ function updateStores(serverStatus, serverSong) {
   if (serverSong.file) {
     let yMeta = null;
 
-    // Проверка кэша
     if (yCtx.streamCache) {
-      // 1. По URL
       yMeta = yCtx.streamCache[serverSong.file];
-
-      // 2. По ID
       if (!yMeta) {
         const tId = getYandexIdFromUrl(serverSong.file);
         if (tId) yMeta = yCtx.streamCache[String(tId)];
@@ -285,17 +237,13 @@ function updateStores(serverStatus, serverSong) {
       serverSong.isYandex = true;
       serverSong.id = yMeta.id;
 
-      if (
-        yMeta.time > 0 &&
-        (serverStatus.duration === 0 || isNaN(serverStatus.duration))
-      ) {
-        serverStatus.duration = yMeta.time;
+      if (serverStatus.duration === 0 || isNaN(serverStatus.duration)) {
+        if (yMeta.time) serverStatus.duration = parseFloat(yMeta.time);
       }
     } else if (
       serverSong.file.includes("yandex.net") ||
       serverSong.file.includes("get-mp3")
     ) {
-      // Если это яндекс, но меты нет - запрашиваем
       fetchYandexMetaForTrack(serverSong.file);
     }
   }

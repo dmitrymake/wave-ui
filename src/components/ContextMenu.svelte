@@ -70,7 +70,6 @@
   function handleGoToAlbum() {
     const t = $contextMenu.track;
     if (t && t.album) {
-      // Yandex navigation handled via callback in view or ignored here
       if (!t.isYandex) {
         navigateTo("tracks_by_album", { name: t.album, artist: t.artist });
       }

@@ -17,9 +17,6 @@ class YandexMusic {
     private function request($path, $postData = null, $isXml = false) {
         $url = strpos($path, 'http') === 0 ? $path : "https://api.music.yandex.net" . $path;
         
-        $method = $postData ? "POST" : "GET";
-        $this->log("REQ [$method]: $url");
-
         $headers = [
             "Authorization: OAuth " . $this->token,
             "Accept-Language: ru"
@@ -44,15 +41,7 @@ class YandexMusic {
         
         curl_close($ch);
 
-        if ($err) {
-            $this->log("CURL ERROR: $err");
-            return null;
-        }
-
-        if ($httpCode >= 400) {
-            $this->log("HTTP ERROR $httpCode: " . substr($response, 0, 200));
-        }
-
+        if ($err) return null;
         if ($isXml) return $response;
         return json_decode($response, true);
     }
@@ -79,18 +68,15 @@ class YandexMusic {
     public function getPlaylistTracks($uid, $kind, $offset = 0, $limit = 100) {
         $data = $this->request("/users/{$uid}/playlists/{$kind}");
         
-        // Strategy 1: Small playlist, tracks inside
         if (isset($data['result']['tracks']) && count($data['result']['tracks']) == $data['result']['trackCount']) {
             $tracks = [];
             foreach ($data['result']['tracks'] as $item) {
                 $track = $item['track'] ?? $item;
                 if (isset($track['id'])) $tracks[] = $track;
             }
-            // Manual slice if tracks are already here
             return array_slice($tracks, $offset, $limit);
         }
 
-        // Strategy 2: Big playlist, use trackIds
         if (isset($data['result']['trackIds'])) {
             $allIds = array_map(function($item) {
                 return is_array($item) ? $item['id'] : $item;
@@ -114,7 +100,6 @@ class YandexMusic {
         return $data['result']['artist'] ?? null;
     }
 
-    // Get actual Albums of an Artist (for Carousel)
     public function getArtistDirectAlbums($artistId) {
         $data = $this->request("/artists/{$artistId}/direct-albums?page-size=50");
         return $data['result']['albums'] ?? [];
@@ -140,6 +125,18 @@ class YandexMusic {
         $param = $newQueue ? 'true' : 'false';
         $data = $this->request("/rotor/station/{$stationId}/tracks?new-queue={$param}");
         return $data['result']['sequence'] ?? [];
+    }
+
+    public function getStationTracksV2($stationId, $queue = []) {
+        $url = "/rotor/station/{$stationId}/tracks/v2";
+        $query = [];
+        if (!empty($queue)) {
+            $slice = array_slice($queue, -50); 
+            $query['queue'] = implode(',', $slice);
+        }
+        $queryString = http_build_query($query);
+        $data = $this->request($url . '?' . $queryString);
+        return $data['result']['batch']['tracks'] ?? [];
     }
 
     public function search($text, $type = 'all', $page = 0) {

@@ -190,8 +190,19 @@
   async function loadArtistData(data) {
     isLoading = true;
     canLoadMore = false;
+
     try {
       const res = await YandexApi.getArtistDetails(data.id);
+
+      const currentStack = get(navigationStack);
+      const activeView = currentStack[currentStack.length - 1];
+      if (activeView.view === "yandex_artist_details") {
+        activeView.data.name = res.name;
+        activeView.data.cover = res.cover;
+        activeView.data.description = res.description;
+        navigationStack.set(currentStack);
+      }
+
       tracksStore.set(res.tracks || []);
       albumsStore.set(res.albums || []);
     } finally {
