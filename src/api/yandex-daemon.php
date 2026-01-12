@@ -58,17 +58,19 @@ function updateMetaCache($url, $track) {
     $cache = file_exists(META_CACHE_FILE) ? json_decode(file_get_contents(META_CACHE_FILE), true) : [];
     if (count($cache) > 300) $cache = array_slice($cache, -100, 100, true);
     
-    $img = $track['ogImage'] ?? $track['coverUri'] ?? null;
-    if ($img) $img = 'https://' . str_replace('%%', '200x200', $img);
+    $img = $track['ogImage'] ?? $track['coverUri'] ?? $track['image'] ?? null;
+    if ($img && strpos($img, '%%') !== false) $img = 'https://' . str_replace('%%', '200x200', $img);
+    
     $artist = isset($track['artists'][0]['name']) ? $track['artists'][0]['name'] : ($track['artist'] ?? 'Unknown');
+    $title = $track['title'] ?? 'Unknown';
     
     $formatted = [
-        'title' => $track['title'] ?? 'Unknown',
+        'title' => $title,
         'artist' => $artist,
         'id' => (string)$track['id'],
         'image' => $img,
         'isYandex' => true,
-        'time' => isset($track['durationMs']) ? $track['durationMs']/1000 : 0
+        'time' => isset($track['durationMs']) ? $track['durationMs']/1000 : ($track['time'] ?? 0)
     ];
     
     $cache[md5($url)] = $formatted;
@@ -145,8 +147,8 @@ while (true) {
                 $url = $api->getDirectLink($nextTrack['id']);
                 
                 if ($url) {
-                    mpdSend("add \"$url\"");
                     updateMetaCache($url, $nextTrack);
+                    mpdSend("add \"$url\"");
                     
                     if (($state['mode'] ?? '') === 'station') {
                         $history = $state['played_history'] ?? [];

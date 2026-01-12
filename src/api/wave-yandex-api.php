@@ -369,8 +369,6 @@ try {
                 $contextName = "Station";
             }
 
-            debug("START STATION: $stationId | Context: $contextName | Params: " . json_encode($extraParams));
-
             mpdSend("clear");
             
             $queueData = $api->getStationTracksV2($stationId, [], $extraParams);
@@ -384,8 +382,8 @@ try {
                     if ($count < 3) {
                         $url = $api->getDirectLink($track['id']);
                         if ($url) {
-                            mpdSend("add \"$url\"");
                             cacheTrackMeta($url, $track);
+                            mpdSend("add \"$url\"");
                             $count++;
                             $history[] = (string)$track['id'];
                         }
@@ -425,8 +423,8 @@ try {
                 if ($count < 3) {
                     $url = $api->getDirectLink($t['id']);
                     if ($url) {
-                        mpdSend("add \"$url\"");
                         cacheTrackMeta($url, $t);
+                        mpdSend("add \"$url\"");
                         $count++;
                     }
                 } else {
@@ -452,26 +450,35 @@ try {
             if (empty($tracks)) throw new Exception("No tracks provided");
             
             $currentState = getState();
+            // Сбрасываем режим на static, чтобы демон не подмешивал вайб
+            // Но флаг active оставляем, чтобы он догрузил эти треки
             $buffer = $currentState['queue_buffer'] ?? [];
-            $newBuffer = array_merge($buffer, $tracks);
             
+            // Если добавили много треков в конец очереди, просто суем их в буфер
+            // Если очередь была пуста, демон сам начнет их играть
+            $added = 0;
+            // Если MPD пуст, добавляем первый сразу, чтобы не ждать демона
             if (empty($buffer)) {
-                 $first = array_shift($newBuffer);
+                 $first = array_shift($tracks);
                  if ($first) {
                      $url = $api->getDirectLink($first['id']);
                      if ($url) {
-                         mpdSend("add \"$url\"");
                          cacheTrackMeta($url, $first);
+                         mpdSend("add \"$url\"");
+                         $added++;
                      }
                  }
             }
+            
+            $newBuffer = array_merge($buffer, $tracks);
 
             saveState([
                 'active' => true,
+                'mode' => 'static', // Блокируем подкачку радио
                 'queue_buffer' => $newBuffer
             ]);
 
-            echo json_encode(['status' => 'ok', 'buffered' => count($tracks)]);
+            echo json_encode(['status' => 'ok', 'added' => $added, 'buffered' => count($tracks)]);
             break;
 
         case 'play_track':
@@ -481,8 +488,8 @@ try {
             $url = $api->getDirectLink($id);
             if ($url && $trackInfo) {
                 if (!$append) mpdSend("clear");
-                mpdSend("add \"$url\"");
                 cacheTrackMeta($url, $trackInfo);
+                mpdSend("add \"$url\"");
                 if (!$append) {
                     mpdSend("play");
                     saveState(['active' => false]);

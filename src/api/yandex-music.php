@@ -5,7 +5,6 @@ class YandexMusic {
     private $userAgent = 'Yandex-Music-Client';
     private $SALT = "XGRlBW9FXlekgbPrRHuSiA";
     
-    // ЛОГ ФАЙЛ ДЛЯ ОТЛАДКИ
     private $debugFile = '/dev/shm/yandex_debug.log';
 
     public function __construct($token) {
@@ -21,9 +20,10 @@ class YandexMusic {
         $url = strpos($path, 'http') === 0 ? $path : "https://api.music.yandex.net" . $path;
         
         $method = $postData ? "POST" : "GET";
-        // ЛОГИРУЕМ ЗАПРОС
-        $this->log("REQ [$method]: $url");
-        if ($postData) $this->log("DATA: " . json_encode($postData));
+        // LOG EVERY REQUEST URL TO SEE IF PARAMS ARE THERE
+        if (strpos($url, '/tracks') !== false || strpos($url, '/search') !== false) {
+            $this->log("REQ: $url");
+        }
 
         $headers = [
             "Authorization: OAuth " . $this->token,
@@ -34,7 +34,7 @@ class YandexMusic {
         curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
         curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
         curl_setopt($ch, CURLOPT_USERAGENT, $this->userAgent);
-        curl_setopt($ch, CURLOPT_TIMEOUT, 20); // Чуть увеличили таймаут
+        curl_setopt($ch, CURLOPT_TIMEOUT, 20);
 
         if ($postData) {
             curl_setopt($ch, CURLOPT_POST, true);
@@ -54,15 +54,9 @@ class YandexMusic {
             return null;
         }
 
-        $this->log("RESP CODE: $httpCode");
-
         if ($isXml) return $response;
         
-        $json = json_decode($response, true);
-        if (!$json) {
-            $this->log("JSON ERROR (Raw response len: " . strlen($response) . ")");
-        }
-        return $json;
+        return json_decode($response, true);
     }
 
     public function getUserId() {
@@ -91,7 +85,6 @@ class YandexMusic {
 
     public function getPlaylistTracks($uid, $kind, $offset = 0, $limit = 100) {
         $data = $this->request("/users/{$uid}/playlists/{$kind}");
-        
         if (isset($data['result']['tracks']) && count($data['result']['tracks']) == $data['result']['trackCount']) {
             $tracks = [];
             foreach ($data['result']['tracks'] as $item) {
@@ -100,17 +93,14 @@ class YandexMusic {
             }
             return array_slice($tracks, $offset, $limit);
         }
-
         if (isset($data['result']['trackIds'])) {
             $allIds = array_map(function($item) {
                 return is_array($item) ? $item['id'] : $item;
             }, $data['result']['trackIds']);
-
             $slice = array_slice($allIds, $offset, $limit);
             if (empty($slice)) return [];
             return $this->getTracksByIds($slice);
         }
-
         return [];
     }
 
@@ -134,27 +124,20 @@ class YandexMusic {
         return $data['result']['tracks'] ?? [];
     }
 
-    // --- ГЛАВНАЯ ФУНКЦИЯ ДЛЯ ВАЙБОВ ---
-    // Теперь точно передает параметры в URL
     public function getStationTracksV2($stationId, $queue = [], $extraParams = []) {
         $url = "/rotor/station/{$stationId}/tracks"; 
         
-        // Добавляем параметры настроения (moodEnergy, diversity)
         $query = $extraParams; 
         
-        // Передаем историю, чтобы не повторялось
         if (!empty($queue)) {
-            // Яндекс иногда хочет параметр 'queue' как список ID, которые уже были
-            // Берем последние 50, чтобы URL не лопнул
             $slice = array_slice($queue, -50); 
             $query['queue'] = implode(',', $slice);
         }
         
-        // Строим query string
         $queryString = http_build_query($query);
         $fullUrl = $url . '?' . $queryString;
         
-        $this->log("VIBE REQUEST: $fullUrl"); // Проверяем в логах, ушли ли параметры
+        $this->log("VIBE REQUEST FULL: $fullUrl"); 
         
         $data = $this->request($fullUrl);
         $rawSequence = $data['result']['sequence'] ?? [];
@@ -167,8 +150,6 @@ class YandexMusic {
                 $cleanTracks[] = $item;
             }
         }
-        
-        $this->log("VIBE RESULT: Got " . count($cleanTracks) . " tracks");
         return $cleanTracks;
     }
 
@@ -194,7 +175,6 @@ class YandexMusic {
         $data = $this->request("/users/{$uid}/likes/tracks");
         $ids = [];
         $res = $data['result'] ?? [];
-
         if (isset($res['library']['tracks'])) {
             foreach ($res['library']['tracks'] as $t) {
                 $ids[] = $t['id'];
@@ -214,10 +194,8 @@ class YandexMusic {
 
     public function getTracksByIds($ids) {
         if (empty($ids)) return [];
-        
         $chunks = array_chunk($ids, 200);
         $allTracks = [];
-
         foreach ($chunks as $chunk) {
             $chunkStr = implode(',', $chunk);
             $data = $this->request("/tracks", ['track-ids' => $chunkStr]);
@@ -237,10 +215,7 @@ class YandexMusic {
         if (!$trackId) return null;
         
         $data = $this->request("/tracks/{$trackId}/download-info");
-        if (empty($data['result'][0]['downloadInfoUrl'])) {
-            $this->log("No download info for $trackId");
-            return null;
-        }
+        if (empty($data['result'][0]['downloadInfoUrl'])) return null;
 
         usort($data['result'], function($a, $b) {
             return $b['bitrateInKbps'] - $a['bitrateInKbps'];
