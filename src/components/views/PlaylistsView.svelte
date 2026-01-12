@@ -253,7 +253,11 @@
       type: "confirm",
       onConfirm: () => {
         pressedPlayAll = true;
-        MPD.playPlaylistContext(currentView.data.name, 0);
+        if ($activePlaylistTracks && $activePlaylistTracks.length > 0) {
+          MPD.playAllTracks($activePlaylistTracks);
+        } else {
+          pressedPlayAll = false;
+        }
       },
     });
   }
