@@ -119,39 +119,51 @@ private function request($path, $postData = null, $isXml = false, $asJson = fals
 
     public function getStationTracksV2($stationId, $queue = [], $extraParams = []) {
         $url = "/rotor/station/{$stationId}/tracks"; 
-        $body = [
-            "interactive" => true,
-            "includeTracksInResponse" => true
+        
+        $params = [
+            "includeTracksInResponse" => "true",
+            "recursive" => "true"
         ];
+
         if (!empty($extraParams)) {
-            foreach ($extraParams as $key => $val) { $body[$key] = $val; }
-        }
-        if (!empty($queue)) {
-            $body['queue'] = implode(',', array_slice($queue, -20));
+            foreach ($extraParams as $key => $val) {
+                $params[$key] = $val;
+            }
         }
 
-        $data = $this->request($url, $body, false, true);
+        if ($stationId === 'user:onyourwave') {
+            $params['external-infos'] = 'onyourwave';
+        }
+
+        if (!empty($queue)) {
+            $params['queue'] = implode(',', array_slice($queue, -20));
+        }
+
+        $fullUrl = $url . '?' . http_build_query($params);
+        
+        $data = $this->request($fullUrl);
 
         $cleanTracks = [];
-        
+        $rawItems = [];
+
         if (isset($data['result']['sequence'])) {
             $rawItems = $data['result']['sequence'];
         } elseif (isset($data['result']['tracks'])) {
             $rawItems = $data['result']['tracks'];
         } elseif (isset($data['tracks'])) {
             $rawItems = $data['tracks'];
-        } else {
-            $rawItems = [];
         }
 
         foreach ($rawItems as $item) {
             $t = $item['track'] ?? $item;
-            if (isset($t['id'])) { $cleanTracks[] = $t; }
+            if (isset($t['id'])) {
+                $cleanTracks[] = $t;
+            }
         }
 
-        // ЕСЛИ ТРЕКОВ НЕТ, СОХРАНЯЕМ ВЕСЬ ОТВЕТ ДЛЯ АНАЛИЗА
+        $this->log("VIBE GET: Request to $stationId | Result: " . count($cleanTracks) . " tracks");
+
         if (empty($cleanTracks)) {
-            $this->log("CRITICAL: No tracks found in response. Dumping to /dev/shm/yandex_last_error.json");
             file_put_contents('/dev/shm/yandex_last_error.json', json_encode($data, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE));
         }
 
