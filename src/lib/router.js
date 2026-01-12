@@ -31,138 +31,122 @@ export const Router = {
 
     let data = consumeRouteData();
 
+    let viewName = route;
+
     if (!data) {
-      if (parts.length > 1) {
-        if (route === "album" && parts.length >= 3) {
-          data = { artist: parts[1], name: parts[2] };
-        } else if (route === "artist" && parts.length >= 2) {
-          data = { name: parts[1] };
-        } else if (route === "yandex_playlist" && parts.length >= 3) {
-          data = { uid: parts[1], kind: parts[2], title: "Playlist" };
-        } else if (route === "yandex_album_details" && parts.length >= 2) {
-          data = { id: parts[1], title: "Album" };
-        } else if (route === "yandex_artist_details" && parts.length >= 2) {
-          data = { id: parts[1], title: "Artist" };
-        } else if (route === "yandex_search" && parts.length >= 2) {
-          data = { query: parts[1] };
-        } else {
-          data = { name: parts[1], displayName: parts[1] };
-        }
+      if (route === "album" && parts.length >= 2) {
+        viewName = "tracks_by_album";
+        // album/Artist/AlbumName или album/AlbumName
+        data =
+          parts.length >= 3
+            ? { artist: parts[1], name: parts[2] }
+            : { name: parts[1] };
+      } else if (route === "artist" && parts.length >= 2) {
+        viewName = "albums_by_artist";
+        data = { name: parts[1] };
+      } else if (route === "playlist" && parts.length >= 2) {
+        viewName = "details";
+        data = { name: parts[1], displayName: parts[1] };
+      } else if (route === "favorites") {
+        viewName = "details";
+        data = { name: "Favorites" };
+      } else if (route === "yandex_playlist" && parts.length >= 3) {
+        data = { uid: parts[1], kind: parts[2], title: "Playlist" };
+      } else if (route === "yandex_album_details" && parts.length >= 2) {
+        data = { id: parts[1], title: "Album" };
+      } else if (route === "yandex_artist_details" && parts.length >= 2) {
+        data = { id: parts[1], title: "Artist" };
+      } else if (route === "yandex_search" && parts.length >= 2) {
+        data = { query: parts[1] };
       }
     }
 
-    console.log(`[Router] Navigating: ${route}`, data);
+    console.log(`[Router] Navigating: ${route} -> ${viewName}`, data);
 
-    switch (route) {
-      case "queue":
+    switch (true) {
+      case route.startsWith("yandex"):
+        activeMenuTab.set("yandex");
+        break;
+      case route === "queue":
         this.setRootTab("queue");
-        break;
-      case "radio":
+        return;
+      case route === "radio":
         this.setRootTab("radio");
-        break;
-      case "playlists":
-        this.setRootTab("playlists");
-        break;
-      case "settings":
-        this.setRootTab("settings");
-        break;
-      case "favorites":
-        activeMenuTab.set("favorites");
-        navigationStack.set([
-          { view: "root" },
-          { view: "details", data: { name: "Favorites" } },
-        ]);
-        break;
+        return;
+      case route === "playlists":
+      case route === "playlist":
+      case viewName === "details":
+        if (data && data.name === "Favorites") activeMenuTab.set("favorites");
+        else activeMenuTab.set("playlists");
 
-      case "artists":
-        this.setRootTab("artists");
+        if (route === "playlists") {
+          this.setRootTab("playlists");
+          return;
+        }
         break;
-      case "albums":
-        this.setRootTab("albums");
+      case route === "settings":
+        this.setRootTab("settings");
+        return;
+      case route === "favorites":
+        activeMenuTab.set("favorites");
+        // Favorites handled below via data check or falling through
         break;
-      case "search":
+      case route === "search":
         activeMenuTab.set("search");
         if (parts[1]) searchQuery.set(parts[1]);
         navigationStack.set([{ view: "root" }]);
-        break;
-
-      case "album":
-        activeMenuTab.set("albums");
-        navigationStack.set([
-          { view: "root" },
-          { view: "tracks_by_album", data: data },
-        ]);
-        break;
-
-      case "artist":
+        return;
+      case route === "artists":
+      case route === "artist":
         activeMenuTab.set("artists");
-        navigationStack.set([
-          { view: "root" },
-          { view: "albums_by_artist", data: data },
-        ]);
-        break;
-
-      case "playlist":
-        activeMenuTab.set("playlists");
-        navigationStack.set([
-          { view: "root" },
-          { view: "details", data: data },
-        ]);
-        break;
-
-      case "yandex":
-        activeMenuTab.set("yandex");
-        if (!data && get(navigationStack).length === 1) {
-          navigationStack.set([{ view: "root" }]);
+        if (route === "artists") {
+          this.setRootTab("artists");
+          return;
         }
         break;
-
-      case "yandex_search":
-        activeMenuTab.set("yandex");
-        if (!data) {
-          navigationStack.set([
-            { view: "root" },
-            { view: "yandex_search", data: { query: parts[1] } },
-          ]);
+      case route === "albums":
+      case route === "album":
+        activeMenuTab.set("albums");
+        if (route === "albums") {
+          this.setRootTab("albums");
+          return;
         }
         break;
+    }
 
-      case "yandex_playlist":
-        activeMenuTab.set("yandex");
-        if (!data) {
-          navigationStack.set([
-            { view: "root" },
-            {
-              view: "yandex_playlist",
-              data: { uid: parts[1], kind: parts[2] },
-            },
-          ]);
+    if (route === "yandex") {
+      if (get(navigationStack).length > 1) {
+        const current = get(navigationStack);
+        if (current[0].view !== "root") navigationStack.set([{ view: "root" }]);
+      } else {
+        navigationStack.set([{ view: "root" }]);
+      }
+    } else {
+      const stack = get(navigationStack);
+      const currentTop = stack[stack.length - 1];
+
+      const isSameView = currentTop.view === viewName;
+      let isSameData = false;
+
+      if (data && currentTop.data) {
+        if (
+          data.name === currentTop.data.name &&
+          data.uid === currentTop.data.uid
+        ) {
+          isSameData = true;
         }
-        break;
+      } else if (!data && !currentTop.data) {
+        isSameData = true;
+      }
 
-      case "yandex_album_details":
-        activeMenuTab.set("yandex");
-        if (!data) {
-          navigationStack.set([
-            { view: "root" },
-            { view: "yandex_album_details", data: { id: parts[1] } },
-          ]);
-        }
-        break;
+      if (isSameView && isSameData) {
+        console.log("[Router] Already on view, skipping stack update");
+        return;
+      }
 
-      case "yandex_artist_details":
-        activeMenuTab.set("yandex");
-        if (!data) {
-          navigationStack.set([
-            { view: "root" },
-            { view: "yandex_artist_details", data: { id: parts[1] } },
-          ]);
-        }
-        break;
-
-      default:
-        this.setRootTab("artists");
-        break;
+      if (data) {
+        navigationStack.set([{ view: "root" }, { view: viewName, data: data }]);
+      }
     }
   },
 
@@ -194,7 +178,6 @@ export const Router = {
     } else if (view === "tracks_by_album") {
       const name = data.name || data;
       const artist = data.artist;
-
       if (artist) {
         newPath = `album/${encodeURIComponent(artist)}/${encodeURIComponent(name)}`;
       } else {
@@ -215,6 +198,12 @@ export const Router = {
     if (newPath) {
       const nextHash = `#/${newPath}`;
       if (
+        (view === "yandex_search" || view === "search") &&
+        decodeURIComponent(window.location.hash) !==
+          decodeURIComponent(nextHash)
+      ) {
+        window.history.replaceState(null, "", nextHash);
+      } else if (
         decodeURIComponent(window.location.hash) !==
         decodeURIComponent(nextHash)
       ) {

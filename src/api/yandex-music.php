@@ -80,6 +80,11 @@ class YandexMusic {
         return $data['result']['blocks'] ?? [];
     }
 
+    public function getStationDashboard() {
+        $data = $this->request("/rotor/stations/dashboard");
+        return $data['result']['stations'] ?? [];
+    }
+
     public function getPlaylistTracks($uid, $kind, $offset = 0, $limit = 100) {
         $data = $this->request("/users/{$uid}/playlists/{$kind}");
         
@@ -142,7 +147,6 @@ class YandexMusic {
         return $data['result']['sequence'] ?? [];
     }
 
-    // ИСПРАВЛЕНО: Распаковка треков из обертки sequence -> item -> track
     public function getStationTracksV2($stationId, $queue = []) {
         $url = "/rotor/station/{$stationId}/tracks"; 
         

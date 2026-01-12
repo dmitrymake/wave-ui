@@ -6,6 +6,8 @@ import md5 from "md5";
 export const connectionStatus = writable("Disconnected");
 export const yandexAuthStatus = writable(false);
 
+export const ignoreNextPopState = writable(false);
+
 export const toastMessage = writable(null);
 let toastTimer;
 

@@ -2,6 +2,7 @@
   import { onMount } from "svelte";
   import { fly } from "svelte/transition";
   import { ICONS } from "../lib/icons";
+  import { get } from "svelte/store";
   import {
     activeMenuTab,
     navigationStack,
@@ -9,6 +10,7 @@
     handleBrowserBack,
     isFullPlayerOpen,
     toastMessage,
+    ignoreNextPopState,
   } from "../lib/store";
 
   import LibraryView from "./views/LibraryView.svelte";
@@ -27,7 +29,13 @@
 
   onMount(() => {
     window.history.replaceState({ depth: $navigationStack.length }, "", "");
-    const onPopState = () => handleBrowserBack();
+    const onPopState = () => {
+      if (get(ignoreNextPopState)) {
+        ignoreNextPopState.set(false);
+        return;
+      }
+      handleBrowserBack();
+    };
     window.addEventListener("popstate", onPopState);
     return () => window.removeEventListener("popstate", onPopState);
   });

@@ -224,6 +224,29 @@ try {
             echo json_encode($result);
             break;
 
+        case 'get_stations_dashboard':
+            $raw = $api->getStationDashboard();
+            $moodStations = [];
+            foreach($raw as $category) {
+                $catName = strtolower($category['name'] ?? '');
+                if ($catName === 'mood' || $catName === 'activity' || $catName === 'настроение' || $catName === 'занятие') {
+                    foreach ($category['stations'] as $st) {
+                        $moodStations[] = [
+                            'title' => $st['name'],
+                            'id' => $st['id']['type'] . ':' . $st['id']['tag'],
+                            'kind' => 'station',
+                            'service' => 'yandex',
+                            'bgColor' => $st['icon']['backgroundColor'] ?? '#444',
+                            'cover' => 'https://' . str_replace('%%', '200x200', $st['icon']['imageUrl'] ?? ''),
+                            'isStation' => true
+                        ];
+                    }
+                }
+            }
+            shuffle($moodStations);
+            echo json_encode(['stations' => $moodStations]);
+            break;
+
         case 'get_artist_details':
             $id = $_GET['id'] ?? '';
             $artist = $api->getArtist($id);
@@ -325,13 +348,12 @@ try {
             debug("Starting station $stationId");
             mpdSend("clear");
             
-            // Получаем треки. ТЕПЕРЬ ОНИ ЧИСТЫЕ (без обертки track)
             $queueData = $api->getStationTracksV2($stationId, []);
             
             $initialBuffer = [];
             $count = 0;
             if ($queueData) {
-                foreach ($queueData as $track) { // <--- Исправлено: $track это уже сам трек
+                foreach ($queueData as $track) { 
                     if ($count < 2) {
                         $url = $api->getDirectLink($track['id']);
                         if ($url) {

@@ -28,6 +28,10 @@ export const YandexApi = {
     return await this.request("get_landing");
   },
 
+  async getStationsDashboard() {
+    return await this.request("get_stations_dashboard");
+  },
+
   async getArtistDetails(id) {
     return await this.request("get_artist_details", { id });
   },
@@ -36,7 +40,6 @@ export const YandexApi = {
     return await this.request("get_album_details", { id });
   },
 
-  // ИСПРАВЛЕНО: добавлен параметр offset
   async getPlaylistTracks(uid, kind, offset = 0) {
     return await this.request("get_playlist_tracks", { uid, kind, offset });
   },

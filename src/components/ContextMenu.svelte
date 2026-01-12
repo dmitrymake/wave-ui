@@ -9,6 +9,7 @@
     showToast,
     activePlaylistTracks,
     showModal,
+    ignoreNextPopState,
   } from "../lib/store";
   import { ICONS } from "../lib/icons";
   import { PlayerActions } from "../lib/mpd/player";
@@ -36,6 +37,7 @@
     }
   } else {
     if (historyPushed && typeof history !== "undefined") {
+      ignoreNextPopState.set(true);
       history.back();
       historyPushed = false;
     }
@@ -221,11 +223,11 @@
     if (innerWidth <= 768 && isMiniPlayerSource && rect) {
       const bottomPos = innerHeight - rect.top;
       return `
-        position: fixed; 
-        bottom: ${bottomPos}px; 
-        left: 50%; 
-        transform: translateX(-50%); 
-        margin: 0; 
+        position: fixed; 
+        bottom: ${bottomPos}px; 
+        left: 50%; 
+        transform: translateX(-50%); 
+        margin: 0; 
         transform-origin: bottom center;
       `;
     }
