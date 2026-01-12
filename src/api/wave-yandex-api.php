@@ -20,6 +20,14 @@ function debug($msg) {
     @file_put_contents(LOG_FILE, "[" . date('H:i:s') . "] API: $msg\n", FILE_APPEND);
 }
 
+// --- FIX: Polyfill for missing mbstring extension on Moode ---
+if (!function_exists('mb_strtolower')) {
+    function mb_strtolower($str) {
+        return strtolower($str);
+    }
+}
+// -------------------------------------------------------------
+
 function getToken() {
     return file_exists(TOKEN_FILE) ? trim(file_get_contents(TOKEN_FILE)) : null;
 }
@@ -127,7 +135,7 @@ function cacheTrackMeta($url, $track) {
 }
 
 try {
-    // debug("Action: $action"); // Uncomment for full verbosity
+    // debug("Action: $action");
 
     if ($action === 'status') {
         $token = getToken();
@@ -233,7 +241,6 @@ try {
                 $catName = mb_strtolower($category['name'] ?? '');
                 debug("Category: $catName");
 
-                // Расширенный фильтр категорий
                 if (
                     strpos($catName, 'mood') !== false || 
                     strpos($catName, 'activity') !== false || 

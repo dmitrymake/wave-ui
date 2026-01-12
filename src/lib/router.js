@@ -30,25 +30,26 @@ export const Router = {
     const route = parts[0];
 
     let data = consumeRouteData();
-
     let viewName = route;
+
+    // --- FIX: Принудительное маппинг URL -> View Name ---
+    if (route === "artist") viewName = "albums_by_artist";
+    if (route === "album") viewName = "tracks_by_album";
+    if (route === "playlist") viewName = "details";
+    if (route === "favorites") viewName = "details";
+    // ----------------------------------------------------
 
     if (!data) {
       if (route === "album" && parts.length >= 2) {
-        viewName = "tracks_by_album";
-        // album/Artist/AlbumName или album/AlbumName
         data =
           parts.length >= 3
             ? { artist: parts[1], name: parts[2] }
             : { name: parts[1] };
       } else if (route === "artist" && parts.length >= 2) {
-        viewName = "albums_by_artist";
         data = { name: parts[1] };
       } else if (route === "playlist" && parts.length >= 2) {
-        viewName = "details";
         data = { name: parts[1], displayName: parts[1] };
       } else if (route === "favorites") {
-        viewName = "details";
         data = { name: "Favorites" };
       } else if (route === "yandex_playlist" && parts.length >= 3) {
         data = { uid: parts[1], kind: parts[2], title: "Playlist" };
@@ -58,6 +59,8 @@ export const Router = {
         data = { id: parts[1], title: "Artist" };
       } else if (route === "yandex_search" && parts.length >= 2) {
         data = { query: parts[1] };
+      } else if (parts.length >= 2) {
+        data = { name: parts[1], displayName: parts[1] };
       }
     }
 
@@ -89,7 +92,6 @@ export const Router = {
         return;
       case route === "favorites":
         activeMenuTab.set("favorites");
-        // Favorites handled below via data check or falling through
         break;
       case route === "search":
         activeMenuTab.set("search");
@@ -122,6 +124,7 @@ export const Router = {
         navigationStack.set([{ view: "root" }]);
       }
     } else {
+      // FIX: Предотвращение дублирования навигации
       const stack = get(navigationStack);
       const currentTop = stack[stack.length - 1];
 
@@ -140,7 +143,6 @@ export const Router = {
       }
 
       if (isSameView && isSameData) {
-        console.log("[Router] Already on view, skipping stack update");
         return;
       }
 
