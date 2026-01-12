@@ -143,12 +143,13 @@ $api = null;
 $lastToken = "";
 
 while (true) {
+    // 1. Init API
     if (file_exists(TOKEN_FILE)) {
         $token = trim(file_get_contents(TOKEN_FILE));
         if ($token && $token !== $lastToken) {
             try {
                 $api = new YandexMusic($token);
-                $api->getUserId();
+                $api->getUserId(); // Check auth
                 $lastToken = $token;
                 logMsg("API Initialized.");
             } catch (Exception $e) { 
@@ -162,9 +163,10 @@ while (true) {
 
     if ($api && $state && !empty($state['active'])) {
         $status = getMpdStatus();
-        $currentFile = $status['file'];
-        $stateStr = $status['state'];
+        $currentFile = $status['file'] ?? '';
+        $stateStr = $status['state'] ?? 'stop';
 
+        // 2. Auto-stop if user plays local file
         if ($stateStr === 'play' && !isYandexFile($currentFile)) {
             logMsg("Detected non-Yandex track playing. Deactivating.");
             $state['active'] = false;
@@ -176,11 +178,13 @@ while (true) {
         $playlistLen = intval($status['playlistlength'] ?? 0);
         $currentPos = intval($status['song'] ?? -1);
         
+        // 3. Check Buffer
         $tracksAhead = $playlistLen - ($currentPos + 1);
 
         if ($tracksAhead < 2) {
             $buffer = $state['queue_buffer'] ?? [];
             
+            // 4. Fetch New Tracks if buffer empty
             if (empty($buffer)) {
                 $context = $state['mode'] ?? 'station';
                 $newTracks = [];
@@ -189,8 +193,13 @@ while (true) {
                     $stationId = $state['station_id'] ?? 'user:onetwo';
                     $history = $state['played_history'] ?? [];
                     
-                    logMsg("Buffer empty. Fetching Vibe v2 for $stationId");
-                    $newTracks = $api->getStationTracksV2($stationId, $history);
+                    // READ PARAMS (Mood, Diversity)
+                    $extraParams = $state['station_params'] ?? [];
+                    $paramsLog = !empty($extraParams) ? "Params: " . json_encode($extraParams) : "Default";
+                    
+                    logMsg("Buffer empty. Fetching $stationId ($paramsLog)");
+                    
+                    $newTracks = $api->getStationTracksV2($stationId, $history, $extraParams);
                     logMsg("Got " . count($newTracks) . " new tracks.");
                 }
 
@@ -201,8 +210,11 @@ while (true) {
                 }
             }
 
+            // 5. Add ONE track from buffer to MPD
             if (!empty($buffer)) {
                 $nextTrack = array_shift($buffer);
+                
+                // Validate ID
                 if (!isset($nextTrack['id'])) {
                     logMsg("Skipping track with no ID");
                     $state['queue_buffer'] = $buffer; 
@@ -218,6 +230,7 @@ while (true) {
                     
                     $state['queue_buffer'] = $buffer;
                     
+                    // Update History
                     $history = $state['played_history'] ?? [];
                     $history[] = (string)$nextTrack['id'];
                     if (count($history) > 100) $history = array_slice($history, -100);
