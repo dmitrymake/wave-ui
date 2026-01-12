@@ -4,6 +4,7 @@ class YandexMusic {
     private $userId;
     private $userAgent = 'Yandex-Music-Client';
     private $SALT = "XGRlBW9FXlekgbPrRHuSiA";
+    private $debugFile = '/dev/shm/wave_lib.log';
 
     public function __construct($token) {
         $this->token = $token;
@@ -11,12 +12,15 @@ class YandexMusic {
 
     private function log($msg) {
         $time = date('H:i:s');
-        @file_put_contents('/tmp/wave_yandex_lib.log', "[$time] $msg\n", FILE_APPEND);
+        @file_put_contents($this->debugFile, "[$time] $msg\n", FILE_APPEND);
     }
 
     private function request($path, $postData = null, $isXml = false) {
         $url = strpos($path, 'http') === 0 ? $path : "https://api.music.yandex.net" . $path;
         
+        $method = $postData ? "POST" : "GET";
+        $this->log("REQ [$method] $url");
+
         $headers = [
             "Authorization: OAuth " . $this->token,
             "Accept-Language: ru"
@@ -26,7 +30,7 @@ class YandexMusic {
         curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
         curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
         curl_setopt($ch, CURLOPT_USERAGENT, $this->userAgent);
-        curl_setopt($ch, CURLOPT_TIMEOUT, 20);
+        curl_setopt($ch, CURLOPT_TIMEOUT, 15);
 
         if ($postData) {
             curl_setopt($ch, CURLOPT_POST, true);
@@ -41,9 +45,20 @@ class YandexMusic {
         
         curl_close($ch);
 
-        if ($err) return null;
+        if ($err) {
+            $this->log("CURL ERROR: $err");
+            return null;
+        }
+
+        $this->log("RESP CODE: $httpCode");
+
         if ($isXml) return $response;
-        return json_decode($response, true);
+        
+        $json = json_decode($response, true);
+        if (!$json) {
+            $this->log("JSON DECODE ERROR: " . substr($response, 0, 100));
+        }
+        return $json;
     }
 
     public function getUserId() {
@@ -128,15 +143,19 @@ class YandexMusic {
     }
 
     public function getStationTracksV2($stationId, $queue = []) {
-        $url = "/rotor/station/{$stationId}/tracks/v2";
+        $url = "/rotor/station/{$stationId}/tracks"; 
+        
         $query = [];
         if (!empty($queue)) {
             $slice = array_slice($queue, -50); 
             $query['queue'] = implode(',', $slice);
         }
+        
         $queryString = http_build_query($query);
-        $data = $this->request($url . '?' . $queryString);
-        return $data['result']['batch']['tracks'] ?? [];
+        $fullUrl = $url . '?' . $queryString;
+        
+        $data = $this->request($fullUrl);
+        return $data['result']['sequence'] ?? [];
     }
 
     public function search($text, $type = 'all', $page = 0) {
@@ -202,7 +221,10 @@ class YandexMusic {
 
     public function getDirectLink($trackId) {
         $data = $this->request("/tracks/{$trackId}/download-info");
-        if (empty($data['result'][0]['downloadInfoUrl'])) return null;
+        if (empty($data['result'][0]['downloadInfoUrl'])) {
+            $this->log("No download info for $trackId");
+            return null;
+        }
 
         usort($data['result'], function($a, $b) {
             return $b['bitrateInKbps'] - $a['bitrateInKbps'];

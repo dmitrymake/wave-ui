@@ -6,7 +6,7 @@ define('STORAGE_DIR', '/dev/shm/yandex_music/');
 define('STATE_FILE', STORAGE_DIR . 'state.json');
 define('META_CACHE_FILE', STORAGE_DIR . 'meta_cache.json');
 define('TOKEN_FILE', '/var/local/www/yandex_token.dat');
-define('LOG_FILE', '/tmp/wave_daemon.log');
+define('LOG_FILE', '/dev/shm/wave_daemon.log');
 
 if (!is_dir(STORAGE_DIR)) {
     @mkdir(STORAGE_DIR, 0777, true);
@@ -49,13 +49,6 @@ function getMpdStatus() {
     $status = parseMpdResponse(mpdSend("status"));
     $song = parseMpdResponse(mpdSend("currentsong"));
     return array_merge($status, ['file' => $song['file'] ?? '']);
-}
-
-function getNextTrackInQueue($currentPos) {
-    $nextPos = $currentPos + 1;
-    $resp = mpdSend("playlistinfo $nextPos");
-    $data = parseMpdResponse($resp);
-    return $data['file'] ?? null;
 }
 
 function getState() {
@@ -144,7 +137,7 @@ function isYandexFile($file) {
     return strpos($file, 'yandex.net') !== false || strpos($file, 'get-mp3') !== false || strpos($file, 'yandex:') === 0;
 }
 
-logMsg("Smart Daemon Started");
+logMsg("Smart Daemon Started (Buffered 2)");
 
 $api = null;
 $lastToken = "";
@@ -158,7 +151,10 @@ while (true) {
                 $api->getUserId();
                 $lastToken = $token;
                 logMsg("API Initialized.");
-            } catch (Exception $e) { $api = null; }
+            } catch (Exception $e) { 
+                $api = null; 
+                logMsg("API Init Failed: " . $e->getMessage());
+            }
         }
     }
 
@@ -177,58 +173,56 @@ while (true) {
             continue;
         }
 
+        $playlistLen = intval($status['playlistlength'] ?? 0);
         $currentPos = intval($status['song'] ?? -1);
-        if ($currentPos === -1 && $stateStr === 'stop') {
-             
-        } else {
-            $nextFile = getNextTrackInQueue($currentPos);
-            $expected = $state['expected_next_file'] ?? '';
+        
+        $tracksAhead = $playlistLen - ($currentPos + 1);
 
-            if (!$nextFile) {
-                $buffer = $state['queue_buffer'] ?? [];
-                
-                if (empty($buffer)) {
-                    $context = $state['context'] ?? 'vibe';
-                    $newTracks = [];
+        if ($tracksAhead < 2) {
+            $buffer = $state['queue_buffer'] ?? [];
+            
+            if (empty($buffer)) {
+                $context = $state['mode'] ?? 'station';
+                $newTracks = [];
 
-                    if ($context === 'vibe' || $context === 'station') {
-                        $stationId = $state['station_id'] ?? 'user:onetwo';
-                        $history = $state['played_history'] ?? [];
-                        logMsg("Buffer empty. Fetching Vibe v2 for $stationId");
-                        $newTracks = $api->getStationTracksV2($stationId, $history);
-                    } elseif ($context === 'playlist' || $context === 'album' || $context === 'artist_top') {
-                         
-                    }
-
-                    if (!empty($newTracks)) {
-                        $buffer = array_merge($buffer, $newTracks);
-                        $state['queue_buffer'] = $buffer;
-                        saveState($state);
-                    }
-                }
-
-                if (!empty($buffer)) {
-                    $nextTrack = array_shift($buffer);
-                    $url = $api->getDirectLink($nextTrack['id']);
+                if ($context === 'station') {
+                    $stationId = $state['station_id'] ?? 'user:onetwo';
+                    $history = $state['played_history'] ?? [];
                     
-                    if ($url) {
-                        mpdSend("add \"$url\"");
-                        updateMetaCache($url, $nextTrack);
-                        
-                        $state['expected_next_file'] = $url;
-                        $state['queue_buffer'] = $buffer;
-                        
-                        $history = $state['played_history'] ?? [];
-                        $history[] = (string)$nextTrack['id'];
-                        if (count($history) > 100) $history = array_slice($history, -100);
-                        $state['played_history'] = $history;
-
-                        saveState($state);
-                        logMsg("Auto-added: " . $nextTrack['title']);
-                    }
+                    logMsg("Buffer empty. Fetching Vibe v2 for $stationId");
+                    $newTracks = $api->getStationTracksV2($stationId, $history);
+                    logMsg("Got " . count($newTracks) . " new tracks.");
                 }
-            } elseif ($nextFile !== $expected) {
-                 
+
+                if (!empty($newTracks)) {
+                    $buffer = array_merge($buffer, $newTracks);
+                    $state['queue_buffer'] = $buffer;
+                    saveState($state);
+                }
+            }
+
+            if (!empty($buffer)) {
+                $nextTrack = array_shift($buffer);
+                $url = $api->getDirectLink($nextTrack['id']);
+                
+                if ($url) {
+                    mpdSend("add \"$url\"");
+                    updateMetaCache($url, $nextTrack);
+                    
+                    $state['queue_buffer'] = $buffer;
+                    
+                    $history = $state['played_history'] ?? [];
+                    $history[] = (string)$nextTrack['id'];
+                    if (count($history) > 100) $history = array_slice($history, -100);
+                    $state['played_history'] = $history;
+
+                    saveState($state);
+                    logMsg("Auto-added: " . $nextTrack['title']);
+                } else {
+                    logMsg("Failed to get link for " . $nextTrack['id']);
+                    $state['queue_buffer'] = $buffer; 
+                    saveState($state);
+                }
             }
         }
     }

@@ -12,7 +12,7 @@ define('STORAGE_DIR', '/dev/shm/yandex_music/');
 define('STATE_FILE', STORAGE_DIR . 'state.json');
 define('META_CACHE_FILE', STORAGE_DIR . 'meta_cache.json');
 define('TOKEN_FILE', '/var/local/www/yandex_token.dat');
-define('LOG_FILE', '/tmp/wave_debug.log');
+define('LOG_FILE', '/dev/shm/wave_api.log');
 
 $action = $_REQUEST['action'] ?? '';
 
@@ -36,7 +36,7 @@ function mpdSend($cmd) {
     fwrite($fp, "$cmd\n");
     $resp = "";
     while (!feof($fp)) {
-        $line = fgets($fp);
+        $line = fgets($fp); 
         $resp .= $line;
         if (strpos($line, 'OK') === 0 || strpos($line, 'ACK') === 0) break;
     }
@@ -61,7 +61,6 @@ function formatTrack($t) {
             'time' => $t['time'] ?? 0
         ];
     }
-    // ----------------------------------------
 
     $cover = null;
     if (!empty($t['ogImage'])) {
@@ -128,6 +127,8 @@ function cacheTrackMeta($url, $track) {
 }
 
 try {
+    debug("Action: $action");
+
     if ($action === 'status') {
         $token = getToken();
         echo json_encode(['authorized' => !!$token]);
@@ -153,6 +154,7 @@ try {
     switch ($action) {
         case 'search':
             $q = $_GET['query'] ?? '';
+            debug("Searching: $q");
             if (empty($q)) {
                 echo json_encode(['tracks' => [], 'albums' => [], 'artists' => []]);
                 break;
@@ -168,7 +170,7 @@ try {
                     $albums[] = [
                         'title' => $a['title'],
                         'artist' => $a['artists'][0]['name'] ?? 'Unknown',
-                        'id' => $a['id'],
+                        'id' => (string)$a['id'],
                         'image' => isset($a['coverUri']) ? "https://" . str_replace('%%', '200x200', $a['coverUri']) : null,
                         'kind' => 'album',
                         'service' => 'yandex'
@@ -181,7 +183,7 @@ try {
                 foreach ($res['artists']['results'] as $a) {
                     $artists[] = [
                         'title' => $a['name'],
-                        'id' => $a['id'],
+                        'id' => (string)$a['id'],
                         'image' => isset($a['cover']['uri']) ? "https://" . str_replace('%%', '200x200', $a['cover']['uri']) : null,
                         'kind' => 'artist',
                         'service' => 'yandex'
@@ -255,7 +257,9 @@ try {
             $id = $_GET['id'] ?? '';
             $raw = $api->getAlbum($id);
             $tracks = [];
-            foreach ($raw['volumes'] as $vol) $tracks = array_merge($tracks, $vol);
+            if(isset($raw['volumes'])){
+                foreach ($raw['volumes'] as $vol) $tracks = array_merge($tracks, $vol);
+            }
             $info = [
                 'title' => $raw['title'],
                 'artist' => $raw['artists'][0]['name'] ?? 'Unknown',
@@ -304,7 +308,7 @@ try {
             $offset = intval($_GET['offset'] ?? 0);
             
             if ($kind === 'favorites') {
-                $rawTracks = $api->getFavorites($offset, 50); // Грузим пачками по 50
+                $rawTracks = $api->getFavorites($offset, 50);
             } else {
                 $rawTracks = $api->getPlaylistTracks($uid, $kind, $offset, 50);
             }
@@ -318,8 +322,11 @@ try {
 
         case 'play_station':
             $stationId = $_REQUEST['station'] ?? 'user:onetwo';
+            debug("Starting station $stationId");
             mpdSend("clear");
-            $queueData = $api->getStationTracks($stationId, true);
+            
+            $queueData = $api->getStationTracksV2($stationId, []);
+            
             $initialBuffer = [];
             $count = 0;
             if ($queueData) {
@@ -335,7 +342,7 @@ try {
                     } else {
                         $initialBuffer[] = $track;
                     }
-                    if (count($initialBuffer) >= 10) break;
+                    if (count($initialBuffer) >= 15) break;
                 }
             }
             mpdSend("play");
@@ -380,7 +387,6 @@ try {
             if (empty($tracks)) throw new Exception("No tracks provided");
             
             $added = 0;
-            // Add first 5 immediately
             $immediate = array_splice($tracks, 0, 5);
             foreach ($immediate as $t) {
                 $url = $api->getDirectLink($t['id']);
@@ -391,7 +397,6 @@ try {
                 }
             }
             
-            // Add rest to buffer if there are more
             if (!empty($tracks)) {
                 $currentState = getState();
                 if (!$currentState) $currentState = [];
@@ -399,7 +404,6 @@ try {
                 $currentState['active'] = true;
                 $currentState['mode'] = 'playlist_extend';
                 
-                // Append to existing buffer or create new
                 $existing = $currentState['queue_buffer'] ?? [];
                 $currentState['queue_buffer'] = array_merge($existing, $tracks);
                 
@@ -440,11 +444,6 @@ try {
             $url = $_GET['url'] ?? '';
             $cache = file_exists(META_CACHE_FILE) ? json_decode(file_get_contents(META_CACHE_FILE), true) : [];
             $res = $cache[md5($url)] ?? null;
-            
-            if (!$res) {
-              ///
-            }
-            
             echo json_encode($res);
             break;
 
