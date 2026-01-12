@@ -20,13 +20,12 @@ function debug($msg) {
     @file_put_contents(LOG_FILE, "[" . date('H:i:s') . "] API: $msg\n", FILE_APPEND);
 }
 
-// --- FIX: Polyfill for missing mbstring extension on Moode ---
+// Polyfill
 if (!function_exists('mb_strtolower')) {
     function mb_strtolower($str) {
         return strtolower($str);
     }
 }
-// -------------------------------------------------------------
 
 function getToken() {
     return file_exists(TOKEN_FILE) ? trim(file_get_contents(TOKEN_FILE)) : null;
@@ -135,8 +134,6 @@ function cacheTrackMeta($url, $track) {
 }
 
 try {
-    // debug("Action: $action");
-
     if ($action === 'status') {
         $token = getToken();
         echo json_encode(['authorized' => !!$token]);
@@ -235,17 +232,20 @@ try {
             $raw = $api->getStationDashboard();
             $moodStations = [];
             
-            // LOGGING FULL STRUCTURE TO SEE WHAT KEYS ARE AVAILABLE
-            // debug("Raw Dashboard JSON: " . json_encode($raw));
+            debug("Dashboard loaded. Categories found: " . count($raw));
+
+            // --- DEBUG: Dump first item to find correct keys ---
+            if (count($raw) > 0) {
+                debug("API: DEBUG ITEM: " . json_encode($raw[0], JSON_UNESCAPED_UNICODE));
+            }
+            // --------------------------------------------------
 
             foreach($raw as $category) {
-                // Check both ID and Name
-                $catId = mb_strtolower($category['id'] ?? '');
                 $catName = mb_strtolower($category['name'] ?? '');
-                
-                debug("Checking Category -> ID: '$catId', Name: '$catName'");
+                $catId = is_string($category['id'] ?? null) ? mb_strtolower($category['id']) : '';
 
-                // Filter by ID (mood, activity) or Name (Russian/English)
+                // debug("Checking Category -> ID: '$catId', Name: '$catName'");
+
                 if (
                     strpos($catId, 'mood') !== false || 
                     strpos($catId, 'activity') !== false ||
@@ -254,7 +254,6 @@ try {
                     strpos($catName, 'настроени') !== false || 
                     strpos($catName, 'заняти') !== false
                 ) {
-                    debug("MATCH! Adding stations...");
                     foreach ($category['stations'] as $st) {
                         $moodStations[] = [
                             'title' => $st['name'],
