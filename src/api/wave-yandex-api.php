@@ -235,18 +235,26 @@ try {
             $raw = $api->getStationDashboard();
             $moodStations = [];
             
-            debug("Dashboard loaded. Categories found: " . count($raw));
+            // LOGGING FULL STRUCTURE TO SEE WHAT KEYS ARE AVAILABLE
+            // debug("Raw Dashboard JSON: " . json_encode($raw));
 
             foreach($raw as $category) {
+                // Check both ID and Name
+                $catId = mb_strtolower($category['id'] ?? '');
                 $catName = mb_strtolower($category['name'] ?? '');
-                debug("Category: $catName");
+                
+                debug("Checking Category -> ID: '$catId', Name: '$catName'");
 
+                // Filter by ID (mood, activity) or Name (Russian/English)
                 if (
+                    strpos($catId, 'mood') !== false || 
+                    strpos($catId, 'activity') !== false ||
                     strpos($catName, 'mood') !== false || 
                     strpos($catName, 'activity') !== false || 
                     strpos($catName, 'настроени') !== false || 
                     strpos($catName, 'заняти') !== false
                 ) {
+                    debug("MATCH! Adding stations...");
                     foreach ($category['stations'] as $st) {
                         $moodStations[] = [
                             'title' => $st['name'],
@@ -261,7 +269,7 @@ try {
                 }
             }
             
-            debug("Stations filtered: " . count($moodStations));
+            debug("Total stations filtered: " . count($moodStations));
             
             shuffle($moodStations);
             echo json_encode(['stations' => $moodStations]);
