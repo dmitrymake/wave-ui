@@ -232,38 +232,42 @@ try {
             $raw = $api->getStationDashboard();
             $moodStations = [];
             
-            debug("Dashboard loaded. Categories found: " . count($raw));
+            debug("Dashboard loaded. Items found: " . count($raw));
 
-            // --- DEBUG: Dump first item to find correct keys ---
-            if (count($raw) > 0) {
-                debug("API: DEBUG ITEM: " . json_encode($raw[0], JSON_UNESCAPED_UNICODE));
-            }
-            // --------------------------------------------------
+            foreach($raw as $idx => $item) {
+                // Check if this item has 'stations' list
+                $stationsList = $item['stations'] ?? $item['items'] ?? [];
+                
+                if (is_array($stationsList) && count($stationsList) > 0) {
+                    $catName = mb_strtolower($item['name'] ?? $item['title'] ?? '');
+                    
+                    debug("Checking Item #$idx -> Name: '$catName'");
 
-            foreach($raw as $category) {
-                $catName = mb_strtolower($category['name'] ?? '');
-                $catId = is_string($category['id'] ?? null) ? mb_strtolower($category['id']) : '';
+                    if (
+                        strpos($catName, 'mood') !== false || 
+                        strpos($catName, 'activity') !== false || 
+                        strpos($catName, 'настроени') !== false || 
+                        strpos($catName, 'заняти') !== false ||
+                        strpos($catName, 'жанр') !== false
+                    ) {
+                        debug(" -> MATCH! Adding " . count($stationsList) . " stations.");
+                        foreach ($stationsList as $st) {
+                            $stName = $st['name'] ?? $st['station']['name'] ?? 'Unknown';
+                            $stIdObj = $st['id'] ?? $st['station']['id'] ?? null;
+                            $iconObj = $st['icon'] ?? $st['station']['icon'] ?? null;
 
-                // debug("Checking Category -> ID: '$catId', Name: '$catName'");
-
-                if (
-                    strpos($catId, 'mood') !== false || 
-                    strpos($catId, 'activity') !== false ||
-                    strpos($catName, 'mood') !== false || 
-                    strpos($catName, 'activity') !== false || 
-                    strpos($catName, 'настроени') !== false || 
-                    strpos($catName, 'заняти') !== false
-                ) {
-                    foreach ($category['stations'] as $st) {
-                        $moodStations[] = [
-                            'title' => $st['name'],
-                            'id' => $st['id']['type'] . ':' . $st['id']['tag'],
-                            'kind' => 'station',
-                            'service' => 'yandex',
-                            'bgColor' => $st['icon']['backgroundColor'] ?? '#444',
-                            'cover' => 'https://' . str_replace('%%', '200x200', $st['icon']['imageUrl'] ?? ''),
-                            'isStation' => true
-                        ];
+                            if ($stIdObj) {
+                                $moodStations[] = [
+                                    'title' => $stName,
+                                    'id' => $stIdObj['type'] . ':' . $stIdObj['tag'],
+                                    'kind' => 'station',
+                                    'service' => 'yandex',
+                                    'bgColor' => $iconObj['backgroundColor'] ?? '#444',
+                                    'cover' => isset($iconObj['imageUrl']) ? 'https://' . str_replace('%%', '200x200', $iconObj['imageUrl']) : null,
+                                    'isStation' => true
+                                ];
+                            }
+                        }
                     }
                 }
             }

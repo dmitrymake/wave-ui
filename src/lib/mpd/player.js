@@ -132,7 +132,6 @@ async function syncQueue(newVersion) {
         }
 
         if (yMeta) {
-          // FIX: Apply duration from metadata if missing in MPD
           const metaTime = parseFloat(yMeta.time || 0);
           const currentT = parseFloat(t.time || 0);
 
@@ -144,7 +143,7 @@ async function syncQueue(newVersion) {
             image: yMeta.image,
             isYandex: true,
             id: yMeta.id,
-            time: currentT > 0 ? currentT : metaTime,
+            time: currentT > 0 ? currentT : metaTime, // Fallback to cache time
             mpdId: t.id,
             mpdPos: t.pos,
             _uid: String(t.id || t.pos) + "y",
@@ -207,7 +206,15 @@ async function fetchYandexMetaForTrack(url) {
     const song = get(currentSong);
     if (song.file === url) {
       currentSong.update((s) => ({ ...s, ...meta, isYandex: true }));
+
+      status.update((s) => {
+        if (meta.time && (s.duration === 0 || isNaN(s.duration))) {
+          return { ...s, duration: parseFloat(meta.time) };
+        }
+        return s;
+      });
     }
+    // -----------------------------------------------------------------
 
     queue.update((q) =>
       q.map((t) => {
