@@ -33,7 +33,15 @@ function getToken() {
 
 function saveState($data) {
     if (!is_dir(STORAGE_DIR)) @mkdir(STORAGE_DIR, 0777, true);
-    file_put_contents(STATE_FILE, json_encode($data));
+    // Merge with existing to not lose history
+    $current = [];
+    if (file_exists(STATE_FILE)) $current = json_decode(file_get_contents(STATE_FILE), true) ?: [];
+    $newState = array_merge($current, $data);
+    file_put_contents(STATE_FILE, json_encode($newState));
+}
+
+function getState() {
+    return file_exists(STATE_FILE) ? json_decode(file_get_contents(STATE_FILE), true) : [];
 }
 
 function mpdSend($cmd) {
@@ -118,7 +126,7 @@ function cacheTrackMeta($url, $track) {
         $content = @file_get_contents(META_CACHE_FILE);
         if ($content) $cache = json_decode($content, true) ?: [];
     }
-    if (count($cache) > 200) {
+    if (count($cache) > 300) {
         $cache = array_slice($cache, -100, 100, true);
     }
     
@@ -232,40 +240,29 @@ try {
             $raw = $api->getStationDashboard();
             $moodStations = [];
             
-            debug("Dashboard Parsing Started");
-
             foreach($raw as $item) {
-                // Check for "onyourwave" (My Vibe) which contains restrictions
                 $tag = $item['station']['id']['tag'] ?? '';
-                
                 if ($tag === 'onyourwave') {
-                    debug("Found My Vibe. Parsing restrictions...");
-                    
-                    // Parse 'moodEnergy' (Moods)
+                    // Moods
                     $moods = $item['station']['restrictions2']['moodEnergy']['possibleValues'] ?? [];
                     foreach ($moods as $m) {
                         if ($m['value'] === 'all') continue;
-                        
                         $moodStations[] = [
-                            'title' => $m['name'], // Бодрое, Веселое...
-                            // ID format: "vibe:moodEnergy:fun"
+                            'title' => $m['name'],
                             'id' => 'vibe:moodEnergy:' . $m['value'], 
                             'kind' => 'station',
                             'service' => 'yandex',
-                            'bgColor' => '#a4508b', // Default vibe gradient base
+                            'bgColor' => '#a4508b',
                             'cover' => isset($m['imageUrl']) ? 'https://' . str_replace('%%', '200x200', $m['imageUrl']) : null,
                             'isStation' => true
                         ];
                     }
-
-                    // Parse 'diversity' (Discovery, Popular)
+                    // Diversity
                     $diversities = $item['station']['restrictions2']['diversity']['possibleValues'] ?? [];
                     foreach ($diversities as $d) {
                         if ($d['value'] === 'default') continue;
-
                         $moodStations[] = [
                             'title' => 'My Vibe: ' . $d['name'], 
-                            // ID format: "vibe:diversity:discover"
                             'id' => 'vibe:diversity:' . $d['value'],
                             'kind' => 'station',
                             'service' => 'yandex',
@@ -276,8 +273,6 @@ try {
                     }
                 }
             }
-            
-            debug("Total vibe stations extracted: " . count($moodStations));
             echo json_encode(['stations' => $moodStations]);
             break;
 
@@ -285,7 +280,6 @@ try {
             $id = $_GET['id'] ?? '';
             $artist = $api->getArtist($id);
             $tracks = $api->getArtistTracks($id);
-            
             $rawAlbums = $api->getArtistDirectAlbums($id);
             $albums = [];
             foreach ($rawAlbums as $a) {
@@ -299,7 +293,6 @@ try {
                     'service' => 'yandex'
                 ];
             }
-
             $info = [
                 'name' => $artist['name'],
                 'cover' => isset($artist['cover']['uri']) ? "https://" . str_replace('%%', '400x400', $artist['cover']['uri']) : null,
@@ -377,97 +370,125 @@ try {
             echo json_encode(['ids' => $api->getFavoritesIds()]);
             break;
 
+        // --- FIXED: Vibe / Radio Logic ---
         case 'play_station':
             $stationId = $_REQUEST['station'] ?? 'user:onetwo';
-            debug("Starting station $stationId");
-            
             $extraParams = [];
-            
-            // --- HANDLE VIRTUAL VIBE STATIONS ---
+            $contextName = "My Vibe";
+
+            // 1. Handle Vibe Variants
             if (strpos($stationId, 'vibe:') === 0) {
-                // ID format: vibe:type:value (e.g. vibe:moodEnergy:fun)
                 $parts = explode(':', $stationId);
                 if (count($parts) === 3) {
                     $type = $parts[1]; // moodEnergy or diversity
-                    $val = $parts[2];  // fun, discover...
+                    $val = $parts[2];
                     $extraParams[$type] = $val;
                     
-                    // Reset ID to base station
-                    $stationId = 'user:onyourwave';
-                    debug("Detected Vibe Variant: $type=$val. Using station $stationId");
+                    // Base station for Vibes is usually My Vibe
+                    $stationId = 'user:onyourwave'; 
+                    $contextName = "Vibe: " . ucfirst($val);
                 }
+            } elseif (strpos($stationId, 'track:') === 0) {
+                // Track Radio
+                $contextName = "Track Radio";
+                // Don't change stationId, leave as track:ID
+            } elseif ($stationId === 'user:onyourwave') {
+                $contextName = "My Vibe";
+            } else {
+                $contextName = "Station";
             }
-            // ------------------------------------
 
             mpdSend("clear");
             
-            // Pass extra params to API wrapper
+            // Get first batch with extra params
             $queueData = $api->getStationTracksV2($stationId, [], $extraParams);
             
             $initialBuffer = [];
             $count = 0;
+            $history = [];
+
             if ($queueData) {
                 foreach ($queueData as $track) { 
-                    if ($count < 2) {
+                    // Add first 3 immediately to MPD
+                    if ($count < 3) {
                         $url = $api->getDirectLink($track['id']);
                         if ($url) {
                             mpdSend("add \"$url\"");
                             cacheTrackMeta($url, $track);
                             $count++;
+                            $history[] = (string)$track['id'];
                         }
                     } else {
+                        // Keep rest for daemon
                         $initialBuffer[] = $track;
+                        // Pre-cache meta for buffer too to be safe
+                        $url_fake = "yandex:" . $track['id']; // dummy key
+                        cacheTrackMeta($url_fake, $track); 
                     }
-                    if (count($initialBuffer) >= 15) break;
+                    if (count($initialBuffer) >= 10) break; 
                 }
             }
             mpdSend("play");
             
-            // Save state including query params so Daemon can continue fetching
+            // Save state for Daemon (Enable it)
             saveState([
                 'active' => true,
                 'mode' => 'station',
                 'station_id' => $stationId,
-                'station_params' => $extraParams, // New field for daemon
+                'station_params' => $extraParams,
+                'context_name' => $contextName,
                 'queue_buffer' => $initialBuffer,
-                'played_history' => []
+                'played_history' => $history
             ]);
-            echo json_encode(['status' => 'started', 'added' => $count]);
+            echo json_encode(['status' => 'started', 'context' => $contextName]);
             break;
 
+        // --- FIXED: Play Album/Playlist (Static Queue) ---
         case 'play_playlist':
             $input = json_decode(file_get_contents('php://input'), true);
             $tracks = $input['tracks'] ?? [];
             if (empty($tracks)) throw new Exception("No tracks provided");
+            
             mpdSend("clear");
-            $initialCount = 0;
-            $toAddMpd = array_splice($tracks, 0, 3);
-            foreach ($toAddMpd as $t) {
+            $added = 0;
+            
+            // Limit to 50 to avoid timeout, though user wants ALL. 
+            // 50 direct link requests takes ~10-15s. Acceptable.
+            $limit = 50; 
+            $chunk = array_slice($tracks, 0, $limit);
+
+            foreach ($chunk as $t) {
                 $url = $api->getDirectLink($t['id']);
                 if ($url) {
                     mpdSend("add \"$url\"");
                     cacheTrackMeta($url, $t);
-                    $initialCount++;
+                    $added++;
                 }
             }
             mpdSend("play");
+
+            // DISABLE DAEMON for static lists
             saveState([
-                'active' => true,
-                'mode' => 'playlist_extend',
-                'station_id' => 'custom_list',
-                'queue_buffer' => $tracks
+                'active' => false,
+                'mode' => 'static',
+                'context_name' => 'Yandex Playlist'
             ]);
-            echo json_encode(['status' => 'ok', 'added_now' => $initialCount]);
+            
+            echo json_encode(['status' => 'ok', 'added' => $added]);
             break;
 
+        // --- FIXED: Add to Queue (Bulk) ---
         case 'add_tracks':
             $input = json_decode(file_get_contents('php://input'), true);
             $tracks = $input['tracks'] ?? [];
             if (empty($tracks)) throw new Exception("No tracks provided");
             
             $added = 0;
-            $immediate = array_splice($tracks, 0, 5);
-            foreach ($immediate as $t) {
+            // Add up to 50 tracks immediately to queue end
+            $limit = 50;
+            $chunk = array_slice($tracks, 0, $limit);
+
+            foreach ($chunk as $t) {
                 $url = $api->getDirectLink($t['id']);
                 if ($url) {
                     mpdSend("add \"$url\"");
@@ -476,20 +497,11 @@ try {
                 }
             }
             
-            if (!empty($tracks)) {
-                $currentState = getState();
-                if (!$currentState) $currentState = [];
-                
-                $currentState['active'] = true;
-                $currentState['mode'] = 'playlist_extend';
-                
-                $existing = $currentState['queue_buffer'] ?? [];
-                $currentState['queue_buffer'] = array_merge($existing, $tracks);
-                
-                saveState($currentState);
-            }
+            // We do NOT change state['active'] here. 
+            // If user was listening to Vibe, let Daemon continue.
+            // If user was static, Daemon stays off.
             
-            echo json_encode(['status' => 'ok', 'added_immediate' => $added]);
+            echo json_encode(['status' => 'ok', 'added' => $added]);
             break;
 
         case 'play_track':
@@ -503,6 +515,7 @@ try {
                 cacheTrackMeta($url, $trackInfo);
                 if (!$append) {
                     mpdSend("play");
+                    // Stop daemon for single track play
                     saveState(['active' => false]);
                 }
                 echo json_encode(['status' => 'ok']);
@@ -524,6 +537,14 @@ try {
             $cache = file_exists(META_CACHE_FILE) ? json_decode(file_get_contents(META_CACHE_FILE), true) : [];
             $res = $cache[md5($url)] ?? null;
             echo json_encode($res);
+            break;
+
+        case 'get_state':
+            $state = getState();
+            echo json_encode([
+                'active' => $state['active'] ?? false,
+                'context_name' => $state['context_name'] ?? 'Yandex Music'
+            ]);
             break;
 
         default:

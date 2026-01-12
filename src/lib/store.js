@@ -444,3 +444,8 @@ isYandexEnabled.subscribe((val) => {
 });
 
 export const yandexFavorites = writable(new Set());
+
+export const yandexState = writable({
+  active: false,
+  context_name: "Yandex Music",
+});

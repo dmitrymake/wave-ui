@@ -1,10 +1,12 @@
 <script>
+  import { onMount, onDestroy } from "svelte";
   import {
     queue,
     showModal,
     currentSong,
     status,
     isQueueLocked,
+    yandexState, // Убедись, что добавил это в store.js
   } from "../../lib/store";
   import { PlayerActions } from "../../lib/mpd/player";
   import * as MPD from "../../lib/mpd";
@@ -15,6 +17,7 @@
 
   let isEditMode = false;
   let headerTotalDuration = "";
+  let statusInterval;
 
   $: serverPlayingIndex = Number($status.song);
 
@@ -28,6 +31,7 @@
   $: playingFile = $currentSong.file;
   $: isPlaying = $status.state === "play";
 
+  // Расчет длительности очереди
   $: if ($queue.length >= 0) {
     const totalSec = $queue.reduce(
       (acc, t) => acc + (parseFloat(t.time) || 0),
@@ -42,6 +46,31 @@
       headerTotalDuration = "";
     }
   }
+
+  // --- ЛОГИКА ПОЛУЧЕНИЯ СТАТУСА ВАЙБА ---
+  async function fetchYandexStatus() {
+    try {
+      const res = await fetch("/wave-yandex-api.php?action=get_state");
+      if (res.ok) {
+        const data = await res.json();
+        // Обновляем стор
+        yandexState.set(data);
+      }
+    } catch (e) {
+      // Игнорируем ошибки сети при опросе
+    }
+  }
+
+  onMount(() => {
+    fetchYandexStatus();
+    // Опрашиваем состояние каждые 5 секунд, чтобы обновить заголовок, если вайб сменился или отключился
+    statusInterval = setInterval(fetchYandexStatus, 5000);
+  });
+
+  onDestroy(() => {
+    if (statusInterval) clearInterval(statusInterval);
+  });
+  // --------------------------------------
 
   function toggleEditMode() {
     isEditMode = !isEditMode;
@@ -143,7 +172,16 @@
         <div class="header-info">
           <div class="header-text-group">
             <div class="header-label">Now Playing</div>
-            <h1 class="header-title">Current Queue</h1>
+
+            <h1 class="header-title">
+              {#if $yandexState && $yandexState.active}
+                <span style="color: var(--c-accent)"
+                  >{$yandexState.context_name || "My Vibe"}</span
+                >
+              {:else}
+                Current Queue
+              {/if}
+            </h1>
 
             <div class="meta-badges">
               <span class="meta-tag">{$queue.length} tracks</span>
