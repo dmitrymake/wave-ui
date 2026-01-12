@@ -8,23 +8,19 @@ define('META_CACHE_FILE', STORAGE_DIR . 'meta_cache.json');
 define('TOKEN_FILE', '/var/local/www/yandex_token.dat');
 define('LOG_FILE', '/dev/shm/wave_daemon.log');
 
-if (!is_dir(STORAGE_DIR)) {
-    @mkdir(STORAGE_DIR, 0777, true);
-}
+if (!is_dir(STORAGE_DIR)) @mkdir(STORAGE_DIR, 0777, true);
 
-$pollInterval = 5;
+$pollInterval = 2;
 
 function logMsg($msg) {
     $str = "[" . date('H:i:s') . "] $msg\n";
     @file_put_contents(LOG_FILE, $str, FILE_APPEND);
-    // echo $str; // Раскомментируй для отладки в консоли
 }
 
 function mpdSend($cmd) {
     $fp = @fsockopen("localhost", 6600, $errno, $errstr, 5);
     if (!$fp) return false;
-    fgets($fp); 
-    fwrite($fp, "$cmd\n");
+    fgets($fp); fwrite($fp, "$cmd\n");
     $resp = "";
     while (!feof($fp)) {
         $line = fgets($fp); $resp .= $line;
@@ -39,9 +35,7 @@ function parseMpdResponse($resp) {
     $data = [];
     foreach ($lines as $line) {
         $parts = explode(': ', $line, 2);
-        if (count($parts) === 2) {
-            $data[strtolower($parts[0])] = trim($parts[1]);
-        }
+        if (count($parts) === 2) $data[strtolower($parts[0])] = trim($parts[1]);
     }
     return $data;
 }
@@ -60,32 +54,25 @@ function saveState($state) {
     file_put_contents(STATE_FILE, json_encode($state));
 }
 
-function formatTrackForCache($t) {
-    if (!isset($t['id'])) return null;
-    $img = $t['ogImage'] ?? $t['coverUri'] ?? $t['cover'] ?? null;
-    if ($img) $img = 'https://' . str_replace('%%', '200x200', $img);
-    
-    $artist = 'Unknown';
-    if (isset($t['artists'][0]['name'])) $artist = $t['artists'][0]['name'];
-    elseif (isset($t['artist'])) $artist = $t['artist'];
-
-    return [
-        'title' => $t['title'] ?? 'Unknown',
-        'artist' => $artist,
-        'album' => $t['albums'][0]['title'] ?? $t['album'] ?? '',
-        'id' => (string)$t['id'],
-        'image' => $img,
-        'isYandex' => true,
-        'time' => isset($t['durationMs']) ? $t['durationMs']/1000 : 0
-    ];
-}
-
 function updateMetaCache($url, $track) {
     $cache = file_exists(META_CACHE_FILE) ? json_decode(file_get_contents(META_CACHE_FILE), true) : [];
     if (count($cache) > 300) $cache = array_slice($cache, -100, 100, true);
-    $formatted = formatTrackForCache($track);
+    
+    $img = $track['ogImage'] ?? $track['coverUri'] ?? null;
+    if ($img) $img = 'https://' . str_replace('%%', '200x200', $img);
+    $artist = isset($track['artists'][0]['name']) ? $track['artists'][0]['name'] : ($track['artist'] ?? 'Unknown');
+    
+    $formatted = [
+        'title' => $track['title'] ?? 'Unknown',
+        'artist' => $artist,
+        'id' => (string)$track['id'],
+        'image' => $img,
+        'isYandex' => true,
+        'time' => isset($track['durationMs']) ? $track['durationMs']/1000 : 0
+    ];
+    
     $cache[md5($url)] = $formatted;
-    if (isset($formatted['id'])) $cache[$formatted['id']] = $formatted;
+    if (isset($track['id'])) $cache[$track['id']] = $formatted;
     file_put_contents(META_CACHE_FILE, json_encode($cache));
 }
 
@@ -93,7 +80,7 @@ function isYandexFile($file) {
     return strpos($file, 'yandex.net') !== false || strpos($file, 'get-mp3') !== false || strpos($file, 'yandex:') === 0;
 }
 
-logMsg("Smart Daemon Started");
+logMsg("Daemon Started (Mode: Load +1)");
 
 $api = null;
 $lastToken = "";
@@ -106,10 +93,8 @@ while (true) {
                 $api = new YandexMusic($token);
                 $api->getUserId();
                 $lastToken = $token;
-                logMsg("API Initialized.");
-            } catch (Exception $e) { 
-                $api = null; 
-            }
+                logMsg("API Connected");
+            } catch (Exception $e) { $api = null; }
         }
     }
 
@@ -120,82 +105,63 @@ while (true) {
         $currentFile = $status['file'] ?? '';
         $stateStr = $status['state'] ?? 'stop';
 
-        // Если играет не Яндекс (пользователь переключил), отключаем активность
-        if ($stateStr === 'play' && !isYandexFile($currentFile)) {
-            logMsg("Non-Yandex track playing. Daemon sleeping.");
+        if ($stateStr === 'play' && !empty($currentFile) && !isYandexFile($currentFile)) {
+            logMsg("External track detected. Sleeping.");
             $state['active'] = false;
             saveState($state);
-            sleep($pollInterval);
+            sleep(2);
             continue;
         }
 
         $playlistLen = intval($status['playlistlength'] ?? 0);
         $currentPos = intval($status['song'] ?? -1);
-        
         $tracksAhead = $playlistLen - ($currentPos + 1);
 
-        // Если в очереди мало треков (меньше 5)
-        if ($tracksAhead < 5) {
+        if ($tracksAhead < 3) {
             $buffer = $state['queue_buffer'] ?? [];
             
-            // Если буфер пуст - пополняем
-            if (count($buffer) < 5) {
+            if (empty($buffer) && ($state['mode'] ?? '') === 'station') {
                 $stationId = $state['station_id'] ?? 'user:onetwo';
+                $params = $state['station_params'] ?? [];
                 $history = $state['played_history'] ?? [];
-                // ВАЖНО: Читаем параметры настроения
-                $extraParams = $state['station_params'] ?? [];
                 
-                logMsg("Refilling buffer for $stationId with params: " . json_encode($extraParams));
+                logMsg("Refilling buffer: $stationId " . json_encode($params));
                 
-                // Запрашиваем НОВЫЕ треки, передавая ИСТОРИЮ
-                $newTracks = $api->getStationTracksV2($stationId, $history, $extraParams);
+                $newTracks = $api->getStationTracksV2($stationId, $history, $params);
                 
                 if (!empty($newTracks)) {
-                    $buffer = array_merge($buffer, $newTracks);
-                    $buffer = array_values(array_unique($buffer, SORT_REGULAR));
-                    
+                    foreach ($newTracks as $nt) {
+                        if (!in_array((string)$nt['id'], $history)) {
+                            $buffer[] = $nt;
+                        }
+                    }
                     $state['queue_buffer'] = $buffer;
                     saveState($state);
-                    logMsg("Buffer refilled. Total: " . count($buffer));
                 }
             }
 
-            // Добавляем треки в MPD
-            // До 5 штук за цикл, чтобы нагнать очередь до 10+
-            $addedThisLoop = 0;
-            $history = $state['played_history'] ?? [];
-
-            while ($tracksAhead < 10 && !empty($buffer) && $addedThisLoop < 5) {
+            if (!empty($buffer)) {
                 $nextTrack = array_shift($buffer);
-                
-                if (!isset($nextTrack['id'])) continue;
-
-                // Дополнительная защита от дублей
-                if (in_array((string)$nextTrack['id'], $history)) {
-                    continue; 
-                }
-
                 $url = $api->getDirectLink($nextTrack['id']);
                 
                 if ($url) {
                     mpdSend("add \"$url\"");
                     updateMetaCache($url, $nextTrack);
                     
-                    $history[] = (string)$nextTrack['id'];
-                    $addedThisLoop++;
-                    $tracksAhead++;
+                    if (($state['mode'] ?? '') === 'station') {
+                        $history = $state['played_history'] ?? [];
+                        $history[] = (string)$nextTrack['id'];
+                        if (count($history) > 150) $history = array_slice($history, -100);
+                        $state['played_history'] = $history;
+                    }
+                    
+                    $state['queue_buffer'] = $buffer;
+                    saveState($state);
+                    logMsg("Added: " . ($nextTrack['title'] ?? 'Unknown'));
+                } else {
+                    $state['queue_buffer'] = $buffer;
+                    saveState($state);
                 }
-                
-                if (count($history) > 200) {
-                    $history = array_slice($history, -150);
-                }
-            }
-
-            if ($addedThisLoop > 0) {
-                $state['queue_buffer'] = $buffer;
-                $state['played_history'] = $history;
-                saveState($state);
-                logMsg("Added $addedThisLoop tracks to MPD Queue.");
             }
         }
     }
