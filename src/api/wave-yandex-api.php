@@ -325,13 +325,13 @@ try {
             debug("Starting station $stationId");
             mpdSend("clear");
             
+            // Получаем треки. ТЕПЕРЬ ОНИ ЧИСТЫЕ (без обертки track)
             $queueData = $api->getStationTracksV2($stationId, []);
             
             $initialBuffer = [];
             $count = 0;
             if ($queueData) {
-                foreach ($queueData as $item) {
-                    $track = $item['track'];
+                foreach ($queueData as $track) { // <--- Исправлено: $track это уже сам трек
                     if ($count < 2) {
                         $url = $api->getDirectLink($track['id']);
                         if ($url) {

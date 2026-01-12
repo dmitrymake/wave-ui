@@ -142,6 +142,7 @@ class YandexMusic {
         return $data['result']['sequence'] ?? [];
     }
 
+    // ИСПРАВЛЕНО: Распаковка треков из обертки sequence -> item -> track
     public function getStationTracksV2($stationId, $queue = []) {
         $url = "/rotor/station/{$stationId}/tracks"; 
         
@@ -155,7 +156,17 @@ class YandexMusic {
         $fullUrl = $url . '?' . $queryString;
         
         $data = $this->request($fullUrl);
-        return $data['result']['sequence'] ?? [];
+        $rawSequence = $data['result']['sequence'] ?? [];
+        
+        $cleanTracks = [];
+        foreach ($rawSequence as $item) {
+            if (isset($item['track'])) {
+                $cleanTracks[] = $item['track'];
+            } elseif (isset($item['id'])) {
+                $cleanTracks[] = $item;
+            }
+        }
+        return $cleanTracks;
     }
 
     public function search($text, $type = 'all', $page = 0) {
@@ -220,6 +231,8 @@ class YandexMusic {
     }
 
     public function getDirectLink($trackId) {
+        if (!$trackId) return null;
+        
         $data = $this->request("/tracks/{$trackId}/download-info");
         if (empty($data['result'][0]['downloadInfoUrl'])) {
             $this->log("No download info for $trackId");

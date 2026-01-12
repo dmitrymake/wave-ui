@@ -203,6 +203,13 @@ while (true) {
 
             if (!empty($buffer)) {
                 $nextTrack = array_shift($buffer);
+                if (!isset($nextTrack['id'])) {
+                    logMsg("Skipping track with no ID");
+                    $state['queue_buffer'] = $buffer; 
+                    saveState($state);
+                    continue; 
+                }
+
                 $url = $api->getDirectLink($nextTrack['id']);
                 
                 if ($url) {
@@ -217,7 +224,7 @@ while (true) {
                     $state['played_history'] = $history;
 
                     saveState($state);
-                    logMsg("Auto-added: " . $nextTrack['title']);
+                    logMsg("Auto-added: " . ($nextTrack['title'] ?? 'Unknown'));
                 } else {
                     logMsg("Failed to get link for " . $nextTrack['id']);
                     $state['queue_buffer'] = $buffer; 
