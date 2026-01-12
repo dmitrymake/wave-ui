@@ -147,10 +147,12 @@ class YandexMusic {
         return $data['result']['sequence'] ?? [];
     }
 
-    public function getStationTracksV2($stationId, $queue = []) {
+    // UPDATE: Added $extraParams support for Mood/Diversity
+    public function getStationTracksV2($stationId, $queue = [], $extraParams = []) {
         $url = "/rotor/station/{$stationId}/tracks"; 
         
-        $query = [];
+        $query = $extraParams; // Start with extra params (moodEnergy, diversity)
+        
         if (!empty($queue)) {
             $slice = array_slice($queue, -50); 
             $query['queue'] = implode(',', $slice);

@@ -232,49 +232,52 @@ try {
             $raw = $api->getStationDashboard();
             $moodStations = [];
             
-            debug("Dashboard loaded. Items found: " . count($raw));
+            debug("Dashboard Parsing Started");
 
-            foreach($raw as $idx => $item) {
-                // Check if this item has 'stations' list
-                $stationsList = $item['stations'] ?? $item['items'] ?? [];
+            foreach($raw as $item) {
+                // Check for "onyourwave" (My Vibe) which contains restrictions
+                $tag = $item['station']['id']['tag'] ?? '';
                 
-                if (is_array($stationsList) && count($stationsList) > 0) {
-                    $catName = mb_strtolower($item['name'] ?? $item['title'] ?? '');
+                if ($tag === 'onyourwave') {
+                    debug("Found My Vibe. Parsing restrictions...");
                     
-                    debug("Checking Item #$idx -> Name: '$catName'");
+                    // Parse 'moodEnergy' (Moods)
+                    $moods = $item['station']['restrictions2']['moodEnergy']['possibleValues'] ?? [];
+                    foreach ($moods as $m) {
+                        if ($m['value'] === 'all') continue;
+                        
+                        $moodStations[] = [
+                            'title' => $m['name'], // Бодрое, Веселое...
+                            // ID format: "vibe:moodEnergy:fun"
+                            'id' => 'vibe:moodEnergy:' . $m['value'], 
+                            'kind' => 'station',
+                            'service' => 'yandex',
+                            'bgColor' => '#a4508b', // Default vibe gradient base
+                            'cover' => isset($m['imageUrl']) ? 'https://' . str_replace('%%', '200x200', $m['imageUrl']) : null,
+                            'isStation' => true
+                        ];
+                    }
 
-                    if (
-                        strpos($catName, 'mood') !== false || 
-                        strpos($catName, 'activity') !== false || 
-                        strpos($catName, 'настроени') !== false || 
-                        strpos($catName, 'заняти') !== false ||
-                        strpos($catName, 'жанр') !== false
-                    ) {
-                        debug(" -> MATCH! Adding " . count($stationsList) . " stations.");
-                        foreach ($stationsList as $st) {
-                            $stName = $st['name'] ?? $st['station']['name'] ?? 'Unknown';
-                            $stIdObj = $st['id'] ?? $st['station']['id'] ?? null;
-                            $iconObj = $st['icon'] ?? $st['station']['icon'] ?? null;
+                    // Parse 'diversity' (Discovery, Popular)
+                    $diversities = $item['station']['restrictions2']['diversity']['possibleValues'] ?? [];
+                    foreach ($diversities as $d) {
+                        if ($d['value'] === 'default') continue;
 
-                            if ($stIdObj) {
-                                $moodStations[] = [
-                                    'title' => $stName,
-                                    'id' => $stIdObj['type'] . ':' . $stIdObj['tag'],
-                                    'kind' => 'station',
-                                    'service' => 'yandex',
-                                    'bgColor' => $iconObj['backgroundColor'] ?? '#444',
-                                    'cover' => isset($iconObj['imageUrl']) ? 'https://' . str_replace('%%', '200x200', $iconObj['imageUrl']) : null,
-                                    'isStation' => true
-                                ];
-                            }
-                        }
+                        $moodStations[] = [
+                            'title' => 'My Vibe: ' . $d['name'], 
+                            // ID format: "vibe:diversity:discover"
+                            'id' => 'vibe:diversity:' . $d['value'],
+                            'kind' => 'station',
+                            'service' => 'yandex',
+                            'bgColor' => '#5f0a87',
+                            'cover' => isset($d['imageUrl']) ? 'https://' . str_replace('%%', '200x200', $d['imageUrl']) : null,
+                            'isStation' => true
+                        ];
                     }
                 }
             }
             
-            debug("Total stations filtered: " . count($moodStations));
-            
-            shuffle($moodStations);
+            debug("Total vibe stations extracted: " . count($moodStations));
             echo json_encode(['stations' => $moodStations]);
             break;
 
@@ -377,9 +380,29 @@ try {
         case 'play_station':
             $stationId = $_REQUEST['station'] ?? 'user:onetwo';
             debug("Starting station $stationId");
+            
+            $extraParams = [];
+            
+            // --- HANDLE VIRTUAL VIBE STATIONS ---
+            if (strpos($stationId, 'vibe:') === 0) {
+                // ID format: vibe:type:value (e.g. vibe:moodEnergy:fun)
+                $parts = explode(':', $stationId);
+                if (count($parts) === 3) {
+                    $type = $parts[1]; // moodEnergy or diversity
+                    $val = $parts[2];  // fun, discover...
+                    $extraParams[$type] = $val;
+                    
+                    // Reset ID to base station
+                    $stationId = 'user:onyourwave';
+                    debug("Detected Vibe Variant: $type=$val. Using station $stationId");
+                }
+            }
+            // ------------------------------------
+
             mpdSend("clear");
             
-            $queueData = $api->getStationTracksV2($stationId, []);
+            // Pass extra params to API wrapper
+            $queueData = $api->getStationTracksV2($stationId, [], $extraParams);
             
             $initialBuffer = [];
             $count = 0;
@@ -399,10 +422,13 @@ try {
                 }
             }
             mpdSend("play");
+            
+            // Save state including query params so Daemon can continue fetching
             saveState([
                 'active' => true,
                 'mode' => 'station',
                 'station_id' => $stationId,
+                'station_params' => $extraParams, // New field for daemon
                 'queue_buffer' => $initialBuffer,
                 'played_history' => []
             ]);
