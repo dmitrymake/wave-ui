@@ -4,7 +4,9 @@ class YandexMusic {
     private $userId;
     private $userAgent = 'Yandex-Music-Client';
     private $SALT = "XGRlBW9FXlekgbPrRHuSiA";
-    private $debugFile = '/dev/shm/wave_lib.log';
+    
+    // ЛОГ ФАЙЛ ДЛЯ ОТЛАДКИ
+    private $debugFile = '/dev/shm/yandex_debug.log';
 
     public function __construct($token) {
         $this->token = $token;
@@ -19,7 +21,9 @@ class YandexMusic {
         $url = strpos($path, 'http') === 0 ? $path : "https://api.music.yandex.net" . $path;
         
         $method = $postData ? "POST" : "GET";
-        $this->log("REQ [$method] $url");
+        // ЛОГИРУЕМ ЗАПРОС
+        $this->log("REQ [$method]: $url");
+        if ($postData) $this->log("DATA: " . json_encode($postData));
 
         $headers = [
             "Authorization: OAuth " . $this->token,
@@ -30,7 +34,7 @@ class YandexMusic {
         curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
         curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
         curl_setopt($ch, CURLOPT_USERAGENT, $this->userAgent);
-        curl_setopt($ch, CURLOPT_TIMEOUT, 15);
+        curl_setopt($ch, CURLOPT_TIMEOUT, 20); // Чуть увеличили таймаут
 
         if ($postData) {
             curl_setopt($ch, CURLOPT_POST, true);
@@ -56,7 +60,7 @@ class YandexMusic {
         
         $json = json_decode($response, true);
         if (!$json) {
-            $this->log("JSON DECODE ERROR: " . substr($response, 0, 100));
+            $this->log("JSON ERROR (Raw response len: " . strlen($response) . ")");
         }
         return $json;
     }
@@ -125,41 +129,32 @@ class YandexMusic {
         return $data['result']['albums'] ?? [];
     }
 
-    public function getAlbumTracks($albumId) {
-        $data = $this->request("/albums/{$albumId}/with-tracks");
-        if (!isset($data['result']['volumes'])) return [];
-        
-        $tracks = [];
-        foreach ($data['result']['volumes'] as $vol) {
-            if (is_array($vol)) $tracks = array_merge($tracks, $vol);
-        }
-        return $tracks;
-    }
-
     public function getArtistTracks($artistId) {
         $data = $this->request("/artists/{$artistId}/tracks?page-size=50");
         return $data['result']['tracks'] ?? [];
     }
 
-    public function getStationTracks($stationId, $newQueue = false) {
-        $param = $newQueue ? 'true' : 'false';
-        $data = $this->request("/rotor/station/{$stationId}/tracks?new-queue={$param}");
-        return $data['result']['sequence'] ?? [];
-    }
-
-    // UPDATE: Added $extraParams support for Mood/Diversity
+    // --- ГЛАВНАЯ ФУНКЦИЯ ДЛЯ ВАЙБОВ ---
+    // Теперь точно передает параметры в URL
     public function getStationTracksV2($stationId, $queue = [], $extraParams = []) {
         $url = "/rotor/station/{$stationId}/tracks"; 
         
-        $query = $extraParams; // Start with extra params (moodEnergy, diversity)
+        // Добавляем параметры настроения (moodEnergy, diversity)
+        $query = $extraParams; 
         
+        // Передаем историю, чтобы не повторялось
         if (!empty($queue)) {
+            // Яндекс иногда хочет параметр 'queue' как список ID, которые уже были
+            // Берем последние 50, чтобы URL не лопнул
             $slice = array_slice($queue, -50); 
             $query['queue'] = implode(',', $slice);
         }
         
+        // Строим query string
         $queryString = http_build_query($query);
         $fullUrl = $url . '?' . $queryString;
+        
+        $this->log("VIBE REQUEST: $fullUrl"); // Проверяем в логах, ушли ли параметры
         
         $data = $this->request($fullUrl);
         $rawSequence = $data['result']['sequence'] ?? [];
@@ -172,6 +167,8 @@ class YandexMusic {
                 $cleanTracks[] = $item;
             }
         }
+        
+        $this->log("VIBE RESULT: Got " . count($cleanTracks) . " tracks");
         return $cleanTracks;
     }
 

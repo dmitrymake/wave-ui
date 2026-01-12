@@ -1,5 +1,9 @@
 <?php
 ini_set('display_errors', 0);
+// СНИМАЕМ ЛИМИТ ВРЕМЕНИ ВЫПОЛНЕНИЯ, ЧТОБЫ ГРУЗИТЬ БОЛЬШИЕ АЛЬБОМЫ
+set_time_limit(0); 
+ignore_user_abort(true);
+
 header('Content-Type: application/json');
 header('Access-Control-Allow-Origin: *');
 header('Access-Control-Allow-Methods: GET, POST');
@@ -33,7 +37,6 @@ function getToken() {
 
 function saveState($data) {
     if (!is_dir(STORAGE_DIR)) @mkdir(STORAGE_DIR, 0777, true);
-    // Merge with existing to not lose history
     $current = [];
     if (file_exists(STATE_FILE)) $current = json_decode(file_get_contents(STATE_FILE), true) ?: [];
     $newState = array_merge($current, $data);
@@ -370,37 +373,38 @@ try {
             echo json_encode(['ids' => $api->getFavoritesIds()]);
             break;
 
-        // --- FIXED: Vibe / Radio Logic ---
+        // --- ЛОГИКА ЗАПУСКА РАДИО/ВАЙБА ---
         case 'play_station':
             $stationId = $_REQUEST['station'] ?? 'user:onetwo';
             $extraParams = [];
             $contextName = "My Vibe";
 
-            // 1. Handle Vibe Variants
+            // Парсим ID вида vibe:type:value
             if (strpos($stationId, 'vibe:') === 0) {
                 $parts = explode(':', $stationId);
                 if (count($parts) === 3) {
-                    $type = $parts[1]; // moodEnergy or diversity
+                    $type = $parts[1]; // moodEnergy или diversity
                     $val = $parts[2];
                     $extraParams[$type] = $val;
                     
-                    // Base station for Vibes is usually My Vibe
+                    // Базовая станция для вайбов обычно user:onyourwave
                     $stationId = 'user:onyourwave'; 
                     $contextName = "Vibe: " . ucfirst($val);
                 }
             } elseif (strpos($stationId, 'track:') === 0) {
-                // Track Radio
                 $contextName = "Track Radio";
-                // Don't change stationId, leave as track:ID
+                // ID станции оставляем как есть (track:12345), API это умеет
             } elseif ($stationId === 'user:onyourwave') {
                 $contextName = "My Vibe";
             } else {
                 $contextName = "Station";
             }
 
+            debug("START STATION: $stationId | Context: $contextName | Params: " . json_encode($extraParams));
+
             mpdSend("clear");
             
-            // Get first batch with extra params
+            // Запрашиваем треки
             $queueData = $api->getStationTracksV2($stationId, [], $extraParams);
             
             $initialBuffer = [];
@@ -409,7 +413,7 @@ try {
 
             if ($queueData) {
                 foreach ($queueData as $track) { 
-                    // Add first 3 immediately to MPD
+                    // Добавляем первые 3 трека сразу в MPD для старта
                     if ($count < 3) {
                         $url = $api->getDirectLink($track['id']);
                         if ($url) {
@@ -419,10 +423,9 @@ try {
                             $history[] = (string)$track['id'];
                         }
                     } else {
-                        // Keep rest for daemon
+                        // Остальные в буфер для демона
                         $initialBuffer[] = $track;
-                        // Pre-cache meta for buffer too to be safe
-                        $url_fake = "yandex:" . $track['id']; // dummy key
+                        $url_fake = "yandex:" . $track['id']; 
                         cacheTrackMeta($url_fake, $track); 
                     }
                     if (count($initialBuffer) >= 10) break; 
@@ -430,12 +433,12 @@ try {
             }
             mpdSend("play");
             
-            // Save state for Daemon (Enable it)
+            // СОХРАНЯЕМ ПАРАМЕТРЫ, ЧТОБЫ ДЕМОН ЗНАЛ ПРО ВАЙБ
             saveState([
                 'active' => true,
                 'mode' => 'station',
                 'station_id' => $stationId,
-                'station_params' => $extraParams,
+                'station_params' => $extraParams, // Важно! Демон будет использовать это
                 'context_name' => $contextName,
                 'queue_buffer' => $initialBuffer,
                 'played_history' => $history
@@ -443,7 +446,7 @@ try {
             echo json_encode(['status' => 'started', 'context' => $contextName]);
             break;
 
-        // --- FIXED: Play Album/Playlist (Static Queue) ---
+        // --- ЛОГИКА PLAY ALL (БЕЗ ЛИМИТОВ) ---
         case 'play_playlist':
             $input = json_decode(file_get_contents('php://input'), true);
             $tracks = $input['tracks'] ?? [];
@@ -452,12 +455,9 @@ try {
             mpdSend("clear");
             $added = 0;
             
-            // Limit to 50 to avoid timeout, though user wants ALL. 
-            // 50 direct link requests takes ~10-15s. Acceptable.
-            $limit = 50; 
-            $chunk = array_slice($tracks, 0, $limit);
-
-            foreach ($chunk as $t) {
+            // НИКАКИХ ЛИМИТОВ. Перебираем ВСЁ.
+            // Пользователь подождет, зато будет весь альбом.
+            foreach ($tracks as $t) {
                 $url = $api->getDirectLink($t['id']);
                 if ($url) {
                     mpdSend("add \"$url\"");
@@ -467,7 +467,7 @@ try {
             }
             mpdSend("play");
 
-            // DISABLE DAEMON for static lists
+            // ВЫКЛЮЧАЕМ ДЕМОНА, ТАК КАК ЭТО СТАТИЧНЫЙ СПИСОК
             saveState([
                 'active' => false,
                 'mode' => 'static',
@@ -477,18 +477,15 @@ try {
             echo json_encode(['status' => 'ok', 'added' => $added]);
             break;
 
-        // --- FIXED: Add to Queue (Bulk) ---
+        // --- ЛОГИКА ADD TO QUEUE (БЕЗ ЛИМИТОВ) ---
         case 'add_tracks':
             $input = json_decode(file_get_contents('php://input'), true);
             $tracks = $input['tracks'] ?? [];
             if (empty($tracks)) throw new Exception("No tracks provided");
             
             $added = 0;
-            // Add up to 50 tracks immediately to queue end
-            $limit = 50;
-            $chunk = array_slice($tracks, 0, $limit);
-
-            foreach ($chunk as $t) {
+            // ТОЖЕ БЕЗ ЛИМИТОВ
+            foreach ($tracks as $t) {
                 $url = $api->getDirectLink($t['id']);
                 if ($url) {
                     mpdSend("add \"$url\"");
@@ -497,10 +494,7 @@ try {
                 }
             }
             
-            // We do NOT change state['active'] here. 
-            // If user was listening to Vibe, let Daemon continue.
-            // If user was static, Daemon stays off.
-            
+            // Не меняем статус демона (если играл вайб - пусть играет после добавленных треков)
             echo json_encode(['status' => 'ok', 'added' => $added]);
             break;
 
@@ -515,7 +509,7 @@ try {
                 cacheTrackMeta($url, $trackInfo);
                 if (!$append) {
                     mpdSend("play");
-                    // Stop daemon for single track play
+                    // Выключаем демона для одиночного трека
                     saveState(['active' => false]);
                 }
                 echo json_encode(['status' => 'ok']);

@@ -17,19 +17,17 @@ $pollInterval = 5;
 function logMsg($msg) {
     $str = "[" . date('H:i:s') . "] $msg\n";
     @file_put_contents(LOG_FILE, $str, FILE_APPEND);
+    // echo $str; // Раскомментируй для отладки в консоли
 }
 
 function mpdSend($cmd) {
     $fp = @fsockopen("localhost", 6600, $errno, $errstr, 5);
     if (!$fp) return false;
-    
-    fgets($fp);
-    
+    fgets($fp); 
     fwrite($fp, "$cmd\n");
     $resp = "";
     while (!feof($fp)) {
-        $line = fgets($fp); 
-        $resp .= $line;
+        $line = fgets($fp); $resp .= $line;
         if (strpos($line, 'OK') === 0 || strpos($line, 'ACK') === 0) break;
     }
     fclose($fp);
@@ -64,25 +62,17 @@ function saveState($state) {
 
 function formatTrackForCache($t) {
     if (!isset($t['id'])) return null;
-    
-    $img = null;
-    if (!empty($t['ogImage'])) $img = $t['ogImage'];
-    elseif (!empty($t['coverUri'])) $img = $t['coverUri'];
-    
+    $img = $t['ogImage'] ?? $t['coverUri'] ?? $t['cover'] ?? null;
     if ($img) $img = 'https://' . str_replace('%%', '200x200', $img);
     
     $artist = 'Unknown';
     if (isset($t['artists'][0]['name'])) $artist = $t['artists'][0]['name'];
     elseif (isset($t['artist'])) $artist = $t['artist'];
 
-    $album = 'Unknown Album';
-    if (isset($t['albums'][0]['title'])) $album = $t['albums'][0]['title'];
-    elseif (isset($t['album']['title'])) $album = $t['album']['title'];
-
     return [
         'title' => $t['title'] ?? 'Unknown',
         'artist' => $artist,
-        'album' => $album,
+        'album' => $t['albums'][0]['title'] ?? $t['album'] ?? '',
         'id' => (string)$t['id'],
         'image' => $img,
         'isYandex' => true,
@@ -92,29 +82,18 @@ function formatTrackForCache($t) {
 
 function updateMetaCache($url, $track) {
     $cache = file_exists(META_CACHE_FILE) ? json_decode(file_get_contents(META_CACHE_FILE), true) : [];
-    
-    if (count($cache) > 300) {
-        $cache = array_slice($cache, -100, 100, true);
-    }
-    
+    if (count($cache) > 300) $cache = array_slice($cache, -100, 100, true);
     $formatted = formatTrackForCache($track);
     $cache[md5($url)] = $formatted;
-    
-    // Сохраняем также по ID для надежности
-    if (isset($formatted['id'])) {
-        $cache[$formatted['id']] = $formatted;
-    }
-    
+    if (isset($formatted['id'])) $cache[$formatted['id']] = $formatted;
     file_put_contents(META_CACHE_FILE, json_encode($cache));
 }
 
 function isYandexFile($file) {
-    return strpos($file, 'yandex.net') !== false || 
-           strpos($file, 'get-mp3') !== false || 
-           strpos($file, 'yandex:') === 0;
+    return strpos($file, 'yandex.net') !== false || strpos($file, 'get-mp3') !== false || strpos($file, 'yandex:') === 0;
 }
 
-logMsg("--- Smart Daemon Started ---");
+logMsg("Smart Daemon Started");
 
 $api = null;
 $lastToken = "";
@@ -125,12 +104,11 @@ while (true) {
         if ($token && $token !== $lastToken) {
             try {
                 $api = new YandexMusic($token);
-                $api->getUserId(); // Проверка авторизации
+                $api->getUserId();
                 $lastToken = $token;
-                logMsg("API Initialized Successfully.");
+                logMsg("API Initialized.");
             } catch (Exception $e) { 
                 $api = null; 
-                logMsg("API Error: " . $e->getMessage());
             }
         }
     }
@@ -142,8 +120,9 @@ while (true) {
         $currentFile = $status['file'] ?? '';
         $stateStr = $status['state'] ?? 'stop';
 
-        if ($stateStr === 'play' && !empty($currentFile) && !isYandexFile($currentFile)) {
-            logMsg("Detected non-Yandex track ($currentFile). Deactivating daemon.");
+        // Если играет не Яндекс (пользователь переключил), отключаем активность
+        if ($stateStr === 'play' && !isYandexFile($currentFile)) {
+            logMsg("Non-Yandex track playing. Daemon sleeping.");
             $state['active'] = false;
             saveState($state);
             sleep($pollInterval);
@@ -155,33 +134,34 @@ while (true) {
         
         $tracksAhead = $playlistLen - ($currentPos + 1);
 
+        // Если в очереди мало треков (меньше 5)
         if ($tracksAhead < 5) {
             $buffer = $state['queue_buffer'] ?? [];
             
+            // Если буфер пуст - пополняем
             if (count($buffer) < 5) {
                 $stationId = $state['station_id'] ?? 'user:onetwo';
                 $history = $state['played_history'] ?? [];
-                
+                // ВАЖНО: Читаем параметры настроения
                 $extraParams = $state['station_params'] ?? [];
                 
-                logMsg("Refilling buffer for $stationId...");
+                logMsg("Refilling buffer for $stationId with params: " . json_encode($extraParams));
                 
+                // Запрашиваем НОВЫЕ треки, передавая ИСТОРИЮ
                 $newTracks = $api->getStationTracksV2($stationId, $history, $extraParams);
                 
                 if (!empty($newTracks)) {
                     $buffer = array_merge($buffer, $newTracks);
-                    
-                    // Убираем дубликаты внутри буфера
                     $buffer = array_values(array_unique($buffer, SORT_REGULAR));
                     
                     $state['queue_buffer'] = $buffer;
                     saveState($state);
-                    logMsg("Buffer refilled. New size: " . count($buffer));
-                } else {
-                    logMsg("Warning: API returned 0 tracks.");
+                    logMsg("Buffer refilled. Total: " . count($buffer));
                 }
             }
 
+            // Добавляем треки в MPD
+            // До 5 штук за цикл, чтобы нагнать очередь до 10+
             $addedThisLoop = 0;
             $history = $state['played_history'] ?? [];
 
@@ -190,11 +170,11 @@ while (true) {
                 
                 if (!isset($nextTrack['id'])) continue;
 
+                // Дополнительная защита от дублей
                 if (in_array((string)$nextTrack['id'], $history)) {
-                    continue; // Пропускаем
+                    continue; 
                 }
 
-                // Получаем прямую ссылку
                 $url = $api->getDirectLink($nextTrack['id']);
                 
                 if ($url) {
@@ -204,8 +184,6 @@ while (true) {
                     $history[] = (string)$nextTrack['id'];
                     $addedThisLoop++;
                     $tracksAhead++;
-                } else {
-                    logMsg("Failed to get link for track ID: " . $nextTrack['id']);
                 }
                 
                 if (count($history) > 200) {
@@ -221,7 +199,6 @@ while (true) {
             }
         }
     }
-    
     sleep($pollInterval);
 }
 ?>
