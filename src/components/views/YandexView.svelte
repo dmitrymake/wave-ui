@@ -73,8 +73,6 @@
   }
 
   async function handleViewChange(mode, data) {
-    console.log(`[YandexView] Loading: ${mode}`, data);
-
     if (mode !== "dashboard") {
       if (mode !== "search") tracksStore.set([]);
       albumsStore.set([]);
@@ -320,9 +318,8 @@
           performSearch();
         }
       }, 600);
-    } else if (val.length === 0 && viewMode === "search") {
-      window.history.back();
     }
+    // FIX: Removed automatic history.back() on empty search
   }
 
   async function performSearch() {
@@ -637,6 +634,51 @@
                 </div>
               </div>
             </div>
+          {/if}
+
+          {#if viewMode === "search" && !isLoading}
+            {#if searchResults.artists.length > 0 && searchType === "all"}
+              <h3 class="header-label">Artists</h3>
+              <div
+                class="music-grid horizontal section-mb"
+                on:wheel={handleHorizontalScroll}
+              >
+                {#each searchResults.artists as artist}
+                  <div class="music-card" on:click={() => openArtist(artist)}>
+                    <div class="card-img-container">
+                      <ImageLoader
+                        src={artist.image}
+                        alt={artist.title}
+                        radius="8px"
+                      />
+                    </div>
+                    <div class="card-title center">{artist.title}</div>
+                  </div>
+                {/each}
+              </div>
+            {/if}
+
+            {#if searchResults.albums.length > 0 && searchType === "all"}
+              <h3 class="header-label">Albums</h3>
+              <div
+                class="music-grid horizontal section-mb"
+                on:wheel={handleHorizontalScroll}
+              >
+                {#each searchResults.albums as album}
+                  <div class="music-card" on:click={() => openAlbum(album)}>
+                    <div class="card-img-container">
+                      <ImageLoader
+                        src={album.image}
+                        alt={album.title}
+                        radius="8px"
+                      />
+                    </div>
+                    <div class="card-title">{album.title}</div>
+                    <div class="card-sub">{album.artist}</div>
+                  </div>
+                {/each}
+              </div>
+            {/if}
           {/if}
 
           {#if viewMode.includes("artist") && $albumsStore.length > 0}

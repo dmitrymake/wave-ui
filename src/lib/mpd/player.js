@@ -132,6 +132,10 @@ async function syncQueue(newVersion) {
         }
 
         if (yMeta) {
+          // FIX: Apply duration from metadata if missing in MPD
+          const metaTime = parseFloat(yMeta.time || 0);
+          const currentT = parseFloat(t.time || 0);
+
           return {
             ...t,
             title: yMeta.title || t.title,
@@ -140,6 +144,7 @@ async function syncQueue(newVersion) {
             image: yMeta.image,
             isYandex: true,
             id: yMeta.id,
+            time: currentT > 0 ? currentT : metaTime,
             mpdId: t.id,
             mpdPos: t.pos,
             _uid: String(t.id || t.pos) + "y",
@@ -206,7 +211,8 @@ async function fetchYandexMetaForTrack(url) {
 
     queue.update((q) =>
       q.map((t) => {
-        if (t.file === url) return { ...t, ...meta, isYandex: true };
+        if (t.file === url)
+          return { ...t, ...meta, isYandex: true, time: meta.time || t.time };
         return t;
       }),
     );

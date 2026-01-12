@@ -127,7 +127,7 @@ function cacheTrackMeta($url, $track) {
 }
 
 try {
-    debug("Action: $action");
+    // debug("Action: $action"); // Uncomment for full verbosity
 
     if ($action === 'status') {
         $token = getToken();
@@ -154,7 +154,6 @@ try {
     switch ($action) {
         case 'search':
             $q = $_GET['query'] ?? '';
-            debug("Searching: $q");
             if (empty($q)) {
                 echo json_encode(['tracks' => [], 'albums' => [], 'artists' => []]);
                 break;
@@ -227,9 +226,20 @@ try {
         case 'get_stations_dashboard':
             $raw = $api->getStationDashboard();
             $moodStations = [];
+            
+            debug("Dashboard loaded. Categories found: " . count($raw));
+
             foreach($raw as $category) {
-                $catName = strtolower($category['name'] ?? '');
-                if ($catName === 'mood' || $catName === 'activity' || $catName === 'настроение' || $catName === 'занятие') {
+                $catName = mb_strtolower($category['name'] ?? '');
+                debug("Category: $catName");
+
+                // Расширенный фильтр категорий
+                if (
+                    strpos($catName, 'mood') !== false || 
+                    strpos($catName, 'activity') !== false || 
+                    strpos($catName, 'настроени') !== false || 
+                    strpos($catName, 'заняти') !== false
+                ) {
                     foreach ($category['stations'] as $st) {
                         $moodStations[] = [
                             'title' => $st['name'],
@@ -243,6 +253,9 @@ try {
                     }
                 }
             }
+            
+            debug("Stations filtered: " . count($moodStations));
+            
             shuffle($moodStations);
             echo json_encode(['stations' => $moodStations]);
             break;
