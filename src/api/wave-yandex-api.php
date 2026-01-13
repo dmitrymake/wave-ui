@@ -451,14 +451,17 @@ try {
             echo json_encode(['status' => 'started', 'context' => $contextName]);
             break;
 
-        case 'play_playlist':
+  
+            case 'play_playlist':
             $input = json_decode(file_get_contents('php://input'), true);
             $tracks = $input['tracks'] ?? [];
             $contextName = $input['context'] ?? 'Yandex Playlist';
 
             if (empty($tracks)) throw new Exception("No tracks provided");
             
-            resetDaemon(); // СБРОС
+            debug("PLAY_PLAYLIST START: Count=" . count($tracks)); // LOG
+
+            mpdSend("clear");
             
             $count = 0;
             $initialBuffer = [];
@@ -473,11 +476,16 @@ try {
                         cacheTrackMeta($url, $cleanTrack);
                         mpdSend("add \"$url\"");
                         $count++;
+                        debug("Added track to MPD: " . $cleanTrack['title']); // LOG
+                    } else {
+                        debug("Failed to get link for: " . $cleanTrack['id']); // LOG
                     }
                 } else {
                     $initialBuffer[] = $cleanTrack;
                 }
             }
+            
+            debug("Sending MPD Play"); // LOG
             mpdSend("play");
 
             saveState([
@@ -488,8 +496,10 @@ try {
                 'played_history' => []
             ]);
             
+            debug("PLAY_PLAYLIST DONE"); // LOG
             echo json_encode(['status' => 'ok', 'buffered' => count($initialBuffer)]);
             break;
+      
 
         case 'add_tracks':
             $input = json_decode(file_get_contents('php://input'), true);
