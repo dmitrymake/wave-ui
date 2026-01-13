@@ -19,8 +19,6 @@ define('LOG_FILE', '/dev/shm/wave_api.log');
 
 if (!is_dir(STORAGE_DIR)) @mkdir(STORAGE_DIR, 0777, true);
 
-// --- HELPER FUNCTIONS ---
-
 function debug($msg) {
     @file_put_contents(LOG_FILE, "[" . date('H:i:s') . "] API: $msg\n", FILE_APPEND);
 }
@@ -44,7 +42,7 @@ function getState() {
 function mpdSend($cmd) {
     $fp = @fsockopen("localhost", 6600, $errno, $errstr, 5);
     if (!$fp) return false;
-    fgets($fp); // skip welcome
+    fgets($fp); 
     fwrite($fp, "$cmd\n");
     $resp = "";
     while (!feof($fp)) {
@@ -56,27 +54,27 @@ function mpdSend($cmd) {
     return $resp;
 }
 
-// --- ROBUST TRACK FORMATTER (Исправленная логика для обложек и имен) ---
 function formatTrack($t) {
     if (!$t || !is_array($t)) return null;
 
-    // 1. Обложка (Cover)
+    if (isset($t['isYandex']) && $t['isYandex'] === true) {
+        if (empty($t['id'])) return null;
+        return $t;
+    }
+
     $cover = null;
     if (!empty($t['ogImage'])) $cover = $t['ogImage'];
     elseif (!empty($t['coverUri'])) $cover = $t['coverUri'];
-    elseif (!empty($t['image'])) $cover = $t['image']; // иногда API отдает image
+    elseif (!empty($t['image'])) $cover = $t['image'];
     elseif (!empty($t['album']['coverUri'])) $cover = $t['album']['coverUri'];
     
     if ($cover) {
-        // Убеждаемся, что размер подставлен и протокол есть
         $cover = str_replace('%%', '400x400', $cover);
         if (strpos($cover, 'http') !== 0) $cover = 'https://' . $cover;
     }
 
-    // 2. Имя Артиста
     $artistName = 'Unknown Artist';
     if (!empty($t['artists'])) {
-        // Собираем всех артистов через запятую
         $names = array_map(function($a) { return $a['name']; }, $t['artists']);
         $artistName = implode(', ', $names);
     } elseif (isset($t['artist']) && is_string($t['artist'])) {
@@ -85,22 +83,21 @@ function formatTrack($t) {
         $artistName = $t['artist']['name'];
     }
 
-    // 3. Название Альбома
     $albumTitle = '';
     if (!empty($t['albums'][0]['title'])) $albumTitle = $t['albums'][0]['title'];
     elseif (!empty($t['album']['title'])) $albumTitle = $t['album']['title'];
     elseif (isset($t['album']) && is_string($t['album'])) $albumTitle = $t['album'];
 
-    // 4. ID и Файл
     $id = (string)($t['id'] ?? '');
     
-    // Формируем чистый объект
+    if (!$id) return null;
+
     return [
         'title'    => $t['title'] ?? 'Unknown Title',
         'artist'   => $artistName,
         'album'    => $albumTitle,
         'id'       => $id,
-        'file'     => "yandex:" . $id, // Специальный формат для распознавания фронтендом
+        'file'     => "yandex:" . $id,
         'image'    => $cover,
         'isYandex' => true,
         'service'  => 'yandex',
@@ -108,7 +105,6 @@ function formatTrack($t) {
     ];
 }
 
-// Кэшируем метаданные, чтобы демон и MPD могли их подхватить
 function cacheTrackMeta($url, $track) {
     if (!is_dir(STORAGE_DIR)) @mkdir(STORAGE_DIR, 0777, true);
     
@@ -118,17 +114,14 @@ function cacheTrackMeta($url, $track) {
         if ($content) $cache = json_decode($content, true) ?: [];
     }
     
-    // Ограничиваем размер кэша
     if (count($cache) > 300) $cache = array_slice($cache, -100, 100, true);
     
     $formatted = formatTrack($track);
     if (!$formatted) return;
 
-    // Ключ по MD5 от URL (для надежности)
     $key = md5($url);
     $cache[$key] = $formatted;
     
-    // Ключ по ID (для быстрого поиска)
     if (!empty($formatted['id'])) {
         $cache[$formatted['id']] = $formatted;
     }
@@ -136,24 +129,20 @@ function cacheTrackMeta($url, $track) {
     file_put_contents(META_CACHE_FILE, json_encode($cache));
 }
 
-// --- MAIN LOGIC ---
-
 try {
     $action = $_REQUEST['action'] ?? '';
 
-    // 1. Статус авторизации
     if ($action === 'status') {
         $token = getToken();
         echo json_encode(['authorized' => !!$token]);
         exit;
     }
 
-    // 2. Сохранение токена
     if ($action === 'save_token') {
         $input = json_decode(file_get_contents('php://input'), true);
         if (empty($input['token'])) throw new Exception("Empty token");
         $api = new YandexMusic($input['token']);
-        $api->getUserId(); // Проверка валидности
+        $api->getUserId(); 
         if (!is_dir(dirname(TOKEN_FILE))) mkdir(dirname(TOKEN_FILE), 0755, true);
         file_put_contents(TOKEN_FILE, $input['token']);
         chmod(TOKEN_FILE, 0600);
@@ -161,14 +150,12 @@ try {
         exit;
     }
 
-    // Инициализация API
     $token = getToken();
     if (!$token) throw new Exception("Token not found");
     $api = new YandexMusic($token);
 
     switch ($action) {
         
-        // --- ПОИСК ---
         case 'search':
             $q = $_GET['query'] ?? '';
             if (empty($q)) {
@@ -178,7 +165,6 @@ try {
             $raw = $api->search($q);
             $res = $raw['result'] ?? [];
             
-            // Используем formatTrack для треков
             $tracks = [];
             if (isset($res['tracks']['results'])) {
                 foreach ($res['tracks']['results'] as $t) {
@@ -186,7 +172,6 @@ try {
                 }
             }
             
-            // Форматируем альбомы
             $albums = [];
             if (isset($res['albums']['results'])) {
                 foreach ($res['albums']['results'] as $a) {
@@ -203,7 +188,6 @@ try {
                 }
             }
             
-            // Форматируем артистов
             $artists = [];
             if (isset($res['artists']['results'])) {
                 foreach ($res['artists']['results'] as $a) {
@@ -219,20 +203,96 @@ try {
             echo json_encode(['tracks' => $tracks, 'albums' => $albums, 'artists' => $artists]);
             break;
 
-        // --- ЛЭНДИНГ И ПЛЕЙЛИСТЫ ---
         case 'get_landing':
             echo json_encode($api->getLandingBlocks());
             break;
 
         case 'get_stations_dashboard':
-            echo json_encode(['stations' => $api->getStationDashboard()]);
+            $raw = $api->getStationDashboard();
+            $stations = [];
+
+            foreach ($raw as $item) {
+                $tag = $item['station']['id']['tag'] ?? '';
+                
+                if ($tag === 'onyourwave' && isset($item['station']['restrictions2'])) {
+                    if (isset($item['station']['restrictions2']['moodEnergy']['possibleValues'])) {
+                        foreach ($item['station']['restrictions2']['moodEnergy']['possibleValues'] as $m) {
+                            if ($m['value'] === 'all') continue;
+                            
+                            $img = null;
+                            if (isset($m['image']['src'])) $img = $m['image']['src'];
+                            elseif (isset($m['imageUrl'])) $img = $m['imageUrl'];
+                            
+                            if ($img) {
+                                $img = str_replace('%%', '400x400', $img);
+                                if (strpos($img, 'http') !== 0) $img = 'https://' . $img;
+                            }
+
+                            $stations[] = [
+                                'title' => $m['name'],
+                                'id' => 'vibe:moodEnergy:' . $m['value'],
+                                'kind' => 'station',
+                                'service' => 'yandex',
+                                'cover' => $img,
+                                'bgColor' => $m['image']['backgroundColor'] ?? '#fa2d48',
+                                'isStation' => true,
+                                'type' => 'mood'
+                            ];
+                        }
+                    }
+                    
+                    if (isset($item['station']['restrictions2']['diversity']['possibleValues'])) {
+                        foreach ($item['station']['restrictions2']['diversity']['possibleValues'] as $d) {
+                            if ($d['value'] === 'default') continue;
+
+                            $img = null;
+                            if (isset($d['image']['src'])) $img = $d['image']['src'];
+                            elseif (isset($d['imageUrl'])) $img = $d['imageUrl'];
+
+                            if ($img) {
+                                $img = str_replace('%%', '400x400', $img);
+                                if (strpos($img, 'http') !== 0) $img = 'https://' . $img;
+                            }
+
+                            $stations[] = [
+                                'title' => $d['name'],
+                                'id' => 'vibe:diversity:' . $d['value'],
+                                'kind' => 'station',
+                                'service' => 'yandex',
+                                'cover' => $img,
+                                'bgColor' => '#5f0a87',
+                                'isStation' => true,
+                                'type' => 'diversity'
+                            ];
+                        }
+                    }
+                }
+                
+                if (isset($item['station']['name']) && $tag !== 'onyourwave') {
+                    $img = $item['station']['icon']['imageUrl'] ?? null;
+                    if ($img) {
+                        $img = str_replace('%%', '400x400', $img);
+                        if (strpos($img, 'http') !== 0) $img = 'https://' . $img;
+                    }
+                    
+                    $stations[] = [
+                        'title' => $item['station']['name'],
+                        'id' => $item['station']['id']['type'] . ':' . $item['station']['id']['tag'],
+                        'kind' => 'station',
+                        'service' => 'yandex',
+                        'cover' => $img,
+                        'bgColor' => $item['station']['icon']['backgroundColor'] ?? '#333',
+                        'isStation' => true
+                    ];
+                }
+            }
+            
+            echo json_encode(['stations' => $stations]);
             break;
 
         case 'get_playlists':
             $playlists = $api->getUserPlaylists();
-            // Форматируем список плейлистов для фронта
             $result = [];
-            // Добавляем Избранное как плейлист
             $result[] = [
                 'title' => 'Favorites',
                 'kind' => 'favorites', 
@@ -281,10 +341,8 @@ try {
 
         case 'get_artist_details':
             $data = $api->getArtistDetails($_GET['id']);
-            // Форматируем треки внутри ответа
             $data['tracks'] = array_map('formatTrack', $data['tracks']);
             
-            // Форматируем альбомы
             $cleanAlbums = [];
             foreach ($data['albums'] as $a) {
                 $cover = isset($a['coverUri']) ? "https://" . str_replace('%%', '400x400', $a['coverUri']) : null;
@@ -298,7 +356,6 @@ try {
             }
             $data['albums'] = $cleanAlbums;
             
-            // Форматируем обложку артиста
             if (isset($data['artist']['cover']['uri'])) {
                 $data['cover'] = "https://" . str_replace('%%', '400x400', $data['artist']['cover']['uri']);
             }
@@ -308,7 +365,6 @@ try {
         case 'get_album_details':
             $data = $api->getAlbumDetails($_GET['id']);
             $info = $data['info'];
-            
             $res = [
                 'title' => $info['title'],
                 'artist' => $info['artists'][0]['name'] ?? 'Unknown',
@@ -323,21 +379,18 @@ try {
             echo json_encode(['ids' => $api->getFavoritesIds()]);
             break;
 
-        // --- ВОСПРОИЗВЕДЕНИЕ (Сложная логика) ---
-
         case 'play_station':
             $stationId = $_REQUEST['station'] ?? 'user:onyourwave';
-            $extraParams = []; // Для настроений и энергии
+            $extraParams = []; 
             $contextName = "My Vibe";
 
-            // Парсинг спец. ID для настроений (vibe:moodEnergy:fun)
             if (strpos($stationId, 'vibe:') === 0) {
                 $parts = explode(':', $stationId);
                 if (count($parts) >= 3) {
-                    $type = $parts[1]; // moodEnergy или diversity
+                    $type = $parts[1]; 
                     $val = $parts[2];
                     $extraParams[$type] = $val;
-                    $stationId = 'user:onyourwave'; // Базовая станция всегда Моя Волна
+                    $stationId = 'user:onyourwave'; 
                     $contextName = "Vibe: " . ucfirst($val);
                 }
             } elseif (strpos($stationId, 'track:') === 0) {
@@ -346,7 +399,6 @@ try {
 
             mpdSend("clear");
             
-            // Запрашиваем треки у API (передаем пустую историю для начала)
             $queueData = $api->getStationTracks($stationId, []); 
             
             $initialBuffer = [];
@@ -355,34 +407,34 @@ try {
 
             if ($queueData) {
                 foreach ($queueData as $track) { 
-                    // Первые 3 грузим сразу в MPD
+                    $clean = formatTrack($track);
+                    if (!$clean) continue;
+
                     if ($count < 3) {
-                        $url = $api->getDirectLink($track['id']);
+                        $url = $api->getDirectLink($clean['id']);
                         if ($url) {
-                            cacheTrackMeta($url, $track);
+                            cacheTrackMeta($url, $clean);
                             mpdSend("add \"$url\"");
                             $count++;
-                            $history[] = (string)$track['id'];
+                            $history[] = (string)$clean['id'];
                         }
                     } else {
-                        // Остальные в буфер для демона
-                        $initialBuffer[] = $track; 
-                        cacheTrackMeta("yandex:" . $track['id'], $track); 
+                        $initialBuffer[] = $clean; 
+                        cacheTrackMeta("yandex:" . $clean['id'], $clean); 
                     }
-                    if (count($initialBuffer) >= 20) break; // Хватит для начала
+                    if (count($initialBuffer) >= 20) break; 
                 }
             }
             mpdSend("play");
             
-            // Сохраняем состояние демона
             saveState([
                 'active' => true,
                 'mode' => 'station',
                 'station_id' => $stationId,
-                'station_params' => $extraParams, // Важно! Передаем параметры настроения
+                'station_params' => $extraParams, 
                 'context_name' => $contextName,
                 'queue_buffer' => $initialBuffer,
-                'played_history' => $history // История, чтобы не повторялось
+                'played_history' => $history
             ]);
             echo json_encode(['status' => 'started', 'context' => $contextName]);
             break;
@@ -390,6 +442,8 @@ try {
         case 'play_playlist':
             $input = json_decode(file_get_contents('php://input'), true);
             $tracks = $input['tracks'] ?? [];
+            $contextName = $input['context'] ?? 'Yandex Playlist';
+
             if (empty($tracks)) throw new Exception("No tracks provided");
             
             mpdSend("clear");
@@ -398,7 +452,6 @@ try {
             $initialBuffer = [];
 
             foreach ($tracks as $t) {
-                // Преобразуем входящие данные в надежный формат
                 $cleanTrack = formatTrack($t);
                 if (!$cleanTrack) continue;
 
@@ -417,8 +470,8 @@ try {
 
             saveState([
                 'active' => true,
-                'mode' => 'static', // Демон только догружает, не качает новое
-                'context_name' => 'Yandex Playlist',
+                'mode' => 'static', 
+                'context_name' => $contextName,
                 'queue_buffer' => $initialBuffer,
                 'played_history' => []
             ]);
@@ -435,7 +488,6 @@ try {
             $buffer = $currentState['queue_buffer'] ?? [];
             $added = 0;
 
-            // Если буфер пуст и ничего не играет, можем попробовать запустить сразу
             if (empty($buffer)) {
                  $first = array_shift($tracks);
                  if ($first) {
@@ -451,7 +503,6 @@ try {
                  }
             }
             
-            // Остальное добавляем в хвост буфера
             foreach ($tracks as $t) {
                 $clean = formatTrack($t);
                 if ($clean) $buffer[] = $clean;
@@ -468,7 +519,6 @@ try {
 
         case 'play_track':
             $id = $_REQUEST['id'] ?? '';
-            // Поддержка параметра append (добавить в конец или играть сразу)
             $append = ($_REQUEST['append'] ?? '0') === '1';
             
             $trackInfo = $api->getTracksByIds([$id]);
@@ -484,11 +534,19 @@ try {
                 
                 if (!$append) {
                     mpdSend("play");
-                    // Останавливаем демона, так как это одиночный трек
-                    saveState(['active' => false, 'mode' => 'idle']);
+                    saveState(['active' => false, 'mode' => 'idle', 'context_name' => 'Single Track']);
                 }
                 echo json_encode(['status' => 'ok']);
             }
+            break;
+
+        case 'stop_daemon':
+            saveState([
+                'active' => false,
+                'mode' => 'idle',
+                'context_name' => 'Stopped'
+            ]);
+            echo json_encode(['status' => 'stopped']);
             break;
 
         case 'like':
@@ -519,6 +577,7 @@ try {
         default:
             echo json_encode(['error' => 'Unknown action']);
     }
+
 } catch (Exception $e) {
     debug("Error: " . $e->getMessage());
     http_response_code(500);

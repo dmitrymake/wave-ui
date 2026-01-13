@@ -22,7 +22,6 @@
   const albumsStore = writable([]);
 
   let vibeCards = [];
-  let moodCards = [];
   let collectionCards = [];
 
   let isLoading = false;
@@ -141,44 +140,53 @@
   async function loadDashboard() {
     isLoading = true;
     try {
-      const userPls = await YandexApi.getUserPlaylists();
-      const landing = await YandexApi.getLanding();
-      const moodData = await YandexApi.getStationsDashboard();
+      const [userPls, landing, moodData] = await Promise.all([
+        YandexApi.getUserPlaylists(),
+        YandexApi.getLanding(),
+        YandexApi.getStationsDashboard(),
+      ]);
 
       const myVibe = {
         title: "My Vibe",
         kind: "my_vibe",
         cover: null,
         isStation: true,
-        description: "Endless flow based on your taste",
-        bgColor: "linear-gradient(135deg, #a4508b, #5f0a87)",
+        bgColor: "linear-gradient(135deg, #FFCC00, #FF3333)",
       };
 
-      vibeCards = [
-        myVibe,
-        ...(landing.moods || []),
-        ...(landing.personal || []),
-      ];
+      const moodStations = moodData.stations || [];
+      vibeCards = [myVibe, ...moodStations];
 
-      if (moodData && moodData.stations) {
-        moodCards = moodData.stations;
-      }
-
-      collectionCards = userPls;
+      collectionCards = [...(landing.personal || []), ...(userPls || [])];
     } catch (e) {
+      console.error("[YandexView] Dashboard Error:", e);
       showToast("Failed to load dashboard", "error");
     } finally {
       isLoading = false;
     }
   }
 
+  function openPlaylist(pl) {
+    if (pl.kind === "my_vibe") {
+      showToast("Starting My Vibe...", "info");
+      YandexApi.playRadio();
+      return;
+    }
+
+    if (pl.kind === "station") {
+      showToast(`Starting vibe: ${pl.title}`, "info");
+      YandexApi.playStation(pl.id);
+      return;
+    }
+
+    navigateTo("yandex_playlist", pl);
+  }
+
   async function loadPlaylistData(data) {
     isLoading = true;
     canLoadMore = true;
-
     let uid = data.uid;
     let kind = data.kind;
-
     if (
       !uid &&
       data.id &&
@@ -191,7 +199,6 @@
     } else if (data.kind === "favorites") {
       kind = "favorites";
     }
-
     currentPlaylistContext = { uid, kind, offset: 0, type: "playlist" };
     try {
       await loadPlaylistTracks(uid, kind, 0);
@@ -205,7 +212,6 @@
     canLoadMore = false;
     try {
       const res = await YandexApi.getArtistDetails(data.id);
-
       const stack = get(navigationStack);
       const active = stack[stack.length - 1];
       if (active.view === "yandex_artist_details") {
@@ -218,7 +224,6 @@
         };
         navigationStack.set(stack);
       }
-
       tracksStore.set(res.tracks || []);
       albumsStore.set(res.albums || []);
     } finally {
@@ -231,7 +236,6 @@
     canLoadMore = false;
     try {
       const res = await YandexApi.getAlbumDetails(data.id);
-
       const stack = get(navigationStack);
       const active = stack[stack.length - 1];
       if (active.view === "yandex_album_details") {
@@ -244,31 +248,15 @@
         };
         navigationStack.set(stack);
       }
-
       tracksStore.set(res.tracks || []);
     } finally {
       isLoading = false;
     }
   }
 
-  function openPlaylist(pl) {
-    if (pl.kind === "my_vibe") {
-      showToast("Starting My Vibe...", "info");
-      YandexApi.playRadio();
-      return;
-    }
-    if (pl.kind === "station") {
-      showToast(`Starting ${pl.title}...`, "info");
-      YandexApi.playStation(pl.id);
-      return;
-    }
-    navigateTo("yandex_playlist", pl);
-  }
-
   function openArtist(artist) {
     navigateTo("yandex_artist_details", artist);
   }
-
   function openAlbum(album) {
     navigateTo("yandex_album_details", album);
   }
@@ -278,7 +266,6 @@
     if (res && res.tracks) {
       if (offset === 0) tracksStore.set(res.tracks);
       else tracksStore.update((curr) => [...curr, ...res.tracks]);
-
       if (res.tracks.length === 0) canLoadMore = false;
       return res.tracks.length;
     }
@@ -290,8 +277,7 @@
     if (isLoadingMore || !canLoadMore) return;
     isLoadingMore = true;
     try {
-      const BATCH_SIZE = 50;
-      currentPlaylistContext.offset += BATCH_SIZE;
+      currentPlaylistContext.offset += 50;
       if (currentPlaylistContext.type === "playlist") {
         const count = await loadPlaylistTracks(
           currentPlaylistContext.uid,
@@ -309,7 +295,6 @@
     const val = e.target.value;
     searchQuery = val;
     clearTimeout(searchDebounceTimer);
-
     if (val.length >= 2) {
       searchDebounceTimer = setTimeout(() => {
         if (viewMode !== "search") {
@@ -319,7 +304,6 @@
         }
       }, 600);
     }
-    // FIX: Removed automatic history.back() on empty search
   }
 
   async function performSearch() {
@@ -341,67 +325,67 @@
 
   function setSearchType(type) {
     searchType = type;
-    if (searchResults.tracks) {
-      if (type === "track") tracksStore.set(searchResults.tracks);
-    }
-  }
-
-  function normalizeTracksAndCache(tracks) {
-    const normalized = tracks.map((t) => {
-      let artistName =
-        t.artist ||
-        (t.artists && t.artists.map((a) => a.name).join(", ")) ||
-        "Unknown";
-      let fullCoverUrl = t.image;
-      if (!fullCoverUrl && (t.coverUri || t.cover)) {
-        let clean = (t.coverUri || t.cover).replace("%%", "400x400");
-        fullCoverUrl = clean.startsWith("http")
-          ? clean
-          : "https://" + clean.replace(/^\/\//, "");
-      }
-      return {
-        ...t,
-        artist: artistName,
-        title: t.title || "Unknown Title",
-        image: fullCoverUrl,
-      };
-    });
-    yandexContext.update((ctx) => {
-      const newCache = { ...ctx.streamCache };
-      normalized.forEach((t) => {
-        if (t.file) newCache[t.file] = t;
-        if (t.id) newCache[String(t.id)] = t;
-      });
-      return { ...ctx, streamCache: newCache };
-    });
-    return normalized;
+    if (searchResults.tracks && type === "track")
+      tracksStore.set(searchResults.tracks);
   }
 
   async function playAll() {
-    const rawTracks = get(tracksStore);
-    if (!rawTracks.length) return;
-    const tracks = normalizeTracksAndCache(rawTracks);
-    showToast("Adding tracks to queue...", "info");
-    const res = await fetch("/wave-yandex-api.php?action=play_playlist", {
-      method: "POST",
-      body: JSON.stringify({ tracks }),
-    });
-    if (res.ok) {
-      showToast("Playing...", "success");
-      setTimeout(() => MPD.runMpdRequest("play 0"), 800);
+    const raw = get(tracksStore);
+    if (!raw || raw.length === 0) {
+      showToast("No tracks to play", "error");
+      return;
+    }
+
+    let contextName = "Yandex Playlist";
+    if (currentView?.data) {
+      contextName =
+        currentView.data.title || currentView.data.name || contextName;
+      if (viewMode === "artist_details") contextName = `Artist: ${contextName}`;
+      if (viewMode === "album_details") contextName = `Album: ${contextName}`;
+    }
+
+    showToast(`Starting ${contextName}...`, "info");
+
+    try {
+      const res = await fetch("/wave-yandex-api.php?action=play_playlist", {
+        method: "POST",
+        body: JSON.stringify({
+          tracks: raw,
+          context: contextName,
+        }),
+      });
+
+      const json = await res.json();
+
+      if (json.status === "ok") {
+        showToast("Playing...", "success");
+        setTimeout(() => MPD.runMpdRequest("play 0"), 500);
+      } else {
+        console.error(json);
+        showToast("Error starting playback", "error");
+      }
+    } catch (e) {
+      console.error(e);
+      showToast("Network error", "error");
     }
   }
 
   async function addAllToQueue() {
-    const rawTracks = get(tracksStore);
-    if (!rawTracks.length) return;
-    const tracks = normalizeTracksAndCache(rawTracks);
-    showToast(`Adding ${tracks.length} tracks...`, "info");
-    const res = await fetch("/wave-yandex-api.php?action=add_tracks", {
-      method: "POST",
-      body: JSON.stringify({ tracks }),
-    });
-    if (res.ok) showToast("Added to queue", "success");
+    const raw = get(tracksStore);
+    if (!raw || raw.length === 0) return;
+    showToast(`Adding ${raw.length} tracks...`, "info");
+    try {
+      const res = await fetch("/wave-yandex-api.php?action=add_tracks", {
+        method: "POST",
+        body: JSON.stringify({ tracks: raw }),
+      });
+      if (res.ok) {
+        showToast("Added to queue", "success");
+      }
+    } catch (e) {
+      console.error(e);
+      showToast("Failed to add", "error");
+    }
   }
 
   function handleHorizontalScroll(e) {
@@ -440,7 +424,6 @@
             </button>
           {/if}
         </div>
-
         {#if viewMode === "search"}
           <div class="filter-tabs">
             <button
@@ -458,7 +441,7 @@
 
     {#if viewMode === "dashboard"}
       <div class="content-padded" in:fade>
-        <h2 class="header-label">For You</h2>
+        <h2 class="header-label">Vibes</h2>
         <div
           class="music-grid horizontal section-mb"
           on:wheel={handleHorizontalScroll}
@@ -473,60 +456,24 @@
                   : ""}
               >
                 {#if item.kind === "my_vibe"}
-                  <div class="icon-wrap">{@html ICONS.RADIO}</div>
+                  <div class="icon-wrap pulse-anim">{@html ICONS.RADIO}</div>
                 {:else if item.cover}
                   <ImageLoader src={item.cover} alt={item.title} radius="8px" />
                 {:else}
-                  <div class="icon-fallback">{@html ICONS.RADIO}</div>
+                  <div class="icon-wrap">{@html ICONS.RADIO}</div>
                 {/if}
 
                 <div class="play-overlay">
-                  <span class="overlay-icon"
-                    >{@html item.kind === "my_vibe" || item.kind === "station"
-                      ? ICONS.RADIO
-                      : ICONS.PLAY}</span
-                  >
+                  <span class="overlay-icon">{@html ICONS.PLAY}</span>
                 </div>
               </div>
-              <div class="card-title">{item.title}</div>
+              <div class="card-title center">{item.title}</div>
             </div>
           {/each}
         </div>
 
-        {#if moodCards.length > 0}
-          <h2 class="header-label">Vibe by Mood</h2>
-          <div
-            class="music-grid horizontal section-mb"
-            on:wheel={handleHorizontalScroll}
-          >
-            {#each moodCards as item}
-              <div class="music-card" on:click={() => openPlaylist(item)}>
-                <div
-                  class="card-img-container"
-                  style={`background-color: ${item.bgColor || "#333"}`}
-                >
-                  {#if item.cover}
-                    <ImageLoader
-                      src={item.cover}
-                      alt={item.title}
-                      radius="8px"
-                    />
-                  {:else}
-                    <div class="icon-wrap">{@html ICONS.RADIO}</div>
-                  {/if}
-
-                  <div class="play-overlay">
-                    <span class="overlay-icon">{@html ICONS.RADIO}</span>
-                  </div>
-                </div>
-                <div class="card-title">{item.title}</div>
-              </div>
-            {/each}
-          </div>
-        {/if}
-
         {#if collectionCards.length > 0}
-          <h2 class="header-label">My Collection</h2>
+          <h2 class="header-label">Collection & Mixes</h2>
           <div
             class="music-grid horizontal section-mb"
             on:wheel={handleHorizontalScroll}
@@ -537,7 +484,7 @@
                 <div
                   class="card-img-container"
                   style={isFav
-                    ? "background: linear-gradient(135deg, hsl(348, 95%, 58%), hsl(348, 90%, 40%));"
+                    ? "background: linear-gradient(135deg, #fa2d48, #c01c33);"
                     : ""}
                 >
                   {#if isFav}
@@ -554,9 +501,9 @@
                   </div>
                 </div>
                 <div class="card-title">{pl.title}</div>
-                {#if pl.trackCount}
-                  <div class="card-sub">{pl.trackCount} tracks</div>
-                {/if}
+                {#if pl.trackCount}<div class="card-sub">
+                    {pl.trackCount} tracks
+                  </div>{/if}
               </div>
             {/each}
           </div>
@@ -578,16 +525,11 @@
               <div
                 class="header-art"
                 style={headerData.kind === "favorites"
-                  ? "background: linear-gradient(135deg, hsl(348, 95%, 58%), hsl(348, 90%, 40%));"
+                  ? "background: linear-gradient(135deg, #fa2d48, #c01c33);"
                   : ""}
               >
                 {#if headerData.kind === "favorites"}
-                  <div
-                    class="icon-wrap"
-                    style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;"
-                  >
-                    {@html ICONS.HEART_FILLED}
-                  </div>
+                  <div class="icon-wrap">{@html ICONS.HEART_FILLED}</div>
                 {:else}
                   <ImageLoader
                     src={headerData.cover || headerData.image}
@@ -603,26 +545,16 @@
               <div class="header-info">
                 <div class="header-text-group">
                   <div class="header-label">
-                    {viewMode.includes("artist")
-                      ? "Artist"
-                      : viewMode.includes("album")
-                        ? "Album"
-                        : "Playlist"}
+                    {viewMode.replace("_details", "").toUpperCase()}
                   </div>
-                  <h1 class="header-title" title={headerData.title}>
-                    {headerData.title || headerData.name || "Loading..."}
+                  <h1 class="header-title">
+                    {headerData.title || headerData.name}
                   </h1>
-                  {#if headerData.description || headerData.artist}
-                    <div class="header-subtitle-row">
-                      <h2 class="header-sub-text">
-                        {headerData.artist || headerData.description}
-                      </h2>
-                    </div>
+                  {#if headerData.artist || headerData.description}
+                    <h2 class="header-sub-text">
+                      {headerData.artist || headerData.description}
+                    </h2>
                   {/if}
-                  <div class="meta-badges">
-                    <span class="meta-tag">{$tracksStore.length} tracks</span>
-                    <span class="meta-tag">Yandex</span>
-                  </div>
                 </div>
                 <div class="header-actions">
                   <button class="btn-primary" on:click={playAll}
@@ -637,7 +569,7 @@
           {/if}
 
           {#if viewMode === "search" && !isLoading}
-            {#if searchResults.artists.length > 0 && searchType === "all"}
+            {#if searchResults.artists.length > 0}
               <h3 class="header-label">Artists</h3>
               <div
                 class="music-grid horizontal section-mb"
@@ -645,11 +577,11 @@
               >
                 {#each searchResults.artists as artist}
                   <div class="music-card" on:click={() => openArtist(artist)}>
-                    <div class="card-img-container">
+                    <div class="card-img-container circle">
                       <ImageLoader
                         src={artist.image}
                         alt={artist.title}
-                        radius="8px"
+                        radius="50%"
                       />
                     </div>
                     <div class="card-title center">{artist.title}</div>
@@ -657,8 +589,7 @@
                 {/each}
               </div>
             {/if}
-
-            {#if searchResults.albums.length > 0 && searchType === "all"}
+            {#if searchResults.albums.length > 0}
               <h3 class="header-label">Albums</h3>
               <div
                 class="music-grid horizontal section-mb"
@@ -680,34 +611,6 @@
               </div>
             {/if}
           {/if}
-
-          {#if viewMode.includes("artist") && $albumsStore.length > 0}
-            <div class="header-label section-spacing" style="margin-top: 24px;">
-              Albums
-            </div>
-            <div
-              class="music-grid horizontal section-mb"
-              on:wheel={handleHorizontalScroll}
-            >
-              {#each $albumsStore as album}
-                <div class="music-card" on:click={() => openAlbum(album)}>
-                  <div class="card-img-container">
-                    <ImageLoader
-                      src={album.image}
-                      alt={album.title}
-                      radius="8px"
-                    />
-                    <div class="play-overlay">
-                      <span class="overlay-icon">{@html ICONS.PLAY}</span>
-                    </div>
-                  </div>
-                  <div class="card-title">{album.title}</div>
-                  <div class="card-sub">{album.year}</div>
-                </div>
-              {/each}
-            </div>
-            <div class="header-label section-spacing">Popular Tracks</div>
-          {/if}
         </div>
 
         <div slot="row" let:item let:index>
@@ -715,16 +618,12 @@
             track={item}
             {index}
             on:play={() => YandexApi.playTrack(item.id)}
-            on:artistclick={() => {}}
           />
         </div>
 
         <div slot="footer" class="loading-footer">
           {#if isLoadingMore}<div class="spinner"></div>{/if}
-          <div
-            bind:this={loadMoreSentinel}
-            style="height: 20px; width: 100%;"
-          ></div>
+          <div bind:this={loadMoreSentinel} style="height:20px;"></div>
         </div>
       </BaseList>
     {/if}
@@ -800,15 +699,32 @@
     color: #fff;
     border-color: var(--c-accent);
   }
+
   .card-img-container.is-vibe {
-    background: linear-gradient(135deg, #a4508b, #5f0a87);
+    background: linear-gradient(135deg, #ffcc00, #ff3333);
   }
   .card-title.center {
     text-align: center;
   }
+
+  .pulse-anim :global(svg) {
+    animation: pulse-scale 2s infinite ease-in-out;
+  }
+  @keyframes pulse-scale {
+    0%,
+    100% {
+      transform: scale(1);
+      opacity: 1;
+    }
+    50% {
+      transform: scale(1.1);
+      opacity: 0.8;
+    }
+  }
+
   .icon-wrap {
-    width: 40%;
-    height: 40%;
+    width: 100%;
+    height: 100%;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -818,20 +734,16 @@
     width: 40px;
     height: 40px;
   }
-  .icon-fallback {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    width: 100%;
-    height: 100%;
-    color: var(--c-icon-faint);
-    background: var(--c-bg-placeholder);
+
+  .circle {
+    border-radius: 50% !important;
+    overflow: hidden;
   }
-  .icon-fallback :global(svg) {
-    width: 40px;
-    height: 40px;
-    opacity: 0.5;
+
+  .music-card .card-img-container {
+    background-color: var(--c-bg-placeholder);
   }
+
   .loading-footer {
     padding: 20px;
     display: flex;
@@ -852,6 +764,7 @@
       transform: rotate(360deg);
     }
   }
+
   .header-subtitle-row {
     display: flex;
     align-items: center;
