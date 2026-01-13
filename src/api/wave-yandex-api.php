@@ -54,20 +54,16 @@ function mpdSend($cmd) {
     return $resp;
 }
 
-// Вспомогательная функция для полного сброса перед началом нового воспроизведения
 function resetDaemon() {
-    // 1. Сначала отключаем демона, чтобы он не вмешивался
     saveState([
         'active' => false,
         'mode' => 'idle',
         'queue_buffer' => []
     ]);
     
-    // 2. Очищаем MPD
     mpdSend("stop");
     mpdSend("clear");
     
-    // Небольшая пауза для файловой системы
     usleep(50000); 
 }
 
@@ -409,7 +405,7 @@ try {
                 $contextName = "Track Radio";
             }
 
-            resetDaemon(); // СБРОС
+            resetDaemon();
             
             $queueData = $api->getStationTracks($stationId, []); 
             
@@ -459,7 +455,7 @@ try {
 
             if (empty($tracks)) throw new Exception("No tracks provided");
             
-            debug("PLAY_PLAYLIST START: Count=" . count($tracks)); // LOG
+            debug("PLAY_PLAYLIST START: Count=" . count($tracks));
 
             mpdSend("clear");
             
@@ -476,16 +472,14 @@ try {
                         cacheTrackMeta($url, $cleanTrack);
                         mpdSend("add \"$url\"");
                         $count++;
-                        debug("Added track to MPD: " . $cleanTrack['title']); // LOG
                     } else {
-                        debug("Failed to get link for: " . $cleanTrack['id']); // LOG
+                        debug("Failed to get link for: " . $cleanTrack['id']);
                     }
                 } else {
                     $initialBuffer[] = $cleanTrack;
                 }
             }
             
-            debug("Sending MPD Play"); // LOG
             mpdSend("play");
 
             saveState([
@@ -506,7 +500,6 @@ try {
             $tracks = $input['tracks'] ?? [];
             if (empty($tracks)) throw new Exception("No tracks provided");
             
-            // Здесь НЕ сбрасываем, а подгружаем
             $currentState = getState();
             $buffer = $currentState['queue_buffer'] ?? [];
             $added = 0;
@@ -551,7 +544,7 @@ try {
             $url = $api->getDirectLink($id);
             if ($url) {
                 if (!$append) {
-                    resetDaemon(); // СБРОС если играем один трек сейчас
+                  resetDaemon(); 
                 }
                 
                 cacheTrackMeta($url, $cleanTrack);

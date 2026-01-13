@@ -9,17 +9,15 @@
     yandexFavorites,
     yandexSearchTrigger,
     navigationStack,
-    yandexContext,
     navigateTo,
   } from "../../lib/store";
   import { ICONS } from "../../lib/icons";
   import TrackRow from "../TrackRow.svelte";
   import BaseList from "./BaseList.svelte";
   import ImageLoader from "../ImageLoader.svelte";
-  import * as MPD from "../../lib/mpd";
 
   const tracksStore = writable([]);
-  const albumsStore = writable([]);
+  const albumsStore = writable([]); // Стор для альбомов артиста
 
   let vibeCards = [];
   let collectionCards = [];
@@ -72,6 +70,7 @@
   }
 
   async function handleViewChange(mode, data) {
+    // Очистка сторов при смене вида
     if (mode !== "dashboard") {
       if (mode !== "search") tracksStore.set([]);
       albumsStore.set([]);
@@ -212,6 +211,8 @@
     canLoadMore = false;
     try {
       const res = await YandexApi.getArtistDetails(data.id);
+
+      // Обновляем заголовок в стеке навигации
       const stack = get(navigationStack);
       const active = stack[stack.length - 1];
       if (active.view === "yandex_artist_details") {
@@ -224,7 +225,9 @@
         };
         navigationStack.set(stack);
       }
+
       tracksStore.set(res.tracks || []);
+      // Важно: сохраняем альбомы в отдельный стор
       albumsStore.set(res.albums || []);
     } finally {
       isLoading = false;
@@ -359,7 +362,6 @@
 
       if (json.status === "ok") {
         showToast("Playing...", "success");
-        setTimeout(() => MPD.runMpdRequest("play 0"), 500);
       } else {
         console.error(json);
         showToast("Error starting playback", "error");
@@ -545,7 +547,10 @@
               <div class="header-info">
                 <div class="header-text-group">
                   <div class="header-label">
-                    {viewMode.replace("_details", "").toUpperCase()}
+                    {viewMode
+                      .replace("_details", "")
+                      .toUpperCase()
+                      .replace("YANDEX_", "")}
                   </div>
                   <h1 class="header-title">
                     {headerData.title || headerData.name}
@@ -568,6 +573,32 @@
             </div>
           {/if}
 
+          {#if viewMode === "artist_details" && $albumsStore.length > 0}
+            <h3 class="header-label" style="margin-top: 20px;">Albums</h3>
+            <div
+              class="music-grid horizontal section-mb"
+              on:wheel={handleHorizontalScroll}
+            >
+              {#each $albumsStore as album}
+                <div class="music-card" on:click={() => openAlbum(album)}>
+                  <div class="card-img-container">
+                    <ImageLoader
+                      src={album.image}
+                      alt={album.title}
+                      radius="8px"
+                    />
+                    <div class="play-overlay">
+                      <span class="overlay-icon">{@html ICONS.PLAY}</span>
+                    </div>
+                  </div>
+                  <div class="card-title">{album.title}</div>
+                  <div class="card-sub">{album.year}</div>
+                </div>
+              {/each}
+            </div>
+            <h3 class="header-label">Popular Tracks</h3>
+          {/if}
+
           {#if viewMode === "search" && !isLoading}
             {#if searchResults.artists.length > 0}
               <h3 class="header-label">Artists</h3>
@@ -577,11 +608,11 @@
               >
                 {#each searchResults.artists as artist}
                   <div class="music-card" on:click={() => openArtist(artist)}>
-                    <div class="card-img-container circle">
+                    <div class="card-img-container">
                       <ImageLoader
                         src={artist.image}
                         alt={artist.title}
-                        radius="50%"
+                        radius="8px"
                       />
                     </div>
                     <div class="card-title center">{artist.title}</div>
@@ -735,10 +766,8 @@
     height: 40px;
   }
 
-  .circle {
-    border-radius: 50% !important;
-    overflow: hidden;
-  }
+  /* .circle class removed for artists to restore standard look */
+  /* .circle { border-radius: 50% !important; overflow: hidden; } */
 
   .music-card .card-img-container {
     background-color: var(--c-bg-placeholder);

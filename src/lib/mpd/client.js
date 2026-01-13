@@ -47,7 +47,7 @@ class MpdClient {
     this.socket.onopen = () => {
       console.log("[MPD] Connected");
       connectionStatus.set("Connected");
-      showToast("Connected to Moode", "success");
+      // showToast("Connected to Moode", "success"); // Скрыл, чтобы не спамило
       this._processQueue();
     };
 
@@ -67,6 +67,7 @@ class MpdClient {
 
   send(cmd) {
     return new Promise((resolve, reject) => {
+      // console.log(`[MPD] Enqueue: ${cmd.substring(0, 50)}`);
       this.queue.push({ cmd, resolve, reject });
       this._processQueue();
     });
@@ -89,6 +90,8 @@ class MpdClient {
 
     this.isProcessing = true;
     const { cmd } = this.queue[0];
+
+    // console.log(`[MPD] >>> SEND: ${cmd.trim()}`);
 
     if (this.watchdogTimer) clearTimeout(this.watchdogTimer);
     this.watchdogTimer = setTimeout(() => {
@@ -131,7 +134,9 @@ class MpdClient {
 
       if (currentRequest) {
         if (isError) {
-          console.error(`[MPD] Error: ${fullResponse.trim()}`);
+          console.error(
+            `[MPD] Error for "${currentRequest.cmd.trim()}": ${fullResponse.trim()}`,
+          );
           currentRequest.reject(new Error(fullResponse.trim()));
         } else {
           const cleanResult = fullResponse
