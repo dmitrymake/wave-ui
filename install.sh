@@ -12,7 +12,7 @@ PHP_FPM_SOCK=$(ls /run/php/php*-fpm.sock | head -n 1)
 PORT=3000
 
 echo "-------------------------------------------------------"
-echo "Deploying WaveUI (Industrial Edition) to Port $PORT"
+echo "Deploying WaveUI to Port $PORT"
 echo "-------------------------------------------------------"
 
 # 1. Cleaning up previous mess
