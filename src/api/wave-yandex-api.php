@@ -54,9 +54,27 @@ function mpdSend($cmd) {
     return $resp;
 }
 
+// Вспомогательная функция для полного сброса перед началом нового воспроизведения
+function resetDaemon() {
+    // 1. Сначала отключаем демона, чтобы он не вмешивался
+    saveState([
+        'active' => false,
+        'mode' => 'idle',
+        'queue_buffer' => []
+    ]);
+    
+    // 2. Очищаем MPD
+    mpdSend("stop");
+    mpdSend("clear");
+    
+    // Небольшая пауза для файловой системы
+    usleep(50000); 
+}
+
 function formatTrack($t) {
     if (!$t || !is_array($t)) return null;
 
+    // Если трек уже пришел с фронтенда (чистый), возвращаем его
     if (isset($t['isYandex']) && $t['isYandex'] === true) {
         if (empty($t['id'])) return null;
         return $t;
@@ -107,13 +125,11 @@ function formatTrack($t) {
 
 function cacheTrackMeta($url, $track) {
     if (!is_dir(STORAGE_DIR)) @mkdir(STORAGE_DIR, 0777, true);
-    
     $cache = [];
     if (file_exists(META_CACHE_FILE)) {
         $content = @file_get_contents(META_CACHE_FILE);
         if ($content) $cache = json_decode($content, true) ?: [];
     }
-    
     if (count($cache) > 300) $cache = array_slice($cache, -100, 100, true);
     
     $formatted = formatTrack($track);
@@ -121,11 +137,9 @@ function cacheTrackMeta($url, $track) {
 
     $key = md5($url);
     $cache[$key] = $formatted;
-    
     if (!empty($formatted['id'])) {
         $cache[$formatted['id']] = $formatted;
     }
-
     file_put_contents(META_CACHE_FILE, json_encode($cache));
 }
 
@@ -167,9 +181,7 @@ try {
             
             $tracks = [];
             if (isset($res['tracks']['results'])) {
-                foreach ($res['tracks']['results'] as $t) {
-                    $tracks[] = formatTrack($t);
-                }
+                foreach ($res['tracks']['results'] as $t) $tracks[] = formatTrack($t);
             }
             
             $albums = [];
@@ -397,7 +409,7 @@ try {
                 $contextName = "Track Radio";
             }
 
-            mpdSend("clear");
+            resetDaemon(); // СБРОС
             
             $queueData = $api->getStationTracks($stationId, []); 
             
@@ -446,7 +458,7 @@ try {
 
             if (empty($tracks)) throw new Exception("No tracks provided");
             
-            mpdSend("clear");
+            resetDaemon(); // СБРОС
             
             $count = 0;
             $initialBuffer = [];
@@ -484,6 +496,7 @@ try {
             $tracks = $input['tracks'] ?? [];
             if (empty($tracks)) throw new Exception("No tracks provided");
             
+            // Здесь НЕ сбрасываем, а подгружаем
             $currentState = getState();
             $buffer = $currentState['queue_buffer'] ?? [];
             $added = 0;
@@ -527,7 +540,9 @@ try {
 
             $url = $api->getDirectLink($id);
             if ($url) {
-                if (!$append) mpdSend("clear");
+                if (!$append) {
+                    resetDaemon(); // СБРОС если играем один трек сейчас
+                }
                 
                 cacheTrackMeta($url, $cleanTrack);
                 mpdSend("add \"$url\"");
