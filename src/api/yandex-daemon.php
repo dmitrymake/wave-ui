@@ -59,7 +59,7 @@ function updateMetaCache($url, $track) {
     if (count($cache) > 300) $cache = array_slice($cache, -100, 100, true);
     
     $img = $track['ogImage'] ?? $track['coverUri'] ?? $track['image'] ?? null;
-    if ($img && strpos($img, '%%') !== false) $img = 'https://' . str_replace('%%', '200x200', $img);
+    if ($img && strpos($img, '%%') !== false) $img = 'https://' . str_replace('%%', '400x400', $img);
     
     $artist = isset($track['artists'][0]['name']) ? $track['artists'][0]['name'] : ($track['artist'] ?? 'Unknown');
     $title = $track['title'] ?? 'Unknown';

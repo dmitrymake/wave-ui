@@ -82,7 +82,7 @@ function formatTrack($t) {
     elseif (!empty($t['album']['coverUri'])) $cover = $t['album']['coverUri'];
     
     if ($cover) {
-        $cover = str_replace('%%', '200x200', $cover);
+        $cover = str_replace('%%', '400x400', $cover);
         if (strpos($cover, 'http') !== 0) $cover = 'https://' . $cover;
     }
 
@@ -165,7 +165,7 @@ try {
                         'title' => $a['title'],
                         'artist' => $a['artists'][0]['name'] ?? 'Unknown',
                         'id' => (string)$a['id'],
-                        'image' => isset($a['coverUri']) ? "https://" . str_replace('%%', '200x200', $a['coverUri']) : null,
+                        'image' => isset($a['coverUri']) ? "https://" . str_replace('%%', '400x400', $a['coverUri']) : null,
                         'kind' => 'album',
                         'service' => 'yandex'
                     ];
@@ -178,7 +178,7 @@ try {
                     $artists[] = [
                         'title' => $a['name'],
                         'id' => (string)$a['id'],
-                        'image' => isset($a['cover']['uri']) ? "https://" . str_replace('%%', '200x200', $a['cover']['uri']) : null,
+                        'image' => isset($a['cover']['uri']) ? "https://" . str_replace('%%', '400x400', $a['cover']['uri']) : null,
                         'kind' => 'artist',
                         'service' => 'yandex'
                     ];
@@ -195,7 +195,7 @@ try {
                     $result['personal'] = array_map(function($ent) {
                         return [
                             'title' => $ent['data']['data']['title'],
-                            'cover' => 'https://' . str_replace('%%', '200x200', $ent['data']['data']['cover']['uri']),
+                            'cover' => 'https://' . str_replace('%%', '400x400', $ent['data']['data']['cover']['uri']),
                             'id' => $ent['data']['data']['uid'] . ':' . $ent['data']['data']['kind'],
                             'kind' => 'playlist',
                             'service' => 'yandex'
@@ -206,7 +206,7 @@ try {
                     $result['moods'] = array_map(function($ent) {
                         return [
                             'title' => $ent['data']['station']['name'],
-                            'cover' => 'https://' . str_replace('%%', '200x200', $ent['data']['station']['icon']['imageUrl']),
+                            'cover' => 'https://' . str_replace('%%', '400x400', $ent['data']['station']['icon']['imageUrl']),
                             'id' => $ent['data']['station']['id']['type'] . ':' . $ent['data']['station']['id']['tag'],
                             'kind' => 'station',
                             'service' => 'yandex',
@@ -233,7 +233,7 @@ try {
                             'kind' => 'station',
                             'service' => 'yandex',
                             'bgColor' => '#a4508b',
-                            'cover' => isset($m['imageUrl']) ? 'https://' . str_replace('%%', '200x200', $m['imageUrl']) : null,
+                            'cover' => isset($m['imageUrl']) ? 'https://' . str_replace('%%', '400x400', $m['imageUrl']) : null,
                             'isStation' => true
                         ];
                     }
@@ -246,7 +246,7 @@ try {
                             'kind' => 'station',
                             'service' => 'yandex',
                             'bgColor' => '#5f0a87',
-                            'cover' => isset($d['imageUrl']) ? 'https://' . str_replace('%%', '200x200', $d['imageUrl']) : null,
+                            'cover' => isset($d['imageUrl']) ? 'https://' . str_replace('%%', '400x400', $d['imageUrl']) : null,
                             'isStation' => true
                         ];
                     }
@@ -266,7 +266,7 @@ try {
                     'title' => $a['title'],
                     'id' => (string)$a['id'],
                     'year' => $a['year'] ?? '',
-                    'image' => isset($a['coverUri']) ? "https://" . str_replace('%%', '200x200', $a['coverUri']) : null,
+                    'image' => isset($a['coverUri']) ? "https://" . str_replace('%%', '400x400', $a['coverUri']) : null,
                     'artist' => $artist['name'] ?? '',
                     'kind' => 'album',
                     'service' => 'yandex'
@@ -314,9 +314,9 @@ try {
                 if (empty($pl['title'])) continue;
                 $cover = null;
                 if (isset($pl['cover']['uri'])) {
-                    $cover = "https://" . str_replace('%%', '200x200', $pl['cover']['uri']);
+                    $cover = "https://" . str_replace('%%', '400x400', $pl['cover']['uri']);
                 } elseif (isset($pl['cover']['itemsUri'][0])) {
-                    $cover = "https://" . str_replace('%%', '200x200', $pl['cover']['itemsUri'][0]);
+                    $cover = "https://" . str_replace('%%', '400x400', $pl['cover']['itemsUri'][0]);
                 }
                 $result[] = [
                     'title' => $pl['title'],
