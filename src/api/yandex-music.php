@@ -1,35 +1,28 @@
 <?php
 class YandexMusic {
     private $token;
-    private $userId;
+    private $userId = null;
     private $userAgent = 'Yandex-Music-Client';
-    private $SALT = "XGRlBW9FXlekgbPrRHuSiA";
-    
-    private $debugFile = '/dev/shm/yandex_debug.log';
+    private $salt = "XGRlBW9FXlekgbPrRHuSiA"; // Соль для подписи ссылок скачивания
 
     public function __construct($token) {
         $this->token = $token;
     }
 
-    private function log($msg) {
-        $time = date('H:i:s');
-        @file_put_contents($this->debugFile, "[$time] $msg\n", FILE_APPEND);
-    }
-
-private function request($path, $postData = null, $isXml = false, $asJson = false) {
+    private function request($path, $postData = null, $isXml = false, $asJson = false) {
         $url = strpos($path, 'http') === 0 ? $path : "https://api.music.yandex.net" . $path;
-        $this->log("REQ: $url");
-
+        
         $headers = [
             "Authorization: OAuth " . $this->token,
-            "Accept-Language: ru"
+            "Accept-Language: ru",
+            "X-Yandex-Music-Client: YandexMusic/24023251"
         ];
 
         $ch = curl_init($url);
         curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
         curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
         curl_setopt($ch, CURLOPT_USERAGENT, $this->userAgent);
-        curl_setopt($ch, CURLOPT_TIMEOUT, 20);
+        curl_setopt($ch, CURLOPT_TIMEOUT, 15);
 
         if ($postData) {
             curl_setopt($ch, CURLOPT_POST, true);
@@ -37,7 +30,6 @@ private function request($path, $postData = null, $isXml = false, $asJson = fals
                 $jsonData = json_encode($postData);
                 curl_setopt($ch, CURLOPT_POSTFIELDS, $jsonData);
                 $headers[] = 'Content-Type: application/json';
-                $this->log("BODY JSON: $jsonData");
             } else {
                 curl_setopt($ch, CURLOPT_POSTFIELDS, http_build_query($postData));
             }
@@ -45,7 +37,13 @@ private function request($path, $postData = null, $isXml = false, $asJson = fals
 
         curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
         $response = curl_exec($ch);
+        $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
         curl_close($ch);
+
+        if ($httpCode >= 400 && $httpCode != 401) {
+            // Логируем ошибку, но не валим скрипт жестко, если это возможно
+            error_log("Yandex API Error [$httpCode]: " . substr($response, 0, 200));
+        }
 
         if ($isXml) return $response;
         return json_decode($response, true);
@@ -58,174 +56,41 @@ private function request($path, $postData = null, $isXml = false, $asJson = fals
         return $this->userId;
     }
 
-    public function getUserPlaylists() {
-        $uid = $this->getUserId();
-        $data = $this->request("/users/{$uid}/playlists/list");
-        return $data['result'] ?? [];
-    }
-
-    public function getLandingBlocks() {
-        $blocks = "personal-playlists,stations,mixes";
-        $data = $this->request("/landing3?blocks=" . urlencode($blocks));
-        return $data['result']['blocks'] ?? [];
-    }
-
-    public function getStationDashboard() {
-        $data = $this->request("/rotor/stations/dashboard");
-        return $data['result']['stations'] ?? [];
-    }
-
-    public function getPlaylistTracks($uid, $kind, $offset = 0, $limit = 100) {
-        $data = $this->request("/users/{$uid}/playlists/{$kind}");
-        if (isset($data['result']['tracks']) && count($data['result']['tracks']) == $data['result']['trackCount']) {
-            $tracks = [];
-            foreach ($data['result']['tracks'] as $item) {
-                $track = $item['track'] ?? $item;
-                if (isset($track['id'])) $tracks[] = $track;
-            }
-            return array_slice($tracks, $offset, $limit);
-        }
-        if (isset($data['result']['trackIds'])) {
-            $allIds = array_map(function($item) {
-                return is_array($item) ? $item['id'] : $item;
-            }, $data['result']['trackIds']);
-            $slice = array_slice($allIds, $offset, $limit);
-            if (empty($slice)) return [];
-            return $this->getTracksByIds($slice);
-        }
-        return [];
-    }
-
-    public function getAlbum($albumId) {
-        $data = $this->request("/albums/{$albumId}/with-tracks");
-        return $data['result'] ?? null;
-    }
-
-    public function getArtist($artistId) {
-        $data = $this->request("/artists/{$artistId}");
-        return $data['result']['artist'] ?? null;
-    }
-
-    public function getArtistDirectAlbums($artistId) {
-        $data = $this->request("/artists/{$artistId}/direct-albums?page-size=50");
-        return $data['result']['albums'] ?? [];
-    }
-
-    public function getArtistTracks($artistId) {
-        $data = $this->request("/artists/{$artistId}/tracks?page-size=50");
-        return $data['result']['tracks'] ?? [];
-    }
-
-
-    public function getStationTracksV2($stationId, $queue = [], $extraParams = []) {
-        $url = "/rotor/station/{$stationId}/tracks"; 
+    // --- Основная логика Радио (Vibes) ---
+    public function getStationTracks($stationId, $queueHistory = []) {
+        // Rotor API требует отправки очереди ранее прослушанных треков,
+        // чтобы генерировать новые рекомендации.
+        $url = "/rotor/station/{$stationId}/tracks";
         
         $params = [
             "includeTracksInResponse" => "true",
             "recursive" => "true"
         ];
 
-        if (!empty($extraParams)) {
-            foreach ($extraParams as $key => $val) {
-                $params[$key] = $val;
-            }
-        }
-
         if ($stationId === 'user:onyourwave') {
             $params['external-infos'] = 'onyourwave';
         }
 
-        if (!empty($queue)) {
-            $params['queue'] = implode(',', array_slice($queue, -20));
+        // Берем последние 50 треков из истории, чтобы не перегружать запрос
+        if (!empty($queueHistory)) {
+            $historySlice = array_slice($queueHistory, -50);
+            $params['queue'] = implode(',', $historySlice);
         }
 
         $fullUrl = $url . '?' . http_build_query($params);
-        
         $data = $this->request($fullUrl);
 
-        $cleanTracks = [];
-        $rawItems = [];
-
-        if (isset($data['result']['sequence'])) {
-            $rawItems = $data['result']['sequence'];
-        } elseif (isset($data['result']['tracks'])) {
-            $rawItems = $data['result']['tracks'];
-        } elseif (isset($data['tracks'])) {
-            $rawItems = $data['tracks'];
-        }
-
-        foreach ($rawItems as $item) {
+        $tracks = [];
+        $sequence = $data['result']['sequence'] ?? [];
+        
+        foreach ($sequence as $item) {
             $t = $item['track'] ?? $item;
             if (isset($t['id'])) {
-                $cleanTracks[] = $t;
+                $formatted = $this->formatTrack($t);
+                if ($formatted) $tracks[] = $formatted;
             }
         }
-
-        $this->log("VIBE GET: Request to $stationId | Result: " . count($cleanTracks) . " tracks");
-
-        if (empty($cleanTracks)) {
-            file_put_contents('/dev/shm/yandex_last_error.json', json_encode($data, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE));
-        }
-
-        return $cleanTracks;
-    }
-
-    public function search($text, $type = 'all', $page = 0) {
-        $params = [
-            'text' => $text,
-            'type' => $type,
-            'page' => $page,
-            'nocorrect' => 'false'
-        ];
-        $query = http_build_query($params);
-        return $this->request("/search?" . $query);
-    }
-
-    public function toggleLike($trackId, $isLike = true) {
-        $uid = $this->getUserId();
-        $action = $isLike ? 'add' : 'remove';
-        return $this->request("/users/{$uid}/likes/tracks/{$action}", ['track-id' => $trackId]);
-    }
-
-    public function getFavoritesIds() {
-        $uid = $this->getUserId();
-        $data = $this->request("/users/{$uid}/likes/tracks");
-        $ids = [];
-        $res = $data['result'] ?? [];
-        if (isset($res['library']['tracks'])) {
-            foreach ($res['library']['tracks'] as $t) {
-                $ids[] = $t['id'];
-            }
-        } elseif (isset($res['ids'])) {
-            $ids = $res['ids'];
-        }
-        return $ids;
-    }
-
-    public function getFavorites($offset = 0, $limit = 50) {
-        $ids = $this->getFavoritesIds();
-        $slice = array_slice($ids, $offset, $limit);
-        if (empty($slice)) return [];
-        return $this->getTracksByIds($slice);
-    }
-
-    public function getTracksByIds($ids) {
-        if (empty($ids)) return [];
-        $chunks = array_chunk($ids, 200);
-        $allTracks = [];
-        foreach ($chunks as $chunk) {
-            $chunkStr = implode(',', $chunk);
-            $data = $this->request("/tracks", ['track-ids' => $chunkStr]);
-            if (isset($data['result']) && is_array($data['result'])) {
-                $allTracks = array_merge($allTracks, $data['result']);
-            }
-        }
-        return $allTracks;
-    }
-
-    public function getTrackInfo($trackId) {
-        $data = $this->request("/tracks/{$trackId}");
-        return $data['result'][0] ?? null;
+        return $tracks;
     }
 
     public function getDirectLink($trackId) {
@@ -234,8 +99,9 @@ private function request($path, $postData = null, $isXml = false, $asJson = fals
         $data = $this->request("/tracks/{$trackId}/download-info");
         if (empty($data['result'][0]['downloadInfoUrl'])) return null;
 
+        // Сортируем по битрейту (высшее качество)
         usort($data['result'], function($a, $b) {
-            return $b['bitrateInKbps'] - $a['bitrateInKbps'];
+            return ($b['bitrateInKbps'] ?? 0) - ($a['bitrateInKbps'] ?? 0);
         });
         
         $infoUrl = $data['result'][0]['downloadInfoUrl'];
@@ -246,8 +112,157 @@ private function request($path, $postData = null, $isXml = false, $asJson = fals
         if (!preg_match('/<ts>(.*?)<\/ts>/', $xml, $ts)) return null;
         if (!preg_match('/<s>(.*?)<\/s>/', $xml, $s)) return null;
 
-        $sign = md5($this->SALT . substr($path[1], 1) . $s[1]);
+        $sign = md5($this->salt . substr($path[1], 1) . $s[1]);
         return "https://{$host[1]}/get-mp3/{$sign}/{$ts[1]}{$path[1]}";
+    }
+
+    // --- Вспомогательные методы ---
+
+    public function search($text, $type = 'all', $page = 0) {
+        $params = [
+            'text' => $text,
+            'type' => $type,
+            'page' => $page,
+            'nocorrect' => 'false'
+        ];
+        return $this->request("/search?" . http_build_query($params));
+    }
+
+    public function getUserPlaylists() {
+        $uid = $this->getUserId();
+        $data = $this->request("/users/{$uid}/playlists/list");
+        return $data['result'] ?? [];
+    }
+
+    public function getLandingBlocks() {
+        $blocks = "personal-playlists,stations,mixes,chart";
+        $data = $this->request("/landing3?blocks=" . urlencode($blocks));
+        return $data['result']['blocks'] ?? [];
+    }
+
+    public function getStationDashboard() {
+        $data = $this->request("/rotor/stations/dashboard");
+        return $data['result']['stations'] ?? [];
+    }
+
+    public function getPlaylistTracks($uid, $kind, $offset = 0) {
+        $data = $this->request("/users/{$uid}/playlists/{$kind}");
+        // Обработка разных форматов ответа плейлиста
+        if (isset($data['result']['tracks']) && is_array($data['result']['tracks'])) {
+            $tracks = [];
+            foreach ($data['result']['tracks'] as $item) {
+                $t = $item['track'] ?? $item;
+                if (isset($t['id'])) {
+                    $tracks[] = $this->formatTrack($t);
+                }
+            }
+            return array_slice($tracks, $offset, 50);
+        }
+        
+        // Если вернулись только ID
+        if (isset($data['result']['trackIds'])) {
+            $ids = array_map(function($i) { return is_array($i) ? $i['id'] : $i; }, $data['result']['trackIds']);
+            $slice = array_slice($ids, $offset, 50);
+            return $this->getTracksByIds($slice);
+        }
+        return [];
+    }
+
+    public function getFavoritesIds() {
+        $uid = $this->getUserId();
+        $data = $this->request("/users/{$uid}/likes/tracks");
+        $ids = [];
+        $res = $data['result'] ?? [];
+        if (isset($res['library']['tracks'])) {
+            foreach ($res['library']['tracks'] as $t) $ids[] = $t['id'];
+        } elseif (isset($res['ids'])) {
+            $ids = $res['ids'];
+        }
+        return $ids;
+    }
+
+    public function getTracksByIds($ids) {
+        if (empty($ids)) return [];
+        $chunkStr = implode(',', $ids);
+        $data = $this->request("/tracks", ['track-ids' => $chunkStr]);
+        $result = [];
+        if (isset($data['result']) && is_array($data['result'])) {
+            foreach ($data['result'] as $t) {
+                $result[] = $this->formatTrack($t);
+            }
+        }
+        return $result;
+    }
+
+    public function getArtistDetails($id) {
+        $artist = $this->request("/artists/{$id}");
+        $tracks = $this->request("/artists/{$id}/tracks?page-size=50");
+        $albums = $this->request("/artists/{$id}/direct-albums?page-size=50");
+        
+        return [
+            'artist' => $artist['result']['artist'] ?? [],
+            'tracks' => isset($tracks['result']['tracks']) ? array_map([$this, 'formatTrack'], $tracks['result']['tracks']) : [],
+            'albums' => $albums['result']['albums'] ?? []
+        ];
+    }
+
+    public function getAlbumDetails($id) {
+        $raw = $this->request("/albums/{$id}/with-tracks");
+        $tracks = [];
+        if (isset($raw['result']['volumes'])) {
+            foreach ($raw['result']['volumes'] as $vol) {
+                foreach ($vol as $t) $tracks[] = $this->formatTrack($t);
+            }
+        }
+        return ['info' => $raw['result'] ?? [], 'tracks' => $tracks];
+    }
+
+    public function toggleLike($trackId, $isLike = true) {
+        $uid = $this->getUserId();
+        $action = $isLike ? 'add' : 'remove';
+        return $this->request("/users/{$uid}/likes/tracks/{$action}", ['track-id' => $trackId]);
+    }
+
+    // --- Robust Formatting (Самое важное) ---
+    public function formatTrack($t) {
+        if (!$t || !is_array($t)) return null;
+
+        // 1. Artist Name
+        $artistName = 'Unknown Artist';
+        if (!empty($t['artists'])) {
+            $names = array_map(function($a) { return $a['name']; }, $t['artists']);
+            $artistName = implode(', ', $names);
+        } elseif (isset($t['artist'])) {
+            $artistName = $t['artist'];
+        }
+
+        // 2. Cover Art (Самое проблемное место)
+        $cover = null;
+        if (!empty($t['ogImage'])) $cover = $t['ogImage'];
+        elseif (!empty($t['coverUri'])) $cover = $t['coverUri'];
+        elseif (!empty($t['album']['coverUri'])) $cover = $t['album']['coverUri'];
+        
+        if ($cover) {
+            $cover = str_replace('%%', '400x400', $cover);
+            if (strpos($cover, 'http') !== 0) $cover = 'https://' . $cover;
+        }
+
+        // 3. Album Title
+        $albumTitle = '';
+        if (!empty($t['albums'][0]['title'])) $albumTitle = $t['albums'][0]['title'];
+        elseif (!empty($t['album']['title'])) $albumTitle = $t['album']['title'];
+
+        return [
+            'title'    => $t['title'] ?? 'Unknown Title',
+            'artist'   => $artistName,
+            'album'    => $albumTitle,
+            'id'       => (string)($t['id'] ?? ''),
+            'file'     => "yandex:" . ($t['id'] ?? ''),
+            'image'    => $cover,
+            'isYandex' => true,
+            'service'  => 'yandex',
+            'time'     => isset($t['durationMs']) ? ($t['durationMs'] / 1000) : 0
+        ];
     }
 }
 ?>
