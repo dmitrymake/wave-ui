@@ -2,7 +2,6 @@ import { defineConfig } from "vite";
 import { svelte } from "@sveltejs/vite-plugin-svelte";
 import packageJson from "./package.json";
 
-// ⚠️ Убедитесь, что IP адрес верный (IP вашей малинки)
 const MOODE_TARGET = "http://192.168.1.100";
 
 export default defineConfig({
