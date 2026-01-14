@@ -1,3 +1,13 @@
+import { CONFIG } from "../config";
+
+const getBaseUrl = () => {
+  const isDev = import.meta.env.DEV;
+  if (isDev) {
+    return `http://${CONFIG.MOODE_IP}`;
+  }
+  return "";
+};
+
 export const DATABASE = {
   NAME: "MoodePlayerDB",
   STORE_NAME: "music",
@@ -5,11 +15,20 @@ export const DATABASE = {
 };
 
 export const API_ENDPOINTS = {
-  SYNC: `/wave-api.php`,
-  YANDEX: `/wave-yandex-api.php`,
-  STATIONS: (isDev) => `/wave-api.php?action=stations`,
-  COVER_ART: (file) => `/coverart.php?u=${encodeURIComponent(file)}`,
-  RADIO_LOGOS: (filename) => `/imagesw/radio-logos/thumbs/${filename}`,
+  get SYNC() {
+    return `${getBaseUrl()}/wave-api.php`;
+  },
+  get YANDEX() {
+    return `${getBaseUrl()}/wave-yandex-api.php`;
+  },
+
+  STATIONS: () => `${getBaseUrl()}/wave-api.php?action=stations`,
+
+  COVER_ART: (file) =>
+    `${getBaseUrl()}/coverart.php?u=${encodeURIComponent(file)}`,
+
+  RADIO_LOGOS: (filename) =>
+    `${getBaseUrl()}/imagesw/radio-logos/thumbs/${filename}`,
 };
 
 export const PLAYER_CONFIG = {
