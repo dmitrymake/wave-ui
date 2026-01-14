@@ -1,5 +1,4 @@
 <?php
-// yandex-daemon.php
 define('INC', '/var/www/inc');
 require_once INC . '/yandex-music.php';
 
@@ -46,16 +45,32 @@ function getMpdStatus() {
 }
 
 function getState() {
-    return file_exists(STATE_FILE) ? json_decode(file_get_contents(STATE_FILE), true) : [];
+    // Используем flock для атомарного чтения, чтобы не прочитать файл в момент записи API
+    if (!file_exists(STATE_FILE)) return [];
+    $fp = fopen(STATE_FILE, 'r');
+    if (flock($fp, LOCK_SH)) {
+        $json = stream_get_contents($fp);
+        flock($fp, LOCK_UN);
+        fclose($fp);
+        return json_decode($json, true) ?: [];
+    }
+    fclose($fp);
+    return [];
 }
 
 function saveState($state) {
-    file_put_contents(STATE_FILE, json_encode($state));
+    $fp = fopen(STATE_FILE, 'c');
+    if (flock($fp, LOCK_EX)) {
+        ftruncate($fp, 0);
+        fwrite($fp, json_encode($state));
+        fflush($fp);
+        flock($fp, LOCK_UN);
+    }
+    fclose($fp);
 }
 
 function updateMetaCache($url, $track) {
     $cache = file_exists(META_CACHE_FILE) ? json_decode(file_get_contents(META_CACHE_FILE), true) : [];
-    // Кэш максимум 300 записей
     if (count($cache) > 300) $cache = array_slice($cache, -100, 100, true);
     
     $key = md5($url);
@@ -71,13 +86,13 @@ $api = null;
 $lastToken = "";
 
 while (true) {
-    // 1. Проверяем токен и инициализируем API
+    // 1. Инициализация API
     if (file_exists(TOKEN_FILE)) {
         $token = trim(file_get_contents(TOKEN_FILE));
         if ($token && $token !== $lastToken) {
             try {
                 $api = new YandexMusic($token);
-                $api->getUserId(); // Check valid
+                $api->getUserId(); 
                 $lastToken = $token;
                 logMsg("API Connected");
             } catch (Exception $e) {
@@ -93,7 +108,7 @@ while (true) {
     if ($api && !empty($state['active'])) {
         $mpdStatus = getMpdStatus();
         
-        // Проверка: Если играет что-то не из Яндекса (например, локальный файл), засыпаем
+        // --- FIX: Проверка "Чужого трека" ---
         $currentFile = $mpdStatus['file'] ?? '';
         $stateStr = $mpdStatus['state'] ?? 'stop';
         
@@ -101,7 +116,7 @@ while (true) {
             && strpos($currentFile, 'yandex') === false 
             && strpos($currentFile, 'get-mp3') === false) {
             
-            // Кто-то включил локальный трек -> выключаем наш демон
+            // Кто-то включил локальный файл -> выключаем демона
             $state['active'] = false;
             saveState($state);
             logMsg("External track detected. Daemon paused.");
@@ -109,34 +124,48 @@ while (true) {
             continue;
         }
 
-        // 3. Проверка длины очереди
+        // 3. Проверка очереди
         $playlistLen = intval($mpdStatus['playlistlength'] ?? 0);
         $currentPos = intval($mpdStatus['song'] ?? -1);
-        $tracksAhead = $playlistLen - ($currentPos + 1);
+        
+        // Если ничего не играет, считаем что мы в конце очереди (чтобы стригеррить загрузку, если это старт)
+        if ($currentPos === -1 && $playlistLen === 0) $tracksAhead = 0;
+        else $tracksAhead = $playlistLen - ($currentPos + 1);
 
-        // Если осталось мало треков (меньше 3)
+        // Порог пополнения (меньше 3 треков впереди)
         if ($tracksAhead < 3) {
             $buffer = $state['queue_buffer'] ?? [];
 
-            // A. Если буфер пуст и это режим РАДИО -> Качаем новые
+            // A. Если буфер пуст и режим STATION -> Качаем новые
             if (empty($buffer) && ($state['mode'] ?? '') === 'station') {
                 $stationId = $state['station_id'] ?? 'user:onyourwave';
                 $history = $state['played_history'] ?? [];
+                
+                // --- FIX: Читаем параметры настроения (Fun, Sad, etc) ---
+                $params = $state['station_params'] ?? []; 
 
-                logMsg("Refilling radio: $stationId");
+                logMsg("Refilling radio: $stationId Params: " . json_encode($params));
+                
                 try {
-                    // Передаем историю, чтобы не было повторов!
-                    $newTracks = $api->getStationTracks($stationId, $history);
+                    // --- FIX: Передаем параметры в API ---
+                    $newTracks = $api->getStationTracks($stationId, $history, $params);
                     
                     if (!empty($newTracks)) {
+                        $newBuffer = [];
                         foreach ($newTracks as $nt) {
-                            // Дополнительная проверка на всякий случай
                             if (!in_array((string)$nt['id'], $history)) {
-                                $buffer[] = $nt;
+                                $newBuffer[] = $nt;
                             }
                         }
-                        $state['queue_buffer'] = $buffer;
+                        // Сразу сохраняем буфер, чтобы не потерять при перезапуске
+                        $state = getState(); // Обновляем стейт перед записью
+                        if (empty($state['active'])) {
+                             // Если пока мы качали, юзер нажал стоп - не сохраняем
+                             continue;
+                        }
+                        $state['queue_buffer'] = $newBuffer;
                         saveState($state);
+                        $buffer = $newBuffer; // Обновляем локальную переменную
                     }
                 } catch (Exception $e) {
                     logMsg("Fetch Error: " . $e->getMessage());
@@ -147,18 +176,36 @@ while (true) {
             if (!empty($buffer)) {
                 $nextTrack = array_shift($buffer);
                 
-                // Получаем ссылку
                 try {
+                    // --- FIX: CRITICAL CHECK FOR GHOST TRACK ---
+                    // Перед тяжелым запросом ссылки и добавлением в MPD
+                    // проверяем, не отменил ли UI активность
+                    $checkState = getState();
+                    if (empty($checkState['active'])) {
+                        logMsg("Daemon stopped abruptly. Aborting add.");
+                        continue; 
+                    }
+                    // -------------------------------------------
+
                     $url = $api->getDirectLink($nextTrack['id']);
+                    
                     if ($url) {
                         updateMetaCache($url, $nextTrack);
+                        
+                        // --- FIX: DOUBLE CHECK BEFORE MPD ADD ---
+                        $checkState = getState();
+                        if (empty($checkState['active'])) {
+                            logMsg("Daemon stopped before MPD Add. Aborting.");
+                            continue;
+                        }
+                        // ----------------------------------------
+
                         mpdSend("add \"$url\"");
                         logMsg("Added: " . $nextTrack['title']);
 
                         // Обновляем историю
                         if (!isset($state['played_history'])) $state['played_history'] = [];
                         $state['played_history'][] = (string)$nextTrack['id'];
-                        // Храним последние 100 ID
                         if (count($state['played_history']) > 150) {
                             $state['played_history'] = array_slice($state['played_history'], -100);
                         }
@@ -169,9 +216,14 @@ while (true) {
                     logMsg("Link Error: " . $e->getMessage());
                 }
 
-                // Сохраняем уменьшенный буфер и обновленную историю
-                $state['queue_buffer'] = $buffer;
-                saveState($state);
+                // Сохраняем стейт (уменьшенный буфер)
+                // Важно прочитать актуальный стейт, чтобы не перезатереть флаги
+                $currentState = getState();
+                if (!empty($currentState['active'])) {
+                    $currentState['queue_buffer'] = $buffer;
+                    $currentState['played_history'] = $state['played_history'];
+                    saveState($currentState);
+                }
             }
         }
     }
