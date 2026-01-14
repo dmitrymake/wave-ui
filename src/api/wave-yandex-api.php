@@ -344,7 +344,7 @@ try {
             echo json_encode(['ids' => $api->getFavoritesIds()]);
             break;
 
-        // --- PLAY STATION (VIBES) ---
+       // --- PLAY STATION (VIBES) ---
         case 'play_station':
             $stationId = $_REQUEST['station'] ?? 'user:onyourwave';
             $extraParams = []; 
@@ -352,21 +352,43 @@ try {
 
             if (strpos($stationId, 'vibe:') === 0) {
                 $parts = explode(':', $stationId);
+                // Пример: vibe:moodEnergy:fun
                 if (count($parts) >= 3) {
-                    $type = $parts[1]; 
-                    $val = $parts[2];
-                    $extraParams[$type] = $val;
+                    $group = $parts[1]; // moodEnergy, diversity, language
+                    $val = $parts[2];   // fun, active, sad, calm
+                    
                     $stationId = 'user:onyourwave'; 
                     $contextName = "Vibe: " . ucfirst($val);
+
+                    // --- FIX: Маппинг параметров для API ---
+                    // API Яндекса не понимает "moodEnergy", ему нужны "mood" или "energy"
+                    if ($group === 'moodEnergy') {
+                        if (in_array($val, ['active', 'calm'])) {
+                            $extraParams['energy'] = $val;
+                        } else {
+                            // fun, sad, sentimental, etc.
+                            // Примечание: иногда 'fun' в UI соответствует 'happy' в API, 
+                            // но обычно Яндекс понимает и то и то. Оставим $val как есть.
+                            $extraParams['mood'] = $val;
+                        }
+                    } elseif ($group === 'diversity') {
+                        // discovery, popular, favorite, default
+                        $extraParams['diversity'] = $val;
+                    } elseif ($group === 'language') {
+                        // russian, foreign, not-russian
+                        $extraParams['language'] = $val;
+                    } else {
+                        // Fallback для неизвестных групп
+                        $extraParams[$group] = $val;
+                    }
                 }
             } elseif (strpos($stationId, 'track:') === 0) {
                 $contextName = "Track Radio";
             }
 
+            // --- FIX: Сохраняем историю перед сбросом (из предыдущего шага) ---
             $oldState = getState();
             $globalHistory = $oldState['played_history'] ?? [];
-            
-            // Если история слишком большая, обрежем её, чтобы не таскать мусор
             if (count($globalHistory) > 100) {
                 $globalHistory = array_slice($globalHistory, -100);
             }
@@ -374,14 +396,11 @@ try {
             // 1. ОСТАНОВИТЬ ДЕМОНА
             resetDaemon();
             
-            // 2. Получить треки, ПЕРЕДАВАЯ ИСТОРИЮ ($globalHistory)
-            // Это заставит Яндекс учитывать, что мы уже слышали, и менять поток
+            // 2. Получить треки с ПРАВИЛЬНЫМИ параметрами
             $queueData = $api->getStationTracks($stationId, $globalHistory, $extraParams); 
             
             $initialBuffer = [];
             $count = 0;
-            
-            // Добавляем новые треки в историю, чтобы не потерять их
             $newHistory = $globalHistory;
 
             if ($queueData) {
@@ -389,10 +408,7 @@ try {
                     $clean = formatTrack($track);
                     if (!$clean) continue;
 
-                    // Доп. проверка: не добавлять то, что только что играло
                     if (in_array((string)$clean['id'], $globalHistory)) {
-                         // Если трек уже был в истории, пропускаем его, если это возможно,
-                         // чтобы не было дежавю при переключении настроений
                          continue;
                     }
 
@@ -412,7 +428,7 @@ try {
                 }
             }
             
-            // Если вдруг Яндекс вернул ТОЛЬКО дубликаты (бывает), берем что есть
+            // Fallback если вернулись только дубли
             if ($count === 0 && !empty($queueData)) {
                  foreach ($queueData as $track) {
                     $clean = formatTrack($track);
@@ -434,13 +450,14 @@ try {
                 'active' => true,
                 'mode' => 'station',
                 'station_id' => $stationId,
-                'station_params' => $extraParams,
+                'station_params' => $extraParams, // Сохраняем уже ПРАВИЛЬНЫЕ параметры (mood/energy)
                 'context_name' => $contextName,
                 'queue_buffer' => $initialBuffer,
-                'played_history' => $newHistory // <-- Сохраняем обновленную историю
+                'played_history' => $newHistory
             ]);
             echo json_encode(['status' => 'started', 'context' => $contextName]);
             break;
+
 
         case 'play_playlist':
             $input = json_decode(file_get_contents('php://input'), true);
