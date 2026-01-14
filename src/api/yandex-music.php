@@ -3,8 +3,8 @@ class YandexMusic {
     private $token;
     private $userId = null;
     private $userAgent = 'Yandex-Music-Client';
-    private $salt = "XGRlBW9FXlekgbPrRHuSiA"; // Соль для подписи ссылок
-    private $debug = true; // Включаем отладку
+    private $salt = "XGRlBW9FXlekgbPrRHuSiA";
+    private $debug = true;
     private $logFile = '/dev/shm/wave_yandex_debug.log';
 
     public function __construct($token) {
@@ -20,11 +20,8 @@ class YandexMusic {
     private function request($path, $postData = null, $isXml = false, $asJson = false) {
         $url = strpos($path, 'http') === 0 ? $path : "https://api.music.yandex.net" . $path;
         
-        // ЛОГИРОВАНИЕ ЗАПРОСА
         $logMsg = "REQ: $url";
-        if ($postData) {
-            $logMsg .= " | DATA: " . (is_array($postData) ? json_encode($postData) : $postData);
-        }
+        if ($postData) $logMsg .= " | DATA: " . json_encode($postData);
         $this->log($logMsg);
 
         $headers = [
@@ -42,8 +39,7 @@ class YandexMusic {
         if ($postData) {
             curl_setopt($ch, CURLOPT_POST, true);
             if ($asJson) {
-                $jsonData = json_encode($postData);
-                curl_setopt($ch, CURLOPT_POSTFIELDS, $jsonData);
+                curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($postData));
                 $headers[] = 'Content-Type: application/json';
             } else {
                 curl_setopt($ch, CURLOPT_POSTFIELDS, http_build_query($postData));
@@ -70,9 +66,9 @@ class YandexMusic {
         return $this->userId;
     }
 
-    // --- Исправленная логика Радио (Vibes) ---
-    public function getStationTracks($stationId, $queueHistory = []) {
-        $this->log("Getting tracks for Station: $stationId");
+    // --- FIX: Добавлен аргумент $extraParams ---
+    public function getStationTracks($stationId, $queueHistory = [], $extraParams = []) {
+        $this->log("Getting tracks for Station: $stationId with params: " . json_encode($extraParams));
         
         $url = "/rotor/station/{$stationId}/tracks";
         
@@ -81,25 +77,24 @@ class YandexMusic {
             "recursive" => "true"
         ];
 
-        // Критично для "Моей волны"
         if ($stationId === 'user:onyourwave') {
             $params['external-infos'] = 'onyourwave';
         }
 
-        // --- ВАЖНО: Проверка передачи контекста ---
+        // Внедряем параметры настроения (moodEnergy, diversity и т.д.)
+        if (!empty($extraParams)) {
+            foreach ($extraParams as $k => $v) {
+                $params[$k] = $v;
+            }
+        }
+
         if (!empty($queueHistory)) {
-            // Yandex Rotor требует batch-id и queue, если мы продолжаем сессию.
-            // Но для простоты пока шлем queue (историю).
-            // В логах увидим, передается ли это.
-            $historySlice = array_slice($queueHistory, -20); // Берем последние 20
+            $historySlice = array_slice($queueHistory, -20);
             $params['queue'] = implode(',', $historySlice);
-            $this->log("Sending history context: " . count($historySlice) . " items");
-        } else {
-            $this->log("WARNING: No history context sent to Rotor (Cold Start)");
         }
 
         $fullUrl = $url . '?' . http_build_query($params);
-        $data = $this->request($fullUrl);
+        $data = $this->request($fullUrl); // Логирование внутри request покажет финальный URL
 
         if (isset($data['result']['batchId'])) {
             $this->log("Rotor returned batchId: " . $data['result']['batchId']);
@@ -115,7 +110,6 @@ class YandexMusic {
                 if ($formatted) $tracks[] = $formatted;
             }
         }
-        $this->log("Rotor returned " . count($tracks) . " tracks");
         return $tracks;
     }
 
@@ -123,10 +117,7 @@ class YandexMusic {
         if (!$trackId) return null;
         
         $data = $this->request("/tracks/{$trackId}/download-info");
-        if (empty($data['result'][0]['downloadInfoUrl'])) {
-            $this->log("No downloadInfoUrl for track $trackId");
-            return null;
-        }
+        if (empty($data['result'][0]['downloadInfoUrl'])) return null;
 
         usort($data['result'], function($a, $b) {
             return ($b['bitrateInKbps'] ?? 0) - ($a['bitrateInKbps'] ?? 0);
@@ -144,35 +135,24 @@ class YandexMusic {
         return "https://{$host[1]}/get-mp3/{$sign}/{$ts[1]}{$path[1]}";
     }
 
-    // --- Вспомогательные методы ---
-
+    // ... (Остальные методы без изменений) ...
     public function search($text, $type = 'all', $page = 0) {
-        $params = [
-            'text' => $text,
-            'type' => $type,
-            'page' => $page,
-            'nocorrect' => 'false'
-        ];
+        $params = ['text' => $text, 'type' => $type, 'page' => $page, 'nocorrect' => 'false'];
         return $this->request("/search?" . http_build_query($params));
     }
-
     public function getUserPlaylists() {
         $uid = $this->getUserId();
         return $this->request("/users/{$uid}/playlists/list")['result'] ?? [];
     }
-
     public function getLandingBlocks() {
         $blocks = "personal-playlists,stations,mixes,chart";
         return $this->request("/landing3?blocks=" . urlencode($blocks))['result']['blocks'] ?? [];
     }
-
     public function getStationDashboard() {
         return $this->request("/rotor/stations/dashboard")['result']['stations'] ?? [];
     }
-
     public function getPlaylistTracks($uid, $kind, $offset = 0) {
         $data = $this->request("/users/{$uid}/playlists/{$kind}");
-        
         if (isset($data['result']['tracks']) && is_array($data['result']['tracks'])) {
             $tracks = [];
             foreach ($data['result']['tracks'] as $item) {
@@ -181,7 +161,6 @@ class YandexMusic {
             }
             return array_slice($tracks, $offset, 50);
         }
-        
         if (isset($data['result']['trackIds'])) {
             $ids = array_map(function($i) { return is_array($i) ? $i['id'] : $i; }, $data['result']['trackIds']);
             $slice = array_slice($ids, $offset, 50);
@@ -189,7 +168,6 @@ class YandexMusic {
         }
         return [];
     }
-
     public function getFavoritesIds() {
         $uid = $this->getUserId();
         $data = $this->request("/users/{$uid}/likes/tracks");
@@ -202,7 +180,6 @@ class YandexMusic {
         }
         return $ids;
     }
-
     public function getTracksByIds($ids) {
         if (empty($ids)) return [];
         $chunkStr = implode(',', $ids);
@@ -215,19 +192,16 @@ class YandexMusic {
         }
         return $result;
     }
-
     public function getArtistDetails($id) {
         $artist = $this->request("/artists/{$id}");
         $tracks = $this->request("/artists/{$id}/tracks?page-size=50");
         $albums = $this->request("/artists/{$id}/direct-albums?page-size=50");
-        
         return [
             'artist' => $artist['result']['artist'] ?? [],
             'tracks' => isset($tracks['result']['tracks']) ? array_map([$this, 'formatTrack'], $tracks['result']['tracks']) : [],
             'albums' => $albums['result']['albums'] ?? []
         ];
     }
-
     public function getAlbumDetails($id) {
         $raw = $this->request("/albums/{$id}/with-tracks");
         $tracks = [];
@@ -238,17 +212,13 @@ class YandexMusic {
         }
         return ['info' => $raw['result'] ?? [], 'tracks' => $tracks];
     }
-
     public function toggleLike($trackId, $isLike = true) {
         $uid = $this->getUserId();
         $action = $isLike ? 'add' : 'remove';
-        $this->log("Like action: $action for $trackId");
         return $this->request("/users/{$uid}/likes/tracks/{$action}", ['track-id' => $trackId]);
     }
-
     public function formatTrack($t) {
         if (!$t || !is_array($t)) return null;
-
         $artistName = 'Unknown Artist';
         if (!empty($t['artists'])) {
             $names = array_map(function($a) { return $a['name']; }, $t['artists']);
@@ -256,21 +226,17 @@ class YandexMusic {
         } elseif (isset($t['artist'])) {
             $artistName = $t['artist'];
         }
-
         $cover = null;
         if (!empty($t['ogImage'])) $cover = $t['ogImage'];
         elseif (!empty($t['coverUri'])) $cover = $t['coverUri'];
         elseif (!empty($t['album']['coverUri'])) $cover = $t['album']['coverUri'];
-        
         if ($cover) {
             $cover = str_replace('%%', '400x400', $cover);
             if (strpos($cover, 'http') !== 0) $cover = 'https://' . $cover;
         }
-
         $albumTitle = '';
         if (!empty($t['albums'][0]['title'])) $albumTitle = $t['albums'][0]['title'];
         elseif (!empty($t['album']['title'])) $albumTitle = $t['album']['title'];
-
         return [
             'title'    => $t['title'] ?? 'Unknown Title',
             'artist'   => $artistName,

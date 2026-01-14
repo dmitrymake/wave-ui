@@ -17,8 +17,6 @@ define('STATE_FILE', STORAGE_DIR . 'state.json');
 define('META_CACHE_FILE', STORAGE_DIR . 'meta_cache.json');
 define('TOKEN_FILE', '/var/local/www/yandex_token.dat');
 define('LOG_FILE', '/dev/shm/wave_api.log');
-
-// Shared RAM cache for frontend syncing
 define('RAM_STORE_FILE', '/dev/shm/wave_yandex_state.json');
 
 if (!is_dir(STORAGE_DIR)) @mkdir(STORAGE_DIR, 0777, true);
@@ -58,36 +56,22 @@ function mpdSend($cmd) {
     return $resp;
 }
 
-// --- FIX: Улучшенная остановка демона ---
 function resetDaemon() {
     debug("Resetting Daemon...");
-    
-    // 1. Сначала говорим демону остановиться через файл состояния
-    // Перезаписываем весь queue_buffer, чтобы демон не взял оттуда старые треки
     $blankState = [
         'active' => false,
         'mode' => 'idle',
         'queue_buffer' => [],
         'context_name' => 'Stopped'
     ];
-    // Пишем полностью, не мержим, чтобы гарантировать очистку буфера
     file_put_contents(STATE_FILE, json_encode($blankState));
-    
-    // 2. Ждем, чтобы демон (который крутится раз в 1-2 сек) успел подхватить изменение
-    // или хотя бы чтобы мы не очистили MPD, пока он пытается сделать 'add'
-    usleep(200000); // 200ms
-    
-    // 3. Теперь безопасно чистим MPD
+    usleep(200000); 
     mpdSend("stop");
     mpdSend("clear");
     debug("Daemon Reset Complete.");
 }
 
 function formatTrack($t) {
-    // Используем тот же форматтер, что и в классе, но дублируем для надежности тут
-    // или можно создать инстанс класса, но это оверхед.
-    // Лучше проксировать через статический метод или просто использовать логику ниже.
-    
     if (!$t || !is_array($t)) return null;
     if (isset($t['isYandex']) && $t['isYandex'] === true) return $t;
 
@@ -147,7 +131,6 @@ function cacheTrackMeta($url, $track) {
 // --- MAIN HANDLER ---
 
 try {
-    // --- RAM STATE HANDLING (Frontend Sync) ---
     if (isset($_REQUEST['action']) && $_REQUEST['action'] === 'get_yandex_meta') {
         $fileUrl = $_GET['url'] ?? '';
         if (!$fileUrl || !file_exists(RAM_STORE_FILE)) {
@@ -157,11 +140,9 @@ try {
         echo json_encode($data[md5($fileUrl)] ?? null);
         exit;
     }
-    // ------------------------------------------
 
     $action = $_REQUEST['action'] ?? '';
 
-    // Status check doesn't need token instantiation
     if ($action === 'status') {
         $token = getToken();
         echo json_encode(['authorized' => !!$token]);
@@ -172,7 +153,7 @@ try {
         $input = json_decode(file_get_contents('php://input'), true);
         if (empty($input['token'])) throw new Exception("Empty token");
         $api = new YandexMusic($input['token']);
-        $api->getUserId(); // Check validity
+        $api->getUserId(); 
         if (!is_dir(dirname(TOKEN_FILE))) mkdir(dirname(TOKEN_FILE), 0755, true);
         file_put_contents(TOKEN_FILE, $input['token']);
         chmod(TOKEN_FILE, 0600);
@@ -199,7 +180,6 @@ try {
             if (isset($res['tracks']['results'])) {
                 foreach ($res['tracks']['results'] as $t) $tracks[] = formatTrack($t);
             }
-            
             $albums = [];
             if (isset($res['albums']['results'])) {
                 foreach ($res['albums']['results'] as $a) {
@@ -215,7 +195,6 @@ try {
                     ];
                 }
             }
-            
             $artists = [];
             if (isset($res['artists']['results'])) {
                 foreach ($res['artists']['results'] as $a) {
@@ -236,17 +215,11 @@ try {
             break;
 
         case 'get_stations_dashboard':
-            // ... (Код дашборда оставляем без изменений, он только читает) ...
             $raw = $api->getStationDashboard();
             $stations = [];
             foreach ($raw as $item) {
                 $tag = $item['station']['id']['tag'] ?? '';
-                // ... (Логика парсинга станций, как в исходнике) ...
-                // Для краткости я не дублирую весь блок парсинга, он вроде работал нормально
-                // Но если нужно - напишите, вставлю полностью.
-                // ВАЖНО: Добавим сюда логику, чтобы убедиться что ID формируются верно
                 
-                // --- ON YOUR WAVE ---
                 if ($tag === 'onyourwave' && isset($item['station']['restrictions2'])) {
                      if (isset($item['station']['restrictions2']['moodEnergy']['possibleValues'])) {
                         foreach ($item['station']['restrictions2']['moodEnergy']['possibleValues'] as $m) {
@@ -256,7 +229,7 @@ try {
                             
                             $stations[] = [
                                 'title' => $m['name'],
-                                'id' => 'vibe:moodEnergy:' . $m['value'], // ID для Vibe
+                                'id' => 'vibe:moodEnergy:' . $m['value'], 
                                 'kind' => 'station',
                                 'service' => 'yandex',
                                 'cover' => $img,
@@ -267,7 +240,7 @@ try {
                         }
                      }
                 }
-                // --- REGULAR STATIONS ---
+                
                 if (isset($item['station']['name']) && $tag !== 'onyourwave') {
                     $img = $item['station']['icon']['imageUrl'] ?? null;
                     if ($img) $img = "https://" . str_replace('%%', '400x400', $img);
@@ -336,7 +309,6 @@ try {
         case 'get_artist_details':
             $data = $api->getArtistDetails($_GET['id']);
             $data['tracks'] = array_map('formatTrack', $data['tracks']);
-            // ... (Обработка альбомов как раньше) ...
             $cleanAlbums = [];
             foreach ($data['albums'] as $a) {
                 $cover = isset($a['coverUri']) ? "https://" . str_replace('%%', '400x400', $a['coverUri']) : null;
@@ -380,38 +352,24 @@ try {
 
             if (strpos($stationId, 'vibe:') === 0) {
                 $parts = explode(':', $stationId);
-                // vibe:moodEnergy:fun -> stationId=user:onyourwave, params={moodEnergy: fun}
+                // vibe:moodEnergy:fun -> type=moodEnergy, val=fun
                 if (count($parts) >= 3) {
                     $type = $parts[1]; 
                     $val = $parts[2];
-                    $extraParams[$type] = $val;
+                    $extraParams[$type] = $val; // <-- Теперь мы это используем
                     $stationId = 'user:onyourwave'; 
                     $contextName = "Vibe: " . ucfirst($val);
                 }
             } elseif (strpos($stationId, 'track:') === 0) {
-                // Вайб по треку: track:12345
-                // Проверим формат, который ожидает Яндекс для радио по треку. 
-                // Обычно это stationId = 'track:12345' и ничего больше не нужно менять?
-                // Если Яндекс API требует stationId вида 'track:ID', то оставляем как есть.
+                // track:123456
                 $contextName = "Track Radio";
             }
 
-            // 1. ОСТАНОВИТЬ ДЕМОНА ПОЛНОСТЬЮ
+            // 1. Reset
             resetDaemon();
             
-            // 2. Получить треки
-            // Важно: в getStationTracks мы должны передать параметры, если это vibe
-            // Но метод getStationTracks в yandex-music.php принимает только ID и очередь.
-            // Придется полагаться на то, что ID 'vibe:...' мы уже развернули? 
-            // СТОП. Yandex API ожидает параметры в query string.
-            // Мы передаем $stationId = 'user:onyourwave'. А параметры настроения где?
-            // Их нужно внедрить в URL внутри getStationTracks. 
-            // Но мы не меняем сигнатуру метода.
-            // ВРЕМЕННОЕ РЕШЕНИЕ: Пока логируем. Если вайбы одинаковые, значит 
-            // мы теряем $extraParams при вызове. 
-            // В следующем шаге мы поправим это, добавив аргумент в getStationTracks.
-            
-            $queueData = $api->getStationTracks($stationId, []); 
+            // 2. Fetch with PARAMS
+            $queueData = $api->getStationTracks($stationId, [], $extraParams); 
             
             $initialBuffer = [];
             $count = 0;
@@ -443,7 +401,7 @@ try {
                 'active' => true,
                 'mode' => 'station',
                 'station_id' => $stationId,
-                'station_params' => $extraParams, // Сохраняем, чтобы демон мог их использовать (понадобится правка демона)
+                'station_params' => $extraParams, // Это понадобится демону
                 'context_name' => $contextName,
                 'queue_buffer' => $initialBuffer,
                 'played_history' => $history
@@ -451,24 +409,17 @@ try {
             echo json_encode(['status' => 'started', 'context' => $contextName]);
             break;
 
-        // --- PLAY PLAYLIST ---
         case 'play_playlist':
             $input = json_decode(file_get_contents('php://input'), true);
             $tracks = $input['tracks'] ?? [];
             $contextName = $input['context'] ?? 'Yandex Playlist';
-
             if (empty($tracks)) throw new Exception("No tracks provided");
-            
-            // ОСТАНОВИТЬ ДЕМОНА
             resetDaemon();
-            
             $count = 0;
             $initialBuffer = [];
-
             foreach ($tracks as $t) {
                 $cleanTrack = formatTrack($t);
                 if (!$cleanTrack) continue;
-
                 if ($count < 3) {
                     $url = $api->getDirectLink($cleanTrack['id']);
                     if ($url) {
@@ -480,9 +431,7 @@ try {
                     $initialBuffer[] = $cleanTrack;
                 }
             }
-            
             mpdSend("play");
-
             saveState([
                 'active' => true,
                 'mode' => 'static', 
@@ -490,12 +439,10 @@ try {
                 'queue_buffer' => $initialBuffer,
                 'played_history' => []
             ]);
-            
             echo json_encode(['status' => 'ok', 'buffered' => count($initialBuffer)]);
             break;
             
         case 'add_tracks':
-            // ... (Оставим без изменений логику добавления в очередь) ...
             $input = json_decode(file_get_contents('php://input'), true);
             $tracks = $input['tracks'] ?? [];
             $currentState = getState();
@@ -528,7 +475,6 @@ try {
             break;
 
         case 'play_track':
-            // ... (Play track logic) ...
             $id = $_REQUEST['id'] ?? '';
             $append = ($_REQUEST['append'] ?? '0') === '1';
             $trackInfo = $api->getTracksByIds([$id]);
@@ -536,11 +482,9 @@ try {
             $cleanTrack = formatTrack($t);
             $url = $api->getDirectLink($id);
             if ($url) {
-                if (!$append) resetDaemon(); // FIX: Reset here too
-                
+                if (!$append) resetDaemon();
                 cacheTrackMeta($url, $cleanTrack);
                 mpdSend("add \"$url\"");
-                
                 if (!$append) {
                     mpdSend("play");
                     saveState(['active' => false, 'mode' => 'idle', 'context_name' => 'Single Track']);
@@ -550,11 +494,7 @@ try {
             break;
 
         case 'stop_daemon':
-            saveState([
-                'active' => false,
-                'mode' => 'idle',
-                'context_name' => 'Stopped'
-            ]);
+            saveState(['active' => false, 'mode' => 'idle', 'context_name' => 'Stopped']);
             echo json_encode(['status' => 'stopped']);
             break;
 
