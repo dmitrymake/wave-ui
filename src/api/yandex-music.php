@@ -3,15 +3,30 @@ class YandexMusic {
     private $token;
     private $userId = null;
     private $userAgent = 'Yandex-Music-Client';
-    private $salt = "XGRlBW9FXlekgbPrRHuSiA"; // Соль для подписи ссылок скачивания
+    private $salt = "XGRlBW9FXlekgbPrRHuSiA"; // Соль для подписи ссылок
+    private $debug = true; // Включаем отладку
+    private $logFile = '/dev/shm/wave_yandex_debug.log';
 
     public function __construct($token) {
         $this->token = $token;
     }
 
+    private function log($msg) {
+        if (!$this->debug) return;
+        $ts = date('H:i:s');
+        @file_put_contents($this->logFile, "[$ts] $msg\n", FILE_APPEND);
+    }
+
     private function request($path, $postData = null, $isXml = false, $asJson = false) {
         $url = strpos($path, 'http') === 0 ? $path : "https://api.music.yandex.net" . $path;
         
+        // ЛОГИРОВАНИЕ ЗАПРОСА
+        $logMsg = "REQ: $url";
+        if ($postData) {
+            $logMsg .= " | DATA: " . (is_array($postData) ? json_encode($postData) : $postData);
+        }
+        $this->log($logMsg);
+
         $headers = [
             "Authorization: OAuth " . $this->token,
             "Accept-Language: ru",
@@ -41,8 +56,7 @@ class YandexMusic {
         curl_close($ch);
 
         if ($httpCode >= 400 && $httpCode != 401) {
-            // Логируем ошибку, но не валим скрипт жестко, если это возможно
-            error_log("Yandex API Error [$httpCode]: " . substr($response, 0, 200));
+            $this->log("ERR [$httpCode]: " . substr($response, 0, 150));
         }
 
         if ($isXml) return $response;
@@ -56,10 +70,10 @@ class YandexMusic {
         return $this->userId;
     }
 
-    // --- Основная логика Радио (Vibes) ---
+    // --- Исправленная логика Радио (Vibes) ---
     public function getStationTracks($stationId, $queueHistory = []) {
-        // Rotor API требует отправки очереди ранее прослушанных треков,
-        // чтобы генерировать новые рекомендации.
+        $this->log("Getting tracks for Station: $stationId");
+        
         $url = "/rotor/station/{$stationId}/tracks";
         
         $params = [
@@ -67,18 +81,29 @@ class YandexMusic {
             "recursive" => "true"
         ];
 
+        // Критично для "Моей волны"
         if ($stationId === 'user:onyourwave') {
             $params['external-infos'] = 'onyourwave';
         }
 
-        // Берем последние 50 треков из истории, чтобы не перегружать запрос
+        // --- ВАЖНО: Проверка передачи контекста ---
         if (!empty($queueHistory)) {
-            $historySlice = array_slice($queueHistory, -50);
+            // Yandex Rotor требует batch-id и queue, если мы продолжаем сессию.
+            // Но для простоты пока шлем queue (историю).
+            // В логах увидим, передается ли это.
+            $historySlice = array_slice($queueHistory, -20); // Берем последние 20
             $params['queue'] = implode(',', $historySlice);
+            $this->log("Sending history context: " . count($historySlice) . " items");
+        } else {
+            $this->log("WARNING: No history context sent to Rotor (Cold Start)");
         }
 
         $fullUrl = $url . '?' . http_build_query($params);
         $data = $this->request($fullUrl);
+
+        if (isset($data['result']['batchId'])) {
+            $this->log("Rotor returned batchId: " . $data['result']['batchId']);
+        }
 
         $tracks = [];
         $sequence = $data['result']['sequence'] ?? [];
@@ -90,6 +115,7 @@ class YandexMusic {
                 if ($formatted) $tracks[] = $formatted;
             }
         }
+        $this->log("Rotor returned " . count($tracks) . " tracks");
         return $tracks;
     }
 
@@ -97,9 +123,11 @@ class YandexMusic {
         if (!$trackId) return null;
         
         $data = $this->request("/tracks/{$trackId}/download-info");
-        if (empty($data['result'][0]['downloadInfoUrl'])) return null;
+        if (empty($data['result'][0]['downloadInfoUrl'])) {
+            $this->log("No downloadInfoUrl for track $trackId");
+            return null;
+        }
 
-        // Сортируем по битрейту (высшее качество)
         usort($data['result'], function($a, $b) {
             return ($b['bitrateInKbps'] ?? 0) - ($a['bitrateInKbps'] ?? 0);
         });
@@ -130,36 +158,30 @@ class YandexMusic {
 
     public function getUserPlaylists() {
         $uid = $this->getUserId();
-        $data = $this->request("/users/{$uid}/playlists/list");
-        return $data['result'] ?? [];
+        return $this->request("/users/{$uid}/playlists/list")['result'] ?? [];
     }
 
     public function getLandingBlocks() {
         $blocks = "personal-playlists,stations,mixes,chart";
-        $data = $this->request("/landing3?blocks=" . urlencode($blocks));
-        return $data['result']['blocks'] ?? [];
+        return $this->request("/landing3?blocks=" . urlencode($blocks))['result']['blocks'] ?? [];
     }
 
     public function getStationDashboard() {
-        $data = $this->request("/rotor/stations/dashboard");
-        return $data['result']['stations'] ?? [];
+        return $this->request("/rotor/stations/dashboard")['result']['stations'] ?? [];
     }
 
     public function getPlaylistTracks($uid, $kind, $offset = 0) {
         $data = $this->request("/users/{$uid}/playlists/{$kind}");
-        // Обработка разных форматов ответа плейлиста
+        
         if (isset($data['result']['tracks']) && is_array($data['result']['tracks'])) {
             $tracks = [];
             foreach ($data['result']['tracks'] as $item) {
                 $t = $item['track'] ?? $item;
-                if (isset($t['id'])) {
-                    $tracks[] = $this->formatTrack($t);
-                }
+                if (isset($t['id'])) $tracks[] = $this->formatTrack($t);
             }
             return array_slice($tracks, $offset, 50);
         }
         
-        // Если вернулись только ID
         if (isset($data['result']['trackIds'])) {
             $ids = array_map(function($i) { return is_array($i) ? $i['id'] : $i; }, $data['result']['trackIds']);
             $slice = array_slice($ids, $offset, 50);
@@ -220,14 +242,13 @@ class YandexMusic {
     public function toggleLike($trackId, $isLike = true) {
         $uid = $this->getUserId();
         $action = $isLike ? 'add' : 'remove';
+        $this->log("Like action: $action for $trackId");
         return $this->request("/users/{$uid}/likes/tracks/{$action}", ['track-id' => $trackId]);
     }
 
-    // --- Robust Formatting (Самое важное) ---
     public function formatTrack($t) {
         if (!$t || !is_array($t)) return null;
 
-        // 1. Artist Name
         $artistName = 'Unknown Artist';
         if (!empty($t['artists'])) {
             $names = array_map(function($a) { return $a['name']; }, $t['artists']);
@@ -236,7 +257,6 @@ class YandexMusic {
             $artistName = $t['artist'];
         }
 
-        // 2. Cover Art (Самое проблемное место)
         $cover = null;
         if (!empty($t['ogImage'])) $cover = $t['ogImage'];
         elseif (!empty($t['coverUri'])) $cover = $t['coverUri'];
@@ -247,7 +267,6 @@ class YandexMusic {
             if (strpos($cover, 'http') !== 0) $cover = 'https://' . $cover;
         }
 
-        // 3. Album Title
         $albumTitle = '';
         if (!empty($t['albums'][0]['title'])) $albumTitle = $t['albums'][0]['title'];
         elseif (!empty($t['album']['title'])) $albumTitle = $t['album']['title'];
