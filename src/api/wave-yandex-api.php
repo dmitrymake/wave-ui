@@ -352,33 +352,49 @@ try {
 
             if (strpos($stationId, 'vibe:') === 0) {
                 $parts = explode(':', $stationId);
-                // vibe:moodEnergy:fun -> type=moodEnergy, val=fun
                 if (count($parts) >= 3) {
                     $type = $parts[1]; 
                     $val = $parts[2];
-                    $extraParams[$type] = $val; // <-- Теперь мы это используем
+                    $extraParams[$type] = $val;
                     $stationId = 'user:onyourwave'; 
                     $contextName = "Vibe: " . ucfirst($val);
                 }
             } elseif (strpos($stationId, 'track:') === 0) {
-                // track:123456
                 $contextName = "Track Radio";
             }
 
-            // 1. Reset
+            $oldState = getState();
+            $globalHistory = $oldState['played_history'] ?? [];
+            
+            // Если история слишком большая, обрежем её, чтобы не таскать мусор
+            if (count($globalHistory) > 100) {
+                $globalHistory = array_slice($globalHistory, -100);
+            }
+
+            // 1. ОСТАНОВИТЬ ДЕМОНА
             resetDaemon();
             
-            // 2. Fetch with PARAMS
-            $queueData = $api->getStationTracks($stationId, [], $extraParams); 
+            // 2. Получить треки, ПЕРЕДАВАЯ ИСТОРИЮ ($globalHistory)
+            // Это заставит Яндекс учитывать, что мы уже слышали, и менять поток
+            $queueData = $api->getStationTracks($stationId, $globalHistory, $extraParams); 
             
             $initialBuffer = [];
             $count = 0;
-            $history = [];
+            
+            // Добавляем новые треки в историю, чтобы не потерять их
+            $newHistory = $globalHistory;
 
             if ($queueData) {
                 foreach ($queueData as $track) { 
                     $clean = formatTrack($track);
                     if (!$clean) continue;
+
+                    // Доп. проверка: не добавлять то, что только что играло
+                    if (in_array((string)$clean['id'], $globalHistory)) {
+                         // Если трек уже был в истории, пропускаем его, если это возможно,
+                         // чтобы не было дежавю при переключении настроений
+                         continue;
+                    }
 
                     if ($count < 3) {
                         $url = $api->getDirectLink($clean['id']);
@@ -386,7 +402,7 @@ try {
                             cacheTrackMeta($url, $clean);
                             mpdSend("add \"$url\"");
                             $count++;
-                            $history[] = (string)$clean['id'];
+                            $newHistory[] = (string)$clean['id'];
                         }
                     } else {
                         $initialBuffer[] = $clean; 
@@ -395,16 +411,33 @@ try {
                     if (count($initialBuffer) >= 20) break; 
                 }
             }
+            
+            // Если вдруг Яндекс вернул ТОЛЬКО дубликаты (бывает), берем что есть
+            if ($count === 0 && !empty($queueData)) {
+                 foreach ($queueData as $track) {
+                    $clean = formatTrack($track);
+                    if (!$clean) continue;
+                    $url = $api->getDirectLink($clean['id']);
+                    if ($url) {
+                        cacheTrackMeta($url, $clean);
+                        mpdSend("add \"$url\"");
+                        $count++;
+                        $newHistory[] = (string)$clean['id'];
+                        if ($count >= 3) break;
+                    }
+                 }
+            }
+
             mpdSend("play");
             
             saveState([
                 'active' => true,
                 'mode' => 'station',
                 'station_id' => $stationId,
-                'station_params' => $extraParams, // Это понадобится демону
+                'station_params' => $extraParams,
                 'context_name' => $contextName,
                 'queue_buffer' => $initialBuffer,
-                'played_history' => $history
+                'played_history' => $newHistory // <-- Сохраняем обновленную историю
             ]);
             echo json_encode(['status' => 'started', 'context' => $contextName]);
             break;
