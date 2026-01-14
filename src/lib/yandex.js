@@ -1,17 +1,24 @@
 import { API_ENDPOINTS } from "./constants";
 
 export const YandexApi = {
-  async request(action, params = {}) {
-    const url = new URL(window.location.origin + API_ENDPOINTS.YANDEX);
+  async request(action, params = {}, method = "GET") {
+    const url = new URL(API_ENDPOINTS.YANDEX);
     url.searchParams.append("action", action);
 
-    for (const key in params) {
-      if (params[key] !== undefined && params[key] !== null) {
-        url.searchParams.append(key, params[key]);
+    const options = { method };
+
+    if (method === "GET") {
+      for (const key in params) {
+        if (params[key] !== undefined && params[key] !== null) {
+          url.searchParams.append(key, params[key]);
+        }
       }
+    } else {
+      options.body = JSON.stringify(params);
+      options.headers = { "Content-Type": "application/json" };
     }
 
-    const res = await fetch(url);
+    const res = await fetch(url.toString(), options);
     if (!res.ok) throw new Error("API Error");
     return await res.json();
   },
@@ -48,13 +55,18 @@ export const YandexApi = {
     return await this.request("get_favorites_ids");
   },
 
-  async playRadio(trackId) {
-    if (trackId) {
-      return await this.request("play_station", {
-        station: "track:" + trackId,
-      });
+  async playRadio(id, type = "station") {
+    let stationId = "user:onyourwave";
+
+    if (id) {
+      if (type === "track") stationId = "track:" + id;
+      else if (type === "artist") stationId = "artist:" + id;
+      else if (type === "album")
+        stationId = "album:" + id; // Редко используется, но поддерживается API
+      else stationId = id; // Передан полный ID (например, user:onyourwave)
     }
-    return await this.request("play_station", { station: "user:onetwo" });
+
+    return await this.request("play_station", { station: stationId });
   },
 
   async playStation(stationId) {
@@ -63,6 +75,18 @@ export const YandexApi = {
 
   async playTrack(trackId) {
     return await this.request("play_track", { id: trackId });
+  },
+
+  async playPlaylist(tracks, contextName) {
+    return await this.request(
+      "play_playlist",
+      { tracks, context: contextName },
+      "POST",
+    );
+  },
+
+  async addTracksToQueue(tracks) {
+    return await this.request("add_tracks", { tracks }, "POST");
   },
 
   async toggleLike(trackId, isLiked) {

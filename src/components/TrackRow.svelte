@@ -2,6 +2,7 @@
   import { createEventDispatcher } from "svelte";
   import { fade } from "svelte/transition";
   import ImageLoader from "./ImageLoader.svelte";
+  import Skeleton from "./Skeleton.svelte";
   import * as MPD from "../lib/mpd";
   import { YandexApi } from "../lib/yandex";
   import { ICONS } from "../lib/icons";
@@ -63,11 +64,8 @@
 
   $: showPlay = isHovering && !showPause;
 
-  $: title = track.title || track.file?.split("/").pop();
-  $: artist = track.artist || "Unknown";
-
+  $: displayTitle = track.title || track.file?.split("/").pop();
   $: duration = formatDuration(track.time || track.duration);
-
   $: quality = track.qualityBadge ? track.qualityBadge.split(" ")[0] : null;
 
   $: effectiveStationName = null;
@@ -220,7 +218,7 @@
     <div class="thumb">
       <ImageLoader
         src={imgUrl}
-        alt={title}
+        alt={displayTitle}
         radius="4px"
         on:error={() => (imgError = true)}
       >
@@ -233,19 +231,37 @@
 
   <div class="info">
     <div class="title-row">
-      <div class="title text-ellipsis" {title}>{title}</div>
+      {#if track.title}
+        <div class="title text-ellipsis" title={track.title}>{track.title}</div>
+      {:else if track.file && !isYandexTrack}
+        <div class="title text-ellipsis">{track.file.split("/").pop()}</div>
+      {:else}
+        <Skeleton width="60%" height="16px" radius="4px" />
+      {/if}
+
       {#if quality && !isRadio}
         <span class="meta-tag quality">{quality}</span>
       {/if}
     </div>
 
-    <div
-      class="artist text-ellipsis"
-      class:link={!isRadio || isYandexTrack}
-      on:click={handleArtistClick}
-    >
-      {artist}
-    </div>
+    {#if track.artist}
+      <div
+        class="artist text-ellipsis"
+        class:link={!isRadio || isYandexTrack}
+        on:click={handleArtistClick}
+      >
+        {track.artist}
+      </div>
+    {:else if track.title || (track.file && !isYandexTrack)}
+      <div class="artist text-ellipsis">Unknown Artist</div>
+    {:else}
+      <Skeleton
+        width="40%"
+        height="12px"
+        radius="4px"
+        style="margin-top: 4px;"
+      />
+    {/if}
   </div>
 
   <div class="right">

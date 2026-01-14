@@ -6,8 +6,10 @@ import {
   isLoadingRadio,
   stations,
   yandexAuthStatus,
+  yandexFavorites,
 } from "./store";
 import SyncWorker from "./workers/sync.worker.js?worker";
+import { YandexApi } from "./yandex";
 
 export const ApiActions = {
   async syncLibrary() {
@@ -187,5 +189,18 @@ export const ApiActions = {
       if (res.ok) return await res.json();
     } catch (e) {}
     return null;
+  },
+
+  async syncYandexFavorites() {
+    if (!get(yandexAuthStatus)) return;
+    try {
+      const res = await YandexApi.getFavoritesIds();
+      if (res && res.ids) {
+        yandexFavorites.set(new Set(res.ids.map(String)));
+        console.log(`[API] Loaded ${res.ids.length} Yandex likes.`);
+      }
+    } catch (e) {
+      console.warn("[API] Failed to sync Yandex likes", e);
+    }
   },
 };

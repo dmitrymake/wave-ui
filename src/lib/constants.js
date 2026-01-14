@@ -22,7 +22,10 @@ export const API_ENDPOINTS = {
     return `${getBaseUrl()}/wave-yandex-api.php`;
   },
 
-  STATIONS: () => `${getBaseUrl()}/wave-api.php?action=stations`,
+  STATIONS: (isDev) => {
+    const base = isDev ? `http://${CONFIG.MOODE_IP}` : "";
+    return `${base}/wave-api.php?action=stations`;
+  },
 
   COVER_ART: (file) =>
     `${getBaseUrl()}/coverart.php?u=${encodeURIComponent(file)}`,

@@ -163,10 +163,34 @@
     if (t && t.isYandex && t.id) {
       showToast(`Starting radio based on "${t.title}"...`, "info");
       try {
-        await YandexApi.playRadio(t.id);
+        await YandexApi.playRadio(t.id, "track");
       } catch (e) {
         console.error(e);
         showToast("Error starting radio", "error");
+      }
+    }
+    closeContextMenu();
+  }
+
+  async function handleRadioByArtist() {
+    const t = $contextMenu.track;
+    if (t && t.isYandex && t.artist) {
+      showToast(`Searching artist "${t.artist}"...`, "info");
+      try {
+        // First search for the artist to get ID
+        const searchRes = await YandexApi.search(t.artist);
+        if (searchRes && searchRes.artists && searchRes.artists.length > 0) {
+          const artistId = searchRes.artists[0].id;
+          showToast(
+            `Starting Vibe for ${searchRes.artists[0].title}...`,
+            "info",
+          );
+          await YandexApi.playRadio(artistId, "artist");
+        } else {
+          showToast("Artist not found for Vibe", "error");
+        }
+      } catch (e) {
+        showToast("Failed to start Artist Vibe", "error");
       }
     }
     closeContextMenu();
@@ -223,11 +247,11 @@
     if (innerWidth <= 768 && isMiniPlayerSource && rect) {
       const bottomPos = innerHeight - rect.top;
       return `
-        position: fixed; 
-        bottom: ${bottomPos}px; 
-        left: 50%; 
-        transform: translateX(-50%); 
-        margin: 0; 
+        position: fixed; 
+        bottom: ${bottomPos}px; 
+        left: 50%; 
+        transform: translateX(-50%); 
+        margin: 0; 
         transform-origin: bottom center;
       `;
     }
@@ -362,6 +386,10 @@
             <button class="menu-row" on:click={handleRadioByTrack}>
               <span class="icon">{@html ICONS.RADIO}</span>
               <span>Vibe by Track</span>
+            </button>
+            <button class="menu-row" on:click={handleRadioByArtist}>
+              <span class="icon">{@html ICONS.ARTISTS}</span>
+              <span>Vibe by Artist</span>
             </button>
           {/if}
 

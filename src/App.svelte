@@ -24,9 +24,9 @@
     MPD.connect();
     ApiActions.loadRadioStations();
 
-    // Yandex Auto-init
     if (get(isYandexEnabled)) {
-      ApiActions.checkYandexAuth();
+      await ApiActions.checkYandexAuth();
+      ApiActions.syncYandexFavorites();
     }
 
     try {

@@ -1,5 +1,5 @@
 <script>
-  import { onMount } from "svelte";
+  import { onMount, tick } from "svelte";
   import { fade } from "svelte/transition";
   import { writable, get } from "svelte/store";
   import { YandexApi } from "../../lib/yandex";
@@ -15,9 +15,10 @@
   import TrackRow from "../TrackRow.svelte";
   import BaseList from "./BaseList.svelte";
   import ImageLoader from "../ImageLoader.svelte";
+  import Skeleton from "../Skeleton.svelte";
 
   const tracksStore = writable([]);
-  const albumsStore = writable([]); // Стор для альбомов артиста
+  const albumsStore = writable([]);
 
   let vibeCards = [];
   let collectionCards = [];
@@ -70,7 +71,6 @@
   }
 
   async function handleViewChange(mode, data) {
-    // Очистка сторов при смене вида
     if (mode !== "dashboard") {
       if (mode !== "search") tracksStore.set([]);
       albumsStore.set([]);
@@ -212,22 +212,20 @@
     try {
       const res = await YandexApi.getArtistDetails(data.id);
 
-      // Обновляем заголовок в стеке навигации
       const stack = get(navigationStack);
       const active = stack[stack.length - 1];
       if (active.view === "yandex_artist_details") {
         active.data = {
           ...active.data,
-          name: res.name,
-          title: res.name,
-          description: res.description,
+          name: res.artist.name,
+          title: res.artist.name,
+          description: res.artist.description,
           cover: res.cover,
         };
         navigationStack.set(stack);
       }
 
       tracksStore.set(res.tracks || []);
-      // Важно: сохраняем альбомы в отдельный стор
       albumsStore.set(res.albums || []);
     } finally {
       isLoading = false;
@@ -350,20 +348,10 @@
     showToast(`Starting ${contextName}...`, "info");
 
     try {
-      const res = await fetch("/wave-yandex-api.php?action=play_playlist", {
-        method: "POST",
-        body: JSON.stringify({
-          tracks: raw,
-          context: contextName,
-        }),
-      });
-
-      const json = await res.json();
-
-      if (json.status === "ok") {
+      const res = await YandexApi.playPlaylist(raw, contextName);
+      if (res.status === "ok") {
         showToast("Playing...", "success");
       } else {
-        console.error(json);
         showToast("Error starting playback", "error");
       }
     } catch (e) {
@@ -377,16 +365,25 @@
     if (!raw || raw.length === 0) return;
     showToast(`Adding ${raw.length} tracks...`, "info");
     try {
-      const res = await fetch("/wave-yandex-api.php?action=add_tracks", {
-        method: "POST",
-        body: JSON.stringify({ tracks: raw }),
-      });
-      if (res.ok) {
+      const res = await YandexApi.addTracksToQueue(raw);
+      if (res.status === "ok") {
         showToast("Added to queue", "success");
       }
     } catch (e) {
       console.error(e);
       showToast("Failed to add", "error");
+    }
+  }
+
+  async function playVibe(type) {
+    const data = currentView?.data;
+    if (!data || !data.id) return;
+
+    showToast(`Starting ${type} Vibe...`, "info");
+    try {
+      await YandexApi.playRadio(data.id, type);
+    } catch (e) {
+      showToast("Failed to start Vibe", "error");
     }
   }
 
@@ -426,89 +423,108 @@
             </button>
           {/if}
         </div>
-        {#if viewMode === "search"}
-          <div class="filter-tabs">
-            <button
-              class:active={searchType === "all"}
-              on:click={() => setSearchType("all")}>All</button
-            >
-            <button
-              class:active={searchType === "track"}
-              on:click={() => setSearchType("track")}>Tracks</button
-            >
-          </div>
-        {/if}
       </div>
     {/if}
 
     {#if viewMode === "dashboard"}
       <div class="content-padded" in:fade>
-        <h2 class="header-label">Vibes</h2>
-        <div
-          class="music-grid horizontal section-mb"
-          on:wheel={handleHorizontalScroll}
-        >
-          {#each vibeCards as item}
-            <div class="music-card" on:click={() => openPlaylist(item)}>
-              <div
-                class="card-img-container"
-                class:is-vibe={item.kind === "my_vibe"}
-                style={item.bgColor && !item.is_vibe
-                  ? `background: ${item.bgColor}`
-                  : ""}
-              >
-                {#if item.kind === "my_vibe"}
-                  <div class="icon-wrap pulse-anim">{@html ICONS.RADIO}</div>
-                {:else if item.cover}
-                  <ImageLoader src={item.cover} alt={item.title} radius="8px" />
-                {:else}
-                  <div class="icon-wrap">{@html ICONS.RADIO}</div>
-                {/if}
-
-                <div class="play-overlay">
-                  <span class="overlay-icon">{@html ICONS.PLAY}</span>
-                </div>
+        {#if isLoading && vibeCards.length === 0}
+          <h2 class="header-label"><Skeleton width="100px" height="20px" /></h2>
+          <div class="music-grid horizontal section-mb">
+            {#each Array(4) as _}
+              <div class="music-card">
+                <Skeleton
+                  width="100%"
+                  style="aspect-ratio: 1; border-radius: 8px; margin-bottom: 8px;"
+                />
+                <Skeleton width="80%" height="16px" />
               </div>
-              <div class="card-title center">{item.title}</div>
-            </div>
-          {/each}
-        </div>
-
-        {#if collectionCards.length > 0}
-          <h2 class="header-label">Collection & Mixes</h2>
+            {/each}
+          </div>
+          <h2 class="header-label"><Skeleton width="150px" height="20px" /></h2>
+          <div class="music-grid horizontal section-mb">
+            {#each Array(4) as _}
+              <div class="music-card">
+                <Skeleton
+                  width="100%"
+                  style="aspect-ratio: 1; border-radius: 8px; margin-bottom: 8px;"
+                />
+                <Skeleton width="80%" height="16px" />
+              </div>
+            {/each}
+          </div>
+        {:else}
+          <h2 class="header-label">Vibes</h2>
           <div
             class="music-grid horizontal section-mb"
             on:wheel={handleHorizontalScroll}
           >
-            {#each collectionCards as pl}
-              {@const isFav = pl.kind === "favorites"}
-              <div class="music-card" on:click={() => openPlaylist(pl)}>
+            {#each vibeCards as item}
+              <div class="music-card" on:click={() => openPlaylist(item)}>
                 <div
                   class="card-img-container"
-                  style={isFav
-                    ? "background: linear-gradient(135deg, #fa2d48, #c01c33);"
+                  class:is-vibe={item.kind === "my_vibe"}
+                  style={item.bgColor && !item.is_vibe
+                    ? `background: ${item.bgColor}`
                     : ""}
                 >
-                  {#if isFav}
-                    <div class="icon-wrap">{@html ICONS.HEART_FILLED}</div>
+                  {#if item.kind === "my_vibe"}
+                    <div class="icon-wrap pulse-anim">{@html ICONS.RADIO}</div>
+                  {:else if item.cover}
+                    <ImageLoader
+                      src={item.cover}
+                      alt={item.title}
+                      radius="8px"
+                    />
                   {:else}
-                    <ImageLoader src={pl.cover} alt={pl.title} radius="8px">
-                      <div slot="fallback" class="icon-fallback">
-                        {@html ICONS.PLAYLISTS}
-                      </div>
-                    </ImageLoader>
+                    <div class="icon-wrap">{@html ICONS.RADIO}</div>
                   {/if}
+
                   <div class="play-overlay">
                     <span class="overlay-icon">{@html ICONS.PLAY}</span>
                   </div>
                 </div>
-                <div class="card-title">{pl.title}</div>
-                {#if pl.trackCount}<div class="card-sub">
-                    {pl.trackCount} tracks
-                  </div>{/if}
+                <div class="card-title center">{item.title}</div>
               </div>
             {/each}
           </div>
+
+          {#if collectionCards.length > 0}
+            <h2 class="header-label">Collection & Mixes</h2>
+            <div
+              class="music-grid horizontal section-mb"
+              on:wheel={handleHorizontalScroll}
+            >
+              {#each collectionCards as pl}
+                {@const isFav = pl.kind === "favorites"}
+                <div class="music-card" on:click={() => openPlaylist(pl)}>
+                  <div
+                    class="card-img-container"
+                    style={isFav
+                      ? "background: linear-gradient(135deg, #fa2d48, #c01c33);"
+                      : ""}
+                  >
+                    {#if isFav}
+                      <div class="icon-wrap">{@html ICONS.HEART_FILLED}</div>
+                    {:else}
+                      <ImageLoader src={pl.cover} alt={pl.title} radius="8px">
+                        <div slot="fallback" class="icon-fallback">
+                          {@html ICONS.PLAYLISTS}
+                        </div>
+                      </ImageLoader>
+                    {/if}
+                    <div class="play-overlay">
+                      <span class="overlay-icon">{@html ICONS.PLAY}</span>
+                    </div>
+                  </div>
+                  <div class="card-title">{pl.title}</div>
+                  {#if pl.trackCount}<div class="card-sub">
+                      {pl.trackCount} tracks
+                    </div>{/if}
+                </div>
+              {/each}
+            </div>
+          {/if}
         {/if}
       </div>
     {/if}
@@ -523,54 +539,100 @@
         <div slot="header" class="content-padded">
           {#if viewMode !== "search" && currentView.data}
             {@const headerData = currentView.data}
-            <div class="view-header">
-              <div
-                class="header-art"
-                style={headerData.kind === "favorites"
-                  ? "background: linear-gradient(135deg, #fa2d48, #c01c33);"
-                  : ""}
-              >
-                {#if headerData.kind === "favorites"}
-                  <div class="icon-wrap">{@html ICONS.HEART_FILLED}</div>
-                {:else}
-                  <ImageLoader
-                    src={headerData.cover || headerData.image}
-                    alt={headerData.title}
-                    radius="8px"
-                  >
-                    <div slot="fallback" class="icon-fallback">
-                      {@html ICONS.ALBUMS}
-                    </div>
-                  </ImageLoader>
-                {/if}
-              </div>
-              <div class="header-info">
-                <div class="header-text-group">
-                  <div class="header-label">
-                    {viewMode
-                      .replace("_details", "")
-                      .toUpperCase()
-                      .replace("YANDEX_", "")}
+            {#if isLoading && !headerData.cover && !headerData.image}
+              <div class="view-header">
+                <div class="header-art">
+                  <Skeleton width="100%" height="100%" radius="8px" />
+                </div>
+                <div class="header-info">
+                  <Skeleton
+                    width="100px"
+                    height="14px"
+                    style="margin-bottom:8px"
+                  />
+                  <Skeleton
+                    width="80%"
+                    height="28px"
+                    style="margin-bottom:8px"
+                  />
+                  <Skeleton
+                    width="60%"
+                    height="16px"
+                    style="margin-bottom:16px"
+                  />
+                  <div class="header-actions">
+                    <Skeleton width="100px" height="36px" radius="18px" />
+                    <Skeleton width="100px" height="36px" radius="18px" />
                   </div>
-                  <h1 class="header-title">
-                    {headerData.title || headerData.name}
-                  </h1>
-                  {#if headerData.artist || headerData.description}
-                    <h2 class="header-sub-text">
-                      {headerData.artist || headerData.description}
-                    </h2>
+                </div>
+              </div>
+            {:else}
+              <div class="view-header">
+                <div
+                  class="header-art"
+                  style={headerData.kind === "favorites"
+                    ? "background: linear-gradient(135deg, #fa2d48, #c01c33);"
+                    : ""}
+                >
+                  {#if headerData.kind === "favorites"}
+                    <div class="icon-wrap">{@html ICONS.HEART_FILLED}</div>
+                  {:else}
+                    <ImageLoader
+                      src={headerData.cover || headerData.image}
+                      alt={headerData.title}
+                      radius="8px"
+                    >
+                      <div slot="fallback" class="icon-fallback">
+                        {@html ICONS.ALBUMS}
+                      </div>
+                    </ImageLoader>
                   {/if}
                 </div>
-                <div class="header-actions">
-                  <button class="btn-primary" on:click={playAll}
-                    >Play All</button
-                  >
-                  <button class="btn-secondary" on:click={addAllToQueue}
-                    >To Queue</button
-                  >
+                <div class="header-info">
+                  <div class="header-text-group">
+                    <div class="header-label">
+                      {viewMode
+                        .replace("_details", "")
+                        .toUpperCase()
+                        .replace("YANDEX_", "")}
+                    </div>
+                    <h1 class="header-title">
+                      {headerData.title || headerData.name}
+                    </h1>
+                    {#if headerData.artist || headerData.description}
+                      <h2 class="header-sub-text">
+                        {headerData.artist || headerData.description}
+                      </h2>
+                    {/if}
+                  </div>
+                  <div class="header-actions">
+                    <button class="btn-primary" on:click={playAll}
+                      >Play All</button
+                    >
+                    {#if viewMode === "artist_details"}
+                      <button
+                        class="btn-secondary"
+                        on:click={() => playVibe("artist")}
+                      >
+                        <span class="icon-inline">{@html ICONS.RADIO}</span> Artist
+                        Vibe
+                      </button>
+                    {:else if viewMode === "album_details"}
+                      <button
+                        class="btn-secondary"
+                        on:click={() => playVibe("album")}
+                      >
+                        <span class="icon-inline">{@html ICONS.RADIO}</span> Vibe
+                      </button>
+                    {:else}
+                      <button class="btn-secondary" on:click={addAllToQueue}
+                        >To Queue</button
+                      >
+                    {/if}
+                  </div>
                 </div>
               </div>
-            </div>
+            {/if}
           {/if}
 
           {#if viewMode === "artist_details" && $albumsStore.length > 0}
@@ -766,9 +828,6 @@
     height: 40px;
   }
 
-  /* .circle class removed for artists to restore standard look */
-  /* .circle { border-radius: 50% !important; overflow: hidden; } */
-
   .music-card .card-img-container {
     background-color: var(--c-bg-placeholder);
   }
@@ -807,5 +866,15 @@
     overflow: hidden;
     text-overflow: ellipsis;
     font-weight: 400;
+  }
+
+  .icon-inline {
+    display: inline-flex;
+    align-items: center;
+    margin-right: 6px;
+  }
+  .icon-inline :global(svg) {
+    width: 18px;
+    height: 18px;
   }
 </style>

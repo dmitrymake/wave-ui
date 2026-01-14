@@ -32,12 +32,16 @@ export const Router = {
     let data = consumeRouteData();
     let viewName = route;
 
-    // --- FIX: Принудительное маппинг URL -> View Name ---
     if (route === "artist") viewName = "albums_by_artist";
     if (route === "album") viewName = "tracks_by_album";
     if (route === "playlist") viewName = "details";
     if (route === "favorites") viewName = "details";
-    // ----------------------------------------------------
+
+    if (route === "yandex_search") viewName = "yandex_search";
+    if (route === "yandex_artist") viewName = "yandex_artist_details";
+    if (route === "yandex_album") viewName = "yandex_album_details";
+    if (route === "yandex_playlist") viewName = "yandex_playlist";
+    // --------------------------------
 
     if (!data) {
       if (route === "album" && parts.length >= 2) {
@@ -51,11 +55,13 @@ export const Router = {
         data = { name: parts[1], displayName: parts[1] };
       } else if (route === "favorites") {
         data = { name: "Favorites" };
+
+        // --- YANDEX PARSING ---
       } else if (route === "yandex_playlist" && parts.length >= 3) {
         data = { uid: parts[1], kind: parts[2], title: "Playlist" };
-      } else if (route === "yandex_album_details" && parts.length >= 2) {
+      } else if (route === "yandex_album" && parts.length >= 2) {
         data = { id: parts[1], title: "Album" };
-      } else if (route === "yandex_artist_details" && parts.length >= 2) {
+      } else if (route === "yandex_artist" && parts.length >= 2) {
         data = { id: parts[1], title: "Artist" };
       } else if (route === "yandex_search" && parts.length >= 2) {
         data = { query: parts[1] };
@@ -117,24 +123,23 @@ export const Router = {
     }
 
     if (route === "yandex") {
-      if (get(navigationStack).length > 1) {
-        const current = get(navigationStack);
-        if (current[0].view !== "root") navigationStack.set([{ view: "root" }]);
-      } else {
+      const current = get(navigationStack);
+      if (current.length > 1 || current[0].view !== "root") {
         navigationStack.set([{ view: "root" }]);
       }
     } else {
-      // FIX: Предотвращение дублирования навигации
       const stack = get(navigationStack);
       const currentTop = stack[stack.length - 1];
 
       const isSameView = currentTop.view === viewName;
       let isSameData = false;
 
+      // Сравнение данных, чтобы избежать дубликатов в стеке
       if (data && currentTop.data) {
         if (
-          data.name === currentTop.data.name &&
-          data.uid === currentTop.data.uid
+          (data.name && data.name === currentTop.data.name) ||
+          (data.id && data.id === currentTop.data.id) ||
+          (data.uid && data.uid === currentTop.data.uid)
         ) {
           isSameData = true;
         }
@@ -146,8 +151,8 @@ export const Router = {
         return;
       }
 
-      if (data) {
-        navigationStack.set([{ view: "root" }, { view: viewName, data: data }]);
+      if (data || viewName === "yandex_search") {
+        navigationStack.update((s) => [...s, { view: viewName, data: data }]);
       }
     }
   },
@@ -190,9 +195,9 @@ export const Router = {
     } else if (view === "yandex_playlist") {
       newPath = `yandex_playlist/${data.uid}/${data.kind}`;
     } else if (view === "yandex_album_details") {
-      newPath = `yandex_album_details/${data.id}`;
+      newPath = `yandex_album/${data.id}`;
     } else if (view === "yandex_artist_details") {
-      newPath = `yandex_artist_details/${data.id}`;
+      newPath = `yandex_artist/${data.id}`;
     } else if (view === "yandex_search") {
       newPath = `yandex_search/${encodeURIComponent(data.query)}`;
     }
@@ -200,16 +205,14 @@ export const Router = {
     if (newPath) {
       const nextHash = `#/${newPath}`;
       if (
-        (view === "yandex_search" || view === "search") &&
-        decodeURIComponent(window.location.hash) !==
-          decodeURIComponent(nextHash)
-      ) {
-        window.history.replaceState(null, "", nextHash);
-      } else if (
         decodeURIComponent(window.location.hash) !==
         decodeURIComponent(nextHash)
       ) {
-        window.location.hash = `/${newPath}`;
+        if (view === "yandex_search" || view === "search") {
+          window.history.replaceState(null, "", nextHash);
+        } else {
+          window.location.hash = `/${newPath}`;
+        }
       }
     }
   },
