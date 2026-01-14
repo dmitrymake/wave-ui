@@ -1,6 +1,7 @@
 import { writable, derived, get } from "svelte/store";
 import { stations, selectedStationName } from "./library";
 import { getStationImageUrl } from "../utils";
+import { API_ENDPOINTS } from "../constants";
 import md5 from "md5";
 
 // --- MPD STATUS ---
@@ -98,8 +99,7 @@ export function getTrackCoverUrl(
     );
   }
 
-  let cleanPath = track.file.startsWith("/") ? track.file.slice(1) : track.file;
-  return `/coverart.php/${encodeURI(cleanPath)}`;
+  return API_ENDPOINTS.COVER_ART(track.file);
 }
 
 export function getTrackThumbUrl(
@@ -135,8 +135,7 @@ export function getTrackThumbUrl(
   if (!track.file) return "/images/default_icon.png";
 
   if (track.thumbHash) {
-    const suffix = size === "md" ? "" : "_sm";
-    return `/imagesw/thmcache/${track.thumbHash}${suffix}.jpg`;
+    return API_ENDPOINTS.THUMB_CACHE(track.thumbHash, size);
   }
 
   try {
@@ -144,13 +143,10 @@ export function getTrackThumbUrl(
     const dirPath =
       lastSlashIndex === -1 ? "." : track.file.substring(0, lastSlashIndex);
     const hash = md5(dirPath);
-    const suffix = size === "md" ? "" : "_sm";
-    return `/imagesw/thmcache/${hash}${suffix}.jpg`;
+    return API_ENDPOINTS.THUMB_CACHE(hash, size);
   } catch (e) {
-    let cleanPath = track.file.startsWith("/")
-      ? track.file.slice(1)
-      : track.file;
-    return `/coverart.php/${encodeURI(cleanPath)}`;
+    // Fallback to on-the-fly generation if hash fails
+    return API_ENDPOINTS.COVER_ART(track.file);
   }
 }
 
@@ -165,7 +161,7 @@ export const currentCover = derived(
 export const currentArtistImage = derived(currentSong, ($song) => {
   if (!$song || !$song.file) return null;
   if ($song.file.startsWith("http")) return null;
-  return `/coverart.php/${encodeURI($song.file)}`;
+  return API_ENDPOINTS.COVER_ART($song.file);
 });
 
 export const coverUrl = currentCover;

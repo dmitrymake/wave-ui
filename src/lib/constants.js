@@ -23,15 +23,30 @@ export const API_ENDPOINTS = {
   },
 
   STATIONS: (isDev) => {
-    const base = isDev ? `http://${CONFIG.MOODE_IP}` : "";
-    return `${base}/wave-api.php?action=stations`;
+    return `${getBaseUrl()}/wave-api.php?action=stations`;
   },
 
-  COVER_ART: (file) =>
-    `${getBaseUrl()}/coverart.php?u=${encodeURIComponent(file)}`,
+  // Moode cover art script usually accepts path info
+  COVER_ART: (path) => {
+    let clean = path;
+    if (clean.startsWith("/")) clean = clean.slice(1);
+    return `${getBaseUrl()}/coverart.php/${encodeURI(clean)}`;
+  },
 
-  RADIO_LOGOS: (filename) =>
-    `${getBaseUrl()}/imagesw/radio-logos/thumbs/${filename}`,
+  // Thumbnail cache direct access
+  THUMB_CACHE: (hash, size = "sm") => {
+    const suffix = size === "md" ? "" : "_sm";
+    return `${getBaseUrl()}/imagesw/thmcache/${hash}${suffix}.jpg`;
+  },
+
+  // Radio logos
+  RADIO_LOGOS: (filename) => {
+    return `${getBaseUrl()}/imagesw/radio-logos/thumbs/${encodeURIComponent(filename)}`;
+  },
+
+  // Default images (served from local public folder, so no BaseUrl needed usually,
+  // UNLESS you want to serve them from the Pi, but typically these are in your Vite public dir)
+  // We'll keep them relative for now as they are likely part of the UI build.
 };
 
 export const PLAYER_CONFIG = {

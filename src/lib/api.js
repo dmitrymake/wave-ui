@@ -18,7 +18,8 @@ export const ApiActions = {
     isSyncingLibrary.set(true);
     const worker = new SyncWorker();
 
-    const apiUrl = window.location.origin + "/wave-api.php";
+    // --- FIX: Используем правильную константу с полным URL ---
+    const apiUrl = API_ENDPOINTS.SYNC;
 
     worker.postMessage({
       type: "START_SYNC",
@@ -68,6 +69,7 @@ export const ApiActions = {
     isLoadingRadio.set(true);
     try {
       const isDev = import.meta.env.DEV;
+      // Используем функцию генератор, передавая флаг dev
       const res = await fetch(API_ENDPOINTS.STATIONS(isDev));
 
       if (!res.ok) throw new Error("Network error");

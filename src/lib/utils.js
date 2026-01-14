@@ -1,3 +1,5 @@
+import { API_ENDPOINTS } from "./constants";
+
 export function getStationImageUrl(station) {
   if (!station || !station.image) return null;
 
@@ -12,15 +14,15 @@ export function getStationImageUrl(station) {
     filename = station.image;
   }
 
-  const safeFilename = encodeURIComponent(filename);
-  return `/imagesw/radio-logos/thumbs/${safeFilename}`;
+  // Используем API_ENDPOINTS для построения полного URL
+  return API_ENDPOINTS.RADIO_LOGOS(filename);
 }
 
 export function getCoverUrl(song) {
   if (!song || !song.file) return null;
 
   if (!song.file.startsWith("http")) {
-    return `/coverart.php?u=${encodeURIComponent(song.file)}`;
+    return API_ENDPOINTS.COVER_ART(song.file);
   }
 
   return null;
