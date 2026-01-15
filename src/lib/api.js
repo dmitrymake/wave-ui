@@ -18,8 +18,14 @@ export const ApiActions = {
     isSyncingLibrary.set(true);
     const worker = new SyncWorker();
 
-    // --- FIX: Используем правильную константу с полным URL ---
-    const apiUrl = API_ENDPOINTS.SYNC;
+    let apiUrl = API_ENDPOINTS.SYNC;
+    if (!apiUrl.startsWith("http")) {
+      if (window.location.port === "3000") {
+        apiUrl = `http://${window.location.hostname}${apiUrl}`;
+      } else {
+        apiUrl = window.location.origin + apiUrl;
+      }
+    }
 
     worker.postMessage({
       type: "START_SYNC",
@@ -69,7 +75,6 @@ export const ApiActions = {
     isLoadingRadio.set(true);
     try {
       const isDev = import.meta.env.DEV;
-      // Используем функцию генератор, передавая флаг dev
       const res = await fetch(API_ENDPOINTS.STATIONS(isDev));
 
       if (!res.ok) throw new Error("Network error");
@@ -144,11 +149,9 @@ export const ApiActions = {
 
   async checkYandexAuth() {
     try {
-      const res = await fetch(API_ENDPOINTS.YANDEX + "?action=status");
-      const data = await res.json();
-
-      yandexAuthStatus.set(data.authorized);
-      return data.authorized;
+      const res = await YandexApi.request("status");
+      yandexAuthStatus.set(res.authorized);
+      return res.authorized;
     } catch (e) {
       console.error("Yandex Auth Check Failed", e);
       yandexAuthStatus.set(false);

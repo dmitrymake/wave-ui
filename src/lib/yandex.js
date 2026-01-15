@@ -2,7 +2,9 @@ import { API_ENDPOINTS } from "./constants";
 
 export const YandexApi = {
   async request(action, params = {}, method = "GET") {
-    const url = new URL(API_ENDPOINTS.YANDEX);
+    const baseUrl = API_ENDPOINTS.YANDEX;
+    const url = new URL(baseUrl, window.location.origin);
+
     url.searchParams.append("action", action);
 
     const options = { method };
@@ -61,9 +63,8 @@ export const YandexApi = {
     if (id) {
       if (type === "track") stationId = "track:" + id;
       else if (type === "artist") stationId = "artist:" + id;
-      else if (type === "album")
-        stationId = "album:" + id; // Редко используется, но поддерживается API
-      else stationId = id; // Передан полный ID (например, user:onyourwave)
+      else if (type === "album") stationId = "album:" + id;
+      else stationId = id;
     }
 
     return await this.request("play_station", { station: stationId });
