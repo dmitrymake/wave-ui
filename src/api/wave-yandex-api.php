@@ -5,8 +5,13 @@ ignore_user_abort(true);
 
 header('Content-Type: application/json');
 header('Access-Control-Allow-Origin: *');
-header('Access-Control-Allow-Methods: GET, POST');
+header('Access-Control-Allow-Methods: GET, POST, OPTIONS'); 
 header('Access-Control-Allow-Headers: *');
+
+// 2. Добавляем ранний выход для Preflight запросов
+if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
+    exit(0);
+}
 
 define('INC', '/var/www/inc');
 require_once INC . '/yandex-music.php';
@@ -352,7 +357,6 @@ try {
 
             if (strpos($stationId, 'vibe:') === 0) {
                 $parts = explode(':', $stationId);
-                // Пример: vibe:moodEnergy:fun
                 if (count($parts) >= 3) {
                     $group = $parts[1]; // moodEnergy, diversity, language
                     $val = $parts[2];   // fun, active, sad, calm
@@ -360,15 +364,10 @@ try {
                     $stationId = 'user:onyourwave'; 
                     $contextName = "Vibe: " . ucfirst($val);
 
-                    // --- FIX: Маппинг параметров для API ---
-                    // API Яндекса не понимает "moodEnergy", ему нужны "mood" или "energy"
                     if ($group === 'moodEnergy') {
                         if (in_array($val, ['active', 'calm'])) {
                             $extraParams['energy'] = $val;
                         } else {
-                            // fun, sad, sentimental, etc.
-                            // Примечание: иногда 'fun' в UI соответствует 'happy' в API, 
-                            // но обычно Яндекс понимает и то и то. Оставим $val как есть.
                             $extraParams['mood'] = $val;
                         }
                     } elseif ($group === 'diversity') {
@@ -378,7 +377,6 @@ try {
                         // russian, foreign, not-russian
                         $extraParams['language'] = $val;
                     } else {
-                        // Fallback для неизвестных групп
                         $extraParams[$group] = $val;
                     }
                 }
@@ -386,17 +384,14 @@ try {
                 $contextName = "Track Radio";
             }
 
-            // --- FIX: Сохраняем историю перед сбросом (из предыдущего шага) ---
             $oldState = getState();
             $globalHistory = $oldState['played_history'] ?? [];
             if (count($globalHistory) > 100) {
                 $globalHistory = array_slice($globalHistory, -100);
             }
 
-            // 1. ОСТАНОВИТЬ ДЕМОНА
             resetDaemon();
             
-            // 2. Получить треки с ПРАВИЛЬНЫМИ параметрами
             $queueData = $api->getStationTracks($stationId, $globalHistory, $extraParams); 
             
             $initialBuffer = [];
@@ -428,7 +423,6 @@ try {
                 }
             }
             
-            // Fallback если вернулись только дубли
             if ($count === 0 && !empty($queueData)) {
                  foreach ($queueData as $track) {
                     $clean = formatTrack($track);
@@ -450,7 +444,7 @@ try {
                 'active' => true,
                 'mode' => 'station',
                 'station_id' => $stationId,
-                'station_params' => $extraParams, // Сохраняем уже ПРАВИЛЬНЫЕ параметры (mood/energy)
+                'station_params' => $extraParams, 
                 'context_name' => $contextName,
                 'queue_buffer' => $initialBuffer,
                 'played_history' => $newHistory
