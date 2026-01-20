@@ -156,13 +156,33 @@
       const moodStations = moodData.stations || [];
       vibeCards = [myVibe, ...moodStations];
 
-      collectionCards = [...(landing.personal || []), ...(userPls || [])];
+      const mappedPlaylists = (userPls || []).map((pl) => {
+        if (pl.kind === "favorites") {
+          const count =
+            $yandexFavorites.size > 0
+              ? $yandexFavorites.size
+              : pl.trackCount || "♥";
+          return { ...pl, trackCount: count };
+        }
+        return pl;
+      });
+
+      collectionCards = [...(landing.personal || []), ...mappedPlaylists];
     } catch (e) {
       console.error("[YandexView] Dashboard Error:", e);
       showToast("Failed to load dashboard", "error");
     } finally {
       isLoading = false;
     }
+  }
+
+  $: if (collectionCards.length > 0) {
+    collectionCards = collectionCards.map((pl) => {
+      if (pl.kind === "favorites" && $yandexFavorites.size > 0) {
+        return { ...pl, trackCount: $yandexFavorites.size };
+      }
+      return pl;
+    });
   }
 
   function openPlaylist(pl) {
@@ -606,7 +626,10 @@
                     {/if}
                   </div>
                   <div class="header-actions">
-                    <button class="btn-primary" on:click={playAll}
+                    <button
+                      class="btn-primary"
+                      on:click={playAll}
+                      disabled={isLoading || $tracksStore.length === 0}
                       >Play All</button
                     >
                     {#if viewMode === "artist_details"}
@@ -625,7 +648,10 @@
                         <span class="icon-inline">{@html ICONS.RADIO}</span> Vibe
                       </button>
                     {:else}
-                      <button class="btn-secondary" on:click={addAllToQueue}
+                      <button
+                        class="btn-secondary"
+                        on:click={addAllToQueue}
+                        disabled={isLoading || $tracksStore.length === 0}
                         >To Queue</button
                       >
                     {/if}

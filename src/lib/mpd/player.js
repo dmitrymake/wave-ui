@@ -13,6 +13,7 @@ import {
 } from "../store";
 import { db } from "../db";
 import { ApiActions } from "../api";
+import { YandexApi } from "../yandex";
 
 const POLLER_INTERVAL = 1000;
 const TICKER_INTERVAL = 250;
@@ -143,7 +144,7 @@ async function syncQueue(newVersion) {
             image: yMeta.image,
             isYandex: true,
             id: yMeta.id,
-            time: currentT > 0 ? currentT : metaTime, // Fallback to cache time
+            time: currentT > 0 ? currentT : metaTime,
             mpdId: t.id,
             mpdPos: t.pos,
             _uid: String(t.id || t.pos) + "y",
@@ -214,7 +215,6 @@ async function fetchYandexMetaForTrack(url) {
         return s;
       });
     }
-    // -----------------------------------------------------------------
 
     queue.update((q) =>
       q.map((t) => {
@@ -426,15 +426,20 @@ export const PlayerActions = {
 
   async next() {
     forceHardSync = true;
-    ignoreUpdatesUntil = 0;
+    ignoreUpdatesUntil = performance.now() + 1000;
+    currentSong.update((s) => ({ ...s, title: "Loading...", artist: "" }));
+    status.update((s) => ({ ...s, elapsed: 0 }));
+    stopTicker();
     await mpdClient.send("next");
     refreshStatus();
   },
 
   async previous() {
     forceHardSync = true;
-    ignoreUpdatesUntil = 0;
+    ignoreUpdatesUntil = performance.now() + 1000;
+    currentSong.update((s) => ({ ...s, title: "Loading...", artist: "" }));
     status.update((s) => ({ ...s, elapsed: 0 }));
+    stopTicker();
     await mpdClient.send("previous");
     refreshStatus();
   },
@@ -473,27 +478,41 @@ export const PlayerActions = {
 
     status.update((s) => ({ ...s, state: "play", elapsed: 0 }));
     currentSong.set({
-      title: meta.title || uri.split("/").pop(),
+      title: meta.title || "Loading...",
       artist: meta.artist || "",
       album: meta.album || "",
       file: uri,
     });
-    startTicker();
+    stopTicker();
 
     try {
       const songData = await mpdClient.send("currentsong");
       const currentPos = parseInt(MpdParser.parseKeyValue(songData).pos);
 
-      const res = await mpdClient.send(`addid "${safeUri}"`);
-      const newId = parseInt(MpdParser.parseKeyValue(res).id);
+      if (uri.startsWith("yandex:")) {
+        const id = uri.split(":")[1];
+        await YandexApi.request("play_track", { id, append: 1 });
 
-      if (!isNaN(newId)) {
+        const statusRes = await mpdClient.send("status");
+        const len = parseInt(MpdParser.parseKeyValue(statusRes).playlistlength);
         const targetPos = isNaN(currentPos) ? 0 : currentPos + 1;
-        await mpdClient.send(`moveid ${newId} ${targetPos}`);
-        await mpdClient.send(`playid ${newId}`);
+
+        if (len > 0) {
+          await mpdClient.send(`move ${len - 1} ${targetPos}`);
+          await mpdClient.send(`play ${targetPos}`);
+        }
       } else {
-        await mpdClient.send(`add "${safeUri}"`);
-        await mpdClient.send("play");
+        const res = await mpdClient.send(`addid "${safeUri}"`);
+        const newId = parseInt(MpdParser.parseKeyValue(res).id);
+
+        if (!isNaN(newId)) {
+          const targetPos = isNaN(currentPos) ? 0 : currentPos + 1;
+          await mpdClient.send(`moveid ${newId} ${targetPos}`);
+          await mpdClient.send(`playid ${newId}`);
+        } else {
+          await mpdClient.send(`add "${safeUri}"`);
+          await mpdClient.send("play");
+        }
       }
     } catch (e) {
       console.error("Play error", e);
@@ -507,6 +526,13 @@ export const PlayerActions = {
   },
 
   async addToQueue(uri) {
+    if (uri.startsWith("yandex:")) {
+      const id = uri.split(":")[1];
+      await YandexApi.request("add_tracks", { tracks: [{ id }] }, "POST");
+      showToast("Added to queue", "success");
+      return;
+    }
+
     try {
       await mpdClient.send(`add "${escapePath(uri)}"`);
       showToast("Added to queue", "success");
@@ -527,12 +553,27 @@ export const PlayerActions = {
         isQueueLocked.set(false);
         await this.playUri(uri);
       } else {
-        const res = await mpdClient.send(`addid "${safeUri}"`);
-        const newId = parseInt(MpdParser.parseKeyValue(res).id);
+        if (uri.startsWith("yandex:")) {
+          const id = uri.split(":")[1];
+          await YandexApi.request("play_track", { id, append: 1 });
 
-        if (!isNaN(newId)) {
-          await mpdClient.send(`moveid ${newId} ${currentPos + 1}`);
-          showToast("Will play next", "success");
+          const statusRes = await mpdClient.send("status");
+          const len = parseInt(
+            MpdParser.parseKeyValue(statusRes).playlistlength,
+          );
+
+          if (len > 0) {
+            await mpdClient.send(`move ${len - 1} ${currentPos + 1}`);
+            showToast("Will play next", "success");
+          }
+        } else {
+          const res = await mpdClient.send(`addid "${safeUri}"`);
+          const newId = parseInt(MpdParser.parseKeyValue(res).id);
+
+          if (!isNaN(newId)) {
+            await mpdClient.send(`moveid ${newId} ${currentPos + 1}`);
+            showToast("Will play next", "success");
+          }
         }
         setTimeout(() => isQueueLocked.set(false), 1000);
       }
