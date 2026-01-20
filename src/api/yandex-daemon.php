@@ -2,6 +2,7 @@
 define('INC', '/var/www/inc');
 require_once INC . '/yandex-music.php';
 
+// Constants
 define('STORAGE_DIR', '/dev/shm/yandex_music/');
 define('STATE_FILE', STORAGE_DIR . 'state.json');
 define('META_CACHE_FILE', STORAGE_DIR . 'meta_cache.json');
@@ -10,7 +11,7 @@ define('LOG_FILE', '/dev/shm/wave_daemon.log');
 
 if (!is_dir(STORAGE_DIR)) @mkdir(STORAGE_DIR, 0777, true);
 
-$pollInterval = 2;
+$pollInterval = 2; // seconds
 
 function logMsg($msg) {
     $str = "[" . date('H:i:s') . "] $msg\n";
@@ -68,6 +69,7 @@ function saveState($state) {
 }
 
 function updateMetaCache($url, $track) {
+    // Keep cache size small to save RAM
     $cache = file_exists(META_CACHE_FILE) ? json_decode(file_get_contents(META_CACHE_FILE), true) : [];
     if (count($cache) > 300) $cache = array_slice($cache, -100, 100, true);
     
@@ -84,6 +86,7 @@ $api = null;
 $lastToken = "";
 
 while (true) {
+    // 1. Init API if token exists
     if (file_exists(TOKEN_FILE)) {
         $token = trim(file_get_contents(TOKEN_FILE));
         if ($token && $token !== $lastToken) {
@@ -101,9 +104,11 @@ while (true) {
 
     $state = getState();
 
+    // 2. Main Logic if Active
     if ($api && !empty($state['active'])) {
         $mpdStatus = getMpdStatus();
         
+        // Security check: Disable daemon if user plays a local file manually
         $currentFile = $mpdStatus['file'] ?? '';
         $stateStr = $mpdStatus['state'] ?? 'stop';
         
@@ -118,26 +123,21 @@ while (true) {
             continue;
         }
 
-        $currentPos = intval($mpdStatus['song'] ?? -1);
-        if ($currentPos > 2) {
-            $endRange = $currentPos - 2;
-            logMsg("Cleaning up queue: deleting 0:$endRange (Current: $currentPos)");
-            mpdSend("delete 0:$endRange");
-        }
-
+        // 3. Buffer Management
         $playlistLen = intval($mpdStatus['playlistlength'] ?? 0);
         $currentPos = intval($mpdStatus['song'] ?? -1);
         
         if ($currentPos === -1 && $playlistLen === 0) $tracksAhead = 0;
         else $tracksAhead = $playlistLen - ($currentPos + 1);
 
+        // Refill threshold (less than 3 tracks ahead)
         if ($tracksAhead < 3) {
             $buffer = $state['queue_buffer'] ?? [];
 
+            // A. Fetch new tracks if buffer empty (Station Mode)
             if (empty($buffer) && ($state['mode'] ?? '') === 'station') {
                 $stationId = $state['station_id'] ?? 'user:onyourwave';
                 $history = $state['played_history'] ?? [];
-                
                 $params = $state['station_params'] ?? []; 
 
                 logMsg("Refilling radio: $stationId Params: " . json_encode($params));
@@ -152,10 +152,13 @@ while (true) {
                                 $newBuffer[] = $nt;
                             }
                         }
+                        
+                        // Check if state changed during fetch
                         $state = getState(); 
                         if (empty($state['active'])) {
                              continue;
                         }
+                        
                         $state['queue_buffer'] = $newBuffer;
                         saveState($state);
                         $buffer = $newBuffer;
@@ -165,10 +168,12 @@ while (true) {
                 }
             }
 
+            // B. Add track from buffer to MPD
             if (!empty($buffer)) {
                 $nextTrack = array_shift($buffer);
                 
                 try {
+                    // Check active state before heavy operations
                     $checkState = getState();
                     if (empty($checkState['active'])) {
                         logMsg("Daemon stopped abruptly. Aborting add.");
@@ -180,6 +185,7 @@ while (true) {
                     if ($url) {
                         updateMetaCache($url, $nextTrack);
                         
+                        // Double check state
                         $checkState = getState();
                         if (empty($checkState['active'])) {
                             logMsg("Daemon stopped before MPD Add. Aborting.");
@@ -189,6 +195,7 @@ while (true) {
                         mpdSend("add \"$url\"");
                         logMsg("Added: " . $nextTrack['title']);
 
+                        // Update history
                         if (!isset($state['played_history'])) $state['played_history'] = [];
                         $state['played_history'][] = (string)$nextTrack['id'];
                         if (count($state['played_history']) > 150) {
@@ -201,6 +208,7 @@ while (true) {
                     logMsg("Link Error: " . $e->getMessage());
                 }
 
+                // Save updated buffer
                 $currentState = getState();
                 if (!empty($currentState['active'])) {
                     $currentState['queue_buffer'] = $buffer;
