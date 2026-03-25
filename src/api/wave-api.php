@@ -178,7 +178,7 @@ try {
         $timeStr = $_POST['time'] ?? '08:00';
         $playlist = $_POST['playlist'] ?? 'Favorites';
 
-        $safePlaylist = str_replace('"', '\"', $playlist); 
+        $safePlaylist = escapeshellarg($playlist);
         $cronId = "# WAVE_UI_ALARM";
 
         $currentCron = shell_exec('crontab -l 2>/dev/null');
@@ -196,7 +196,7 @@ try {
             $parts = explode(':', $timeStr);
             $hour = intval($parts[0]);
             $min = intval($parts[1]);
-            $cmd = "/usr/bin/mpc clear && /usr/bin/mpc volume 70 && /usr/bin/mpc load \"$safePlaylist\" && /usr/bin/mpc play";
+            $cmd = "/usr/bin/mpc clear && /usr/bin/mpc volume 70 && /usr/bin/mpc load $safePlaylist && /usr/bin/mpc play";
             $cronLine = "$min $hour * * * $cmd $cronId";
             $newLines[] = $cronLine;
         }
