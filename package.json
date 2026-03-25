@@ -1,0 +1,30 @@
+{
+  "name": "moode-svelte",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "test": "vitest",
+    "test:run": "vitest run",
+    "check": "svelte-check --tsconfig ./tsconfig.json"
+  },
+  "devDependencies": {
+    "@sveltejs/vite-plugin-svelte": "^6.2.1",
+    "fake-indexeddb": "^6.2.5",
+    "jsdom": "^29.0.1",
+    "svelte": "^5.43.8",
+    "svelte-check": "^4.4.5",
+    "typescript": "^6.0.2",
+    "vite": "^7.2.4",
+    "vitest": "^4.1.1"
+  },
+  "dependencies": {
+    "axios": "^1.13.2",
+    "md5": "^2.3.0",
+    "torrent-search-api": "^2.1.4",
+    "webtorrent": "^2.8.5"
+  }
+}

@@ -1,0 +1,206 @@
+<script lang="ts">
+  import { ICONS } from "../../lib/icons";
+  import ImageLoader from "../ImageLoader.svelte";
+  import Skeleton from "../Skeleton.svelte";
+  import type { Writable } from "svelte/store";
+  import type { YandexAlbum, YandexHeaderData } from "../../lib/types";
+
+  let { headerData = null, viewMode = "", isLoading = false, tracksCount = 0, albumsStore, onPlayAll, onAddAllToQueue, onPlayVibe, onOpenAlbum }: {
+    headerData?: YandexHeaderData;
+    viewMode?: string;
+    isLoading?: boolean;
+    tracksCount?: number;
+    albumsStore: Writable<YandexAlbum[]>;
+    onPlayAll?: () => void;
+    onAddAllToQueue?: () => void;
+    onPlayVibe?: (type: string) => void;
+    onOpenAlbum?: (album: YandexAlbum) => void;
+  } = $props();
+
+  function handleHorizontalScroll(e: WheelEvent) {
+    if (e.deltaY !== 0) {
+      e.currentTarget.scrollLeft += e.deltaY;
+    }
+  }
+
+  function playAll() {
+    onPlayAll?.();
+  }
+
+  function addAllToQueue() {
+    onAddAllToQueue?.();
+  }
+
+  function playVibe(type: string) {
+    onPlayVibe?.(type);
+  }
+
+  function openAlbum(album: YandexAlbum) {
+    onOpenAlbum?.(album);
+  }
+</script>
+
+{#if viewMode !== "search" && headerData}
+  {#if isLoading && !headerData.cover && !headerData.image}
+    <div class="view-header">
+      <div class="header-art">
+        <Skeleton width="100%" height="100%" radius="8px" />
+      </div>
+      <div class="header-info">
+        <Skeleton
+          width="100px"
+          height="14px"
+          style="margin-bottom:8px"
+        />
+        <Skeleton
+          width="80%"
+          height="28px"
+          style="margin-bottom:8px"
+        />
+        <Skeleton
+          width="60%"
+          height="16px"
+          style="margin-bottom:16px"
+        />
+        <div class="header-actions">
+          <Skeleton width="100px" height="36px" radius="18px" />
+          <Skeleton width="100px" height="36px" radius="18px" />
+        </div>
+      </div>
+    </div>
+  {:else}
+    <div class="view-header">
+      <div
+        class="header-art"
+        style={headerData.kind === "favorites"
+          ? "background: linear-gradient(135deg, #fa2d48, #c01c33);"
+          : ""}
+      >
+        {#if headerData.kind === "favorites"}
+          <div class="icon-wrap">{@html ICONS.HEART_FILLED}</div>
+        {:else}
+          <ImageLoader
+            src={headerData.cover || headerData.image}
+            alt={headerData.title}
+            radius="8px"
+          >
+            <div slot="fallback" class="icon-fallback">
+              {@html ICONS.ALBUMS}
+            </div>
+          </ImageLoader>
+        {/if}
+      </div>
+      <div class="header-info">
+        <div class="header-text-group">
+          <div class="header-label">
+            {viewMode
+              .replace("_details", "")
+              .toUpperCase()
+              .replace("YANDEX_", "")}
+          </div>
+          <h1 class="header-title">
+            {headerData.title || headerData.name}
+          </h1>
+          {#if headerData.artist || headerData.description}
+            <h2 class="header-sub-text">
+              {headerData.artist || headerData.description}
+            </h2>
+          {/if}
+        </div>
+        <div class="header-actions">
+          <button
+            class="btn-primary"
+            onclick={playAll}
+            disabled={isLoading || tracksCount === 0}
+            >Play All</button
+          >
+          {#if viewMode === "artist_details"}
+            <button
+              class="btn-secondary"
+              onclick={() => playVibe("artist")}
+            >
+              <span class="icon-inline">{@html ICONS.RADIO}</span> Artist
+              Vibe
+            </button>
+          {:else if viewMode === "album_details"}
+            <button
+              class="btn-secondary"
+              onclick={() => playVibe("album")}
+            >
+              <span class="icon-inline">{@html ICONS.RADIO}</span> Vibe
+            </button>
+          {:else}
+            <button
+              class="btn-secondary"
+              onclick={addAllToQueue}
+              disabled={isLoading || tracksCount === 0}
+              >To Queue</button
+            >
+          {/if}
+        </div>
+      </div>
+    </div>
+  {/if}
+{/if}
+
+{#if viewMode === "artist_details" && $albumsStore.length > 0}
+  <h3 class="header-label" style="margin-top: 20px;">Albums</h3>
+  <div
+    class="music-grid horizontal section-mb"
+    onwheel={handleHorizontalScroll}
+  >
+    {#each $albumsStore as album}
+      <div class="music-card" onclick={() => openAlbum(album)}>
+        <div class="card-img-container">
+          <ImageLoader
+            src={album.image}
+            alt={album.title}
+            radius="8px"
+          />
+          <div class="play-overlay">
+            <span class="overlay-icon">{@html ICONS.PLAY}</span>
+          </div>
+        </div>
+        <div class="card-title">{album.title}</div>
+        <div class="card-sub">{album.year}</div>
+      </div>
+    {/each}
+  </div>
+  <h3 class="header-label">Popular Tracks</h3>
+{/if}
+
+<style>
+  @import "./MusicViews.css";
+
+  .icon-wrap {
+    width: 100%;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: white;
+  }
+  .icon-wrap :global(svg) {
+    width: 40px;
+    height: 40px;
+  }
+
+  .header-sub-text {
+    font-size: 20px;
+    color: var(--c-white-60);
+    margin: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    font-weight: 400;
+  }
+
+  .icon-inline {
+    display: inline-flex;
+    align-items: center;
+    margin-right: 6px;
+  }
+  .icon-inline :global(svg) {
+    width: 18px;
+    height: 18px;
+  }
+</style>
