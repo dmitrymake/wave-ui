@@ -14,7 +14,7 @@ import {
 import { db } from "../db";
 import { ApiActions } from "../api";
 import { YandexApi } from "../yandex";
-import { isRemoteUrl } from "../utils";
+import { isRemoteUrl, findStationByStream } from "../utils";
 import { MSG } from "../messages";
 import { logger } from "../logger";
 import type { Track, MpdStatus, CurrentSong, Station, YandexContext, YandexTrack } from "../types";
@@ -232,74 +232,65 @@ async function fetchYandexMetaForTrack(url: string): Promise<void> {
   }
 }
 
-function updateStores(serverStatus: MpdStatus, serverSong: CurrentSong): void {
-  const oldSong: CurrentSong = get(currentSong);
-  const allStations: Station[] = get(stations);
-  const yCtx: YandexContext = get(yandexContext);
+function enrichWithYandexMeta(
+  serverSong: CurrentSong,
+  serverStatus: MpdStatus,
+  yCtx: YandexContext,
+): void {
+  if (!serverSong.file) return;
 
-  if (serverSong.file) {
-    let yMeta: (YandexTrack & { file: string }) | undefined;
-
-    if (yCtx.streamCache) {
-      yMeta = yCtx.streamCache[serverSong.file];
-      if (!yMeta) {
-        const tId: string | null = getYandexIdFromUrl(serverSong.file);
-        if (tId) yMeta = yCtx.streamCache[String(tId)];
-      }
-    }
-
-    if (yMeta) {
-      serverSong.title = yMeta.title;
-      serverSong.artist = yMeta.artist;
-      serverSong.album = yMeta.album;
-      serverSong.image = yMeta.image;
-      serverSong.isYandex = true;
-      serverSong.id = String(yMeta.id);
-
-      if (serverStatus.duration === 0 || isNaN(serverStatus.duration)) {
-        if (yMeta.time) serverStatus.duration = parseFloat(String(yMeta.time));
-      }
-    } else if (
-      serverSong.file.includes("yandex.net") ||
-      serverSong.file.includes("get-mp3")
-    ) {
-      fetchYandexMetaForTrack(serverSong.file);
+  let yMeta: (YandexTrack & { file: string }) | undefined;
+  if (yCtx.streamCache) {
+    yMeta = yCtx.streamCache[serverSong.file];
+    if (!yMeta) {
+      const tId = getYandexIdFromUrl(serverSong.file);
+      if (tId) yMeta = yCtx.streamCache[String(tId)];
     }
   }
 
-  const isRadio: boolean = !!isRemoteUrl(serverSong.file);
-  if (isRadio && !serverSong.isYandex) {
-    const clean = (str: string | undefined | null): string =>
-      (str || "")
-        .toString()
-        .toLowerCase()
-        .replace(/[^a-z0-9]/g, "");
-    const targetUrl: string = clean(serverSong.file);
-    const targetTitle: string = clean(serverSong.title);
-
-    const found = allStations.find((s) => {
-      const sUrl: string = clean(
-        s.station || s.file || s.url || (Array.isArray(s) ? (s as unknown as string[])[1] : ""),
-      );
-      const sName: string = clean(s.name || (Array.isArray(s) ? (s as unknown as string[])[0] : ""));
-      return (
-        (sUrl && targetUrl.includes(sUrl)) ||
-        (sName && targetTitle.includes(sName))
-      );
-    });
-
-    if (found) {
-      serverSong.stationName = found.name || (found as unknown as string[])[0];
-    } else if (oldSong.stationName && oldSong.file === serverSong.file) {
-      serverSong.stationName = oldSong.stationName;
+  if (yMeta) {
+    serverSong.title = yMeta.title;
+    serverSong.artist = yMeta.artist;
+    serverSong.album = yMeta.album;
+    serverSong.image = yMeta.image;
+    serverSong.isYandex = true;
+    serverSong.id = String(yMeta.id);
+    if (serverStatus.duration === 0 || isNaN(serverStatus.duration)) {
+      if (yMeta.time) serverStatus.duration = parseFloat(String(yMeta.time));
     }
+  } else if (
+    serverSong.file.includes("yandex.net") ||
+    serverSong.file.includes("get-mp3")
+  ) {
+    fetchYandexMetaForTrack(serverSong.file);
   }
+}
 
-  currentSong.set(serverSong);
+function resolveStationName(
+  serverSong: CurrentSong,
+  oldSong: CurrentSong,
+  allStations: Station[],
+): void {
+  const isRadio = !!isRemoteUrl(serverSong.file);
+  if (!isRadio || serverSong.isYandex) return;
 
+  const found = findStationByStream(allStations, serverSong.file, serverSong.title);
+  if (found) {
+    serverSong.stationName = found.name;
+  } else if (oldSong.stationName && oldSong.file === serverSong.file) {
+    serverSong.stationName = oldSong.stationName;
+  }
+}
+
+function reconcileStatus(
+  serverStatus: MpdStatus,
+  serverSong: CurrentSong,
+  oldSong: CurrentSong,
+  isRadio: boolean,
+): void {
   status.update((localStatus) => {
-    const isPlaying: boolean = serverStatus.state === "play";
-    const now: number = performance.now();
+    const isPlaying = serverStatus.state === "play";
+    const now = performance.now();
 
     if (serverStatus.state === "pause" || localStatus.state === "pause") {
       manageTicker(false);
@@ -325,7 +316,7 @@ function updateStores(serverStatus: MpdStatus, serverSong: CurrentSong): void {
     }
 
     if (isPlaying && (!isRadio || !!serverSong.isYandex)) {
-      const diff: number = serverStatus.elapsed - localStatus.elapsed;
+      const diff = serverStatus.elapsed - localStatus.elapsed;
       if (Math.abs(diff) > 2.0) {
         timeDriftSpeed = 1.0;
         return serverStatus;
@@ -333,9 +324,7 @@ function updateStores(serverStatus: MpdStatus, serverSong: CurrentSong): void {
       if (Math.abs(diff) < 0.05) {
         timeDriftSpeed = 1.0;
       } else {
-        const timeToCorrect: number = 1.5;
-        let correction: number = diff / timeToCorrect;
-        timeDriftSpeed = Math.max(0.5, Math.min(1.5, 1.0 + correction));
+        timeDriftSpeed = Math.max(0.5, Math.min(1.5, 1.0 + diff / 1.5));
       }
       return { ...serverStatus, elapsed: localStatus.elapsed };
     }
@@ -343,6 +332,18 @@ function updateStores(serverStatus: MpdStatus, serverSong: CurrentSong): void {
     manageTicker(false);
     return serverStatus;
   });
+}
+
+function updateStores(serverStatus: MpdStatus, serverSong: CurrentSong): void {
+  const oldSong = get(currentSong);
+  const yCtx = get(yandexContext);
+
+  enrichWithYandexMeta(serverSong, serverStatus, yCtx);
+  resolveStationName(serverSong, oldSong, get(stations));
+  currentSong.set(serverSong);
+
+  const isRadio = !!isRemoteUrl(serverSong.file);
+  reconcileStatus(serverStatus, serverSong, oldSong, isRadio);
 }
 
 function manageTicker(shouldRun: boolean): void {

@@ -35,3 +35,47 @@ export function getCoverUrl(song: Pick<Track, "file">): string | null {
 export function generateUid(): string {
   return Date.now().toString(36) + Math.random().toString(36).substr(2);
 }
+
+export function normalizeForMatch(str: string | null | undefined): string {
+  return (str || "").toString().toLowerCase().replace(/[^a-z0-9]/g, "");
+}
+
+export function findStationByStream(
+  stationList: Station[],
+  songFile: string | null | undefined,
+  songTitle: string | null | undefined,
+): Station | undefined {
+  const targetUrl = normalizeForMatch(songFile);
+  const targetTitle = normalizeForMatch(songTitle);
+
+  return stationList.find((s) => {
+    const sUrl = normalizeForMatch(s.station || s.file || s.url);
+    const sName = normalizeForMatch(s.name);
+    return (
+      (sUrl && targetUrl.includes(sUrl)) ||
+      (sName && targetTitle.includes(sName))
+    );
+  });
+}
+
+export function findStationByName(
+  stationList: Station[],
+  trackTitle: string | null | undefined,
+  trackStationName: string | null | undefined,
+  selectedRadioName: string | null | undefined,
+): Station | undefined {
+  const targetTitle = normalizeForMatch(trackTitle);
+  const targetStationName = normalizeForMatch(trackStationName);
+  const targetSelected = normalizeForMatch(selectedRadioName);
+
+  return stationList.find((s) => {
+    const sName = normalizeForMatch(s.name);
+    if (!sName) return false;
+    return (
+      sName === targetStationName ||
+      sName === targetSelected ||
+      (targetTitle && sName === targetTitle) ||
+      (targetTitle && targetTitle.includes(sName) && sName.length > 3)
+    );
+  });
+}

@@ -22,9 +22,6 @@
     "vitest": "^4.1.1"
   },
   "dependencies": {
-    "axios": "^1.13.2",
-    "md5": "^2.3.0",
-    "torrent-search-api": "^2.1.4",
-    "webtorrent": "^2.8.5"
+    "md5": "^2.3.0"
   }
 }

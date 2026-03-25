@@ -1,6 +1,6 @@
 import { writable, derived, get } from "svelte/store";
 import { stations, selectedStationName } from "./library";
-import { getStationImageUrl, isRemoteUrl } from "../utils";
+import { getStationImageUrl, isRemoteUrl, findStationByName } from "../utils";
 import { API_ENDPOINTS } from "../constants";
 import md5 from "md5";
 import type { Track, MpdStatus, Station } from "../types";
@@ -52,30 +52,10 @@ function resolveRadioImage(
   stationList: Station[],
   selectedRadioName: string | null,
 ): string | null {
-  const normalize = (str: string | null | undefined): string =>
-    (str || "")
-      .toString()
-      .toLowerCase()
-      .replace(/[^a-z0-9]/g, "");
-
-  const targetTitle = normalize(track?.title);
-  const targetStationName = normalize(track?.stationName);
-  const targetSelected = normalize(selectedRadioName);
-
   if (stationList && stationList.length > 0) {
-    const found = stationList.find((s) => {
-      const sName = normalize(s.name);
-      if (!sName) return false;
-      return (
-        sName === targetStationName ||
-        sName === targetSelected ||
-        (targetTitle && sName === targetTitle) ||
-        (targetTitle && targetTitle.includes(sName) && sName.length > 3)
-      );
-    });
+    const found = findStationByName(stationList, track?.title, track?.stationName, selectedRadioName);
     if (found) return getStationImageUrl(found);
   }
-
   const fallbackName = track?.stationName || selectedRadioName;
   if (fallbackName) {
     return getStationImageUrl({ name: fallbackName, image: "local" });
