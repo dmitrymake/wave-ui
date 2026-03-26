@@ -115,9 +115,11 @@
     <div class="art-container">
       <div class="artwork" style="transform: scale({1 - currentY / 3000})">
         <ImageLoader src={artSrc} alt="Cover" radius={artworkRadius}>
-          <div slot="fallback" class="icon-fallback">
-            {@html isRadio ? ICONS.RADIO : ICONS.ALBUMS}
-          </div>
+          {#snippet fallback()}
+            <div class="icon-fallback">
+              {@html isRadio ? ICONS.RADIO : ICONS.ALBUMS}
+            </div>
+          {/snippet}
         </ImageLoader>
       </div>
     </div>

@@ -14,6 +14,7 @@
   } from "./lib/store";
   import { MSG } from "./lib/messages";
   import "./styles/shared.css";
+  import "./components/views/MusicViews.css";
   import { get } from "svelte/store";
 
   onMount(async () => {

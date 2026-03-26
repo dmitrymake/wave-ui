@@ -109,9 +109,11 @@
       <div class="info">
         <div class="art">
           <ImageLoader src={artSrc} alt="art" radius="4px">
-            <div slot="fallback" class="icon-fallback">
-              {@html isRadio ? ICONS.RADIO : ICONS.ALBUMS}
-            </div>
+            {#snippet fallback()}
+              <div class="icon-fallback">
+                {@html isRadio ? ICONS.RADIO : ICONS.ALBUMS}
+              </div>
+            {/snippet}
           </ImageLoader>
         </div>
 
@@ -262,5 +264,7 @@
     .grid { grid-template-columns: 1fr max-content; padding: 0 16px; }
     .play-btn { width: 40px; height: 40px; }
     .art { width: 48px; height: 48px; }
+    .tiny-dots { display: none; }
+    .meta-tag { display: none; }
   }
 </style>

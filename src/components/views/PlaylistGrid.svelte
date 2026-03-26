@@ -80,7 +80,6 @@
 </div>
 
 <style>
-  @import "./MusicViews.css";
 
   .playlists-grid-override {
     grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)) !important;

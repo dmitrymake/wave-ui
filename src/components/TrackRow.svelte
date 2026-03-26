@@ -61,7 +61,7 @@
     (isRemoteUrl(track.file) || String(track.file).includes("RADIO")) &&
     !isYandexTrack);
   let displayTitle = $derived(track.title || track.file?.split("/").pop());
-  let duration = $derived(formatDuration(track.time || track.duration));
+  let duration = $derived(formatDuration(track.time));
   let quality = $derived(track.qualityBadge ? track.qualityBadge.split(" ")[0] : null);
   let imgUrl = $derived(imgError
     ? getTrackCoverUrl(track, $stations, null)
@@ -96,9 +96,18 @@
     openContextMenu(e, track, getContextData());
   }
 
-  function handleLongPress(e: CustomEvent<{ originalEvent: MouseEvent | TouchEvent }>) {
+  function handleLongPress(e: Event) {
     if (isEditable) return;
-    openContextMenu(e.detail.originalEvent, track, getContextData());
+    const detail = (e as CustomEvent<{ originalEvent?: Event }>).detail;
+    const origEvent = detail?.originalEvent ?? e;
+    openContextMenu(origEvent, track, getContextData());
+  }
+
+  function handleKeyDown(e: KeyboardEvent) {
+    if (e.key === "Enter" || e.key === " ") {
+      e.preventDefault();
+      if (!isExactActive) onplay?.();
+    }
   }
 
   function handleArtistClick(e: MouseEvent) {
@@ -123,6 +132,7 @@
   class:striped={showStripes}
   class:editable={isEditable}
   onclick={() => !isExactActive && onplay?.()}
+  onkeydown={handleKeyDown}
   onmouseenter={() => (isHovering = true)}
   onmouseleave={() => (isHovering = false)}
   use:longpress
@@ -153,9 +163,11 @@
 
     <div class="thumb">
       <ImageLoader src={imgUrl} alt={displayTitle} radius="4px" onError={() => (imgError = true)}>
-        <div slot="fallback" class="icon-ph" in:fade>
-          {@html isRadio ? ICONS.RADIO : ICONS.ALBUMS}
-        </div>
+        {#snippet fallback()}
+          <div class="icon-ph" in:fade>
+            {@html isRadio ? ICONS.RADIO : ICONS.ALBUMS}
+          </div>
+        {/snippet}
       </ImageLoader>
     </div>
   </div>
@@ -179,6 +191,9 @@
         class="artist text-ellipsis"
         class:link={!isRadio || isYandexTrack}
         onclick={handleArtistClick}
+        onkeydown={(e) => { if (e.key === "Enter") handleArtistClick(e as unknown as MouseEvent); }}
+        role={(!isRadio || isYandexTrack) ? "link" : undefined}
+        tabindex={(!isRadio || isYandexTrack) ? 0 : undefined}
       >
         {track.artist}
       </div>

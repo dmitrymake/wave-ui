@@ -137,77 +137,80 @@
     isLoading={false}
     emptyText=""
   >
-    <div slot="header" class="content-padded">
-      {#if $searchQuery.length < 2}
-        <div class="placeholder-state">
-          <div class="placeholder-icon">🔍</div>
-          <p>Type to search your library</p>
-        </div>
-      {:else if !isSearching && $tracksStore.length === 0 && foundAlbums.length === 0 && hasSearched}
-        <div class="empty-text">No results found for "{$searchQuery}"</div>
-      {:else}
-        {#if foundAlbums.length > 0}
-          <div class="header-label section-spacing">Albums</div>
+    {#snippet header()}
+      <div class="content-padded">
+        {#if $searchQuery.length < 2}
+          <div class="placeholder-state">
+            <div class="placeholder-icon">🔍</div>
+            <p>Type to search your library</p>
+          </div>
+        {:else if !isSearching && $tracksStore.length === 0 && foundAlbums.length === 0 && hasSearched}
+          <div class="empty-text">No results found for "{$searchQuery}"</div>
+        {:else}
+          {#if foundAlbums.length > 0}
+            <div class="header-label section-spacing">Albums</div>
 
-          <div
-            class="music-grid horizontal section-mb"
-            onwheel={handleHorizontalScroll}
-          >
-            {#each foundAlbums as album (album._uid)}
-              <div class="music-card" onclick={() => goToAlbum(album)}>
-                <div class="card-img-container">
-                  <ImageLoader
-                    src={getTrackThumbUrl(album, "md")}
-                    alt={album.name}
-                    radius="8px"
-                  >
-                    <div slot="fallback" class="icon-fallback">💿</div>
-                  </ImageLoader>
+            <div
+              class="music-grid horizontal section-mb"
+              onwheel={handleHorizontalScroll}
+            >
+              {#each foundAlbums as album (album._uid)}
+                <div class="music-card" onclick={() => goToAlbum(album)}>
+                  <div class="card-img-container">
+                    <ImageLoader
+                      src={getTrackThumbUrl(album, "md")}
+                      alt={album.name}
+                      radius="8px"
+                    >
+                      {#snippet fallback()}
+                        <div class="icon-fallback">💿</div>
+                      {/snippet}
+                    </ImageLoader>
 
-                  <div class="play-overlay">
-                    <span class="overlay-icon">{@html ICONS.PLAY}</span>
+                    <div class="play-overlay">
+                      <span class="overlay-icon">{@html ICONS.PLAY}</span>
+                    </div>
+                  </div>
+
+                  <div class="card-title" title={album.name}>{album.name}</div>
+
+                  <div class="card-sub-row">
+                    <div class="card-sub text-ellipsis">{album.artist}</div>
+
+                    {#if album.year && album.year !== "0" && album.year !== 0}
+                      <div class="meta-tag">{album.year}</div>
+                    {/if}
+
+                    {#if album.qualityBadge}
+                      <div class="meta-tag quality">
+                        {album.qualityBadge.split(" ")[0]}
+                      </div>
+                    {/if}
                   </div>
                 </div>
+              {/each}
+            </div>
+          {/if}
 
-                <div class="card-title" title={album.name}>{album.name}</div>
-
-                <div class="card-sub-row">
-                  <div class="card-sub text-ellipsis">{album.artist}</div>
-
-                  {#if album.year && album.year !== "0" && album.year !== 0}
-                    <div class="meta-tag">{album.year}</div>
-                  {/if}
-
-                  {#if album.qualityBadge}
-                    <div class="meta-tag quality">
-                      {album.qualityBadge.split(" ")[0]}
-                    </div>
-                  {/if}
-                </div>
-              </div>
-            {/each}
-          </div>
+          {#if $tracksStore.length > 0}
+            <div class="header-label">Tracks</div>
+          {/if}
         {/if}
+      </div>
+    {/snippet}
 
-        {#if $tracksStore.length > 0}
-          <div class="header-label">Tracks</div>
-        {/if}
-      {/if}
-    </div>
-
-    <div slot="row" let:item let:index>
+    {#snippet row({ item, index })}
       <TrackRow
         track={item}
         {index}
         isEditable={false}
         onplay={() => playTrack(item)}
       />
-    </div>
+    {/snippet}
   </BaseList>
 </div>
 
 <style>
-  @import "./MusicViews.css";
 
   .clear-icon-btn {
     background: transparent;

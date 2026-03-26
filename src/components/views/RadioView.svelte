@@ -72,7 +72,9 @@
           >
             <div class="card-img-container">
               <ImageLoader src={imgUrl} alt={station.name} radius="8px">
-                <div slot="fallback" class="icon-fallback">📻</div>
+                {#snippet fallback()}
+                  <div class="icon-fallback">📻</div>
+                {/snippet}
               </ImageLoader>
 
               <div class="play-overlay" style={isActive ? "opacity: 1" : ""}>
@@ -113,7 +115,6 @@
 </div>
 
 <style>
-  @import "./MusicViews.css";
 
   .search-input-container {
     display: flex;

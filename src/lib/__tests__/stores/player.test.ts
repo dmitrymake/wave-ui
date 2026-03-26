@@ -11,18 +11,18 @@ vi.mock("../../constants", () => ({
   },
 }));
 
-vi.mock("../../utils", () => ({
-  getStationImageUrl: (station: { name: string; image: string } | null) => {
-    if (!station || !station.image) return null;
-    if (station.image.startsWith("http")) return station.image;
-    if (station.image === "local") return `/radio-logos/${station.name}.jpg`;
-    return `/radio-logos/${station.image}`;
-  },
-  isRemoteUrl: (url: string | undefined | null) => {
-    if (!url) return false;
-    return url.startsWith("http://") || url.startsWith("https://");
-  },
-}));
+vi.mock("../../utils", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../../utils")>();
+  return {
+    ...actual,
+    getStationImageUrl: (station: { name: string; image: string } | null) => {
+      if (!station || !station.image) return null;
+      if (station.image.startsWith("http")) return station.image;
+      if (station.image === "local") return `/radio-logos/${station.name}.jpg`;
+      return `/radio-logos/${station.image}`;
+    },
+  };
+});
 
 vi.mock("../../stores/library", () => ({
   stations: { subscribe: vi.fn() },

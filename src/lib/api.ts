@@ -160,7 +160,7 @@ export const ApiActions = {
 
   async checkYandexAuth(): Promise<boolean> {
     try {
-      const res = await YandexApi.request("status");
+      const res = await YandexApi.request("status") as { authorized: boolean };
       yandexAuthStatus.set(res.authorized);
       return res.authorized;
     } catch (e) {
@@ -212,7 +212,7 @@ export const ApiActions = {
   async syncYandexFavorites(): Promise<void> {
     if (!get(yandexAuthStatus)) return;
     try {
-      const res = await YandexApi.getFavoritesIds();
+      const res = await YandexApi.getFavoritesIds() as { ids?: (string | number)[] } | null;
       if (res && res.ids) {
         yandexFavorites.set(new Set(res.ids.map(String)));
         logger.log(`[API] Loaded ${res.ids.length} Yandex likes.`);

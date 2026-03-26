@@ -158,78 +158,80 @@
     emptyText="Queue is empty"
     onMoveItem={handleMoveTrack}
   >
-    <div slot="header" class="content-padded">
-      <div class="view-header">
-        <div class="header-art" style="background: var(--c-surface-active);">
-          <div class="header-icon-wrap">{@html ICONS.MENU}</div>
-        </div>
-
-        <div class="header-info">
-          <div class="header-text-group">
-            <div class="header-label">Now Playing</div>
-
-            <h1 class="header-title">
-              {#if $yandexState && $yandexState.active}
-                <span class="daemon-active">
-                  {$yandexState.context_name || "Yandex Stream"}
-                </span>
-              {:else}
-                Current Queue
-              {/if}
-            </h1>
-
-            <div class="meta-badges">
-              <span class="meta-tag">{$queue.length} tracks</span>
-              {#if headerTotalDuration}
-                <span class="meta-tag">{headerTotalDuration}</span>
-              {/if}
-
-              {#if $yandexState && $yandexState.active}
-                <span class="meta-tag active-badge">Daemon Active</span>
-              {/if}
-            </div>
+    {#snippet header()}
+      <div class="content-padded">
+        <div class="view-header">
+          <div class="header-art" style="background: var(--c-surface-active);">
+            <div class="header-icon-wrap">{@html ICONS.MENU}</div>
           </div>
 
-          <div class="header-actions">
-            {#if $yandexState && $yandexState.active}
-              <button class="btn-primary" onclick={stopDaemon}>
-                Stop Stream
-              </button>
-            {:else}
+          <div class="header-info">
+            <div class="header-text-group">
+              <div class="header-label">Now Playing</div>
+
+              <h1 class="header-title">
+                {#if $yandexState && $yandexState.active}
+                  <span class="daemon-active">
+                    {$yandexState.context_name || "Yandex Stream"}
+                  </span>
+                {:else}
+                  Current Queue
+                {/if}
+              </h1>
+
+              <div class="meta-badges">
+                <span class="meta-tag">{$queue.length} tracks</span>
+                {#if headerTotalDuration}
+                  <span class="meta-tag">{headerTotalDuration}</span>
+                {/if}
+
+                {#if $yandexState && $yandexState.active}
+                  <span class="meta-tag active-badge">Daemon Active</span>
+                {/if}
+              </div>
+            </div>
+
+            <div class="header-actions">
+              {#if $yandexState && $yandexState.active}
+                <button class="btn-primary" onclick={stopDaemon}>
+                  Stop Stream
+                </button>
+              {:else}
+                <button
+                  class="btn-secondary"
+                  onclick={handleClearQueue}
+                  title="Clear Queue"
+                  disabled={$queue.length === 0}
+                >
+                  Clear
+                </button>
+              {/if}
+
               <button
-                class="btn-secondary"
-                onclick={handleClearQueue}
-                title="Clear Queue"
+                class="btn-action"
+                onclick={handleSaveQueue}
+                title="Save Queue"
                 disabled={$queue.length === 0}
               >
-                Clear
+                {@html ICONS.SAVE}
               </button>
-            {/if}
 
-            <button
-              class="btn-action"
-              onclick={handleSaveQueue}
-              title="Save Queue"
-              disabled={$queue.length === 0}
-            >
-              {@html ICONS.SAVE}
-            </button>
-
-            <button
-              class="btn-action"
-              class:active={isEditMode}
-              onclick={toggleEditMode}
-              title={isEditMode ? "Finish Editing" : "Edit Queue"}
-              disabled={$queue.length === 0}
-            >
-              {@html isEditMode ? ICONS.ACCEPT : ICONS.EDIT}
-            </button>
+              <button
+                class="btn-action"
+                class:active={isEditMode}
+                onclick={toggleEditMode}
+                title={isEditMode ? "Finish Editing" : "Edit Queue"}
+                disabled={$queue.length === 0}
+              >
+                {@html isEditMode ? ICONS.ACCEPT : ICONS.EDIT}
+              </button>
+            </div>
           </div>
         </div>
       </div>
-    </div>
+    {/snippet}
 
-    <div slot="row" let:item let:index let:startDrag>
+    {#snippet row({ item, index, startDrag })}
       <TrackRow
         track={item}
         {index}
@@ -241,12 +243,12 @@
         onremove={() => handleRemove(index)}
         onstartdrag={startDrag}
       />
-    </div>
+    {/snippet}
   </BaseList>
 </div>
 
 <style>
-  @import "./MusicViews.css";
+
 
   .header-icon-wrap {
     width: 64px;

@@ -174,6 +174,13 @@ while (true) {
                 }
             }
 
+            // Cap buffer to avoid unbounded memory growth on Pi
+            if (count($buffer) > 300) {
+                $buffer = array_slice($buffer, 0, 300);
+                $state['queue_buffer'] = $buffer;
+                saveState($state);
+            }
+
             if (!empty($buffer)) {
                 $nextTrack = array_shift($buffer);
 

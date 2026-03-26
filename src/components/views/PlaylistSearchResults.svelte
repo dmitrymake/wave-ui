@@ -121,7 +121,6 @@
 {/if}
 
 <style>
-  @import "./MusicViews.css";
 
   .icon-wrap {
     width: 30%;

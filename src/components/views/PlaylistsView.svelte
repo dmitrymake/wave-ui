@@ -344,67 +344,69 @@
       emptyText="This playlist is empty."
       onMoveItem={handleMoveTrack}
     >
-      <div slot="header" class="content-padded">
-        <div class="view-header">
-          <div class="header-art" style={resolveHeaderStyle(currentView.data)}>
-            <div class="header-icon-wrap">
-              {@html isFavPlaylist ? ICONS.HEART_FILLED : ICONS.PLAYLISTS}
-            </div>
-          </div>
-
-          <div class="header-info">
-            <div class="header-text-group">
-              <div class="header-label">Playlist</div>
-              <h1 class="header-title" title={currentView.data.name}>
-                {currentView.data.name}
-              </h1>
-
-              <div class="meta-badges">
-                {#if $isLoadingTracks}
-                  <span class="meta-tag">Loading...</span>
-                {:else}
-                  <span class="meta-tag"
-                    >{$activePlaylistTracks.length} tracks</span
-                  >
-                  {#if headerTotalDuration}<span class="meta-tag"
-                      >{headerTotalDuration}</span
-                    >{/if}
-                  {#if headerQuality}<span class="meta-tag quality"
-                      >{headerQuality}</span
-                    >{/if}
-                {/if}
+      {#snippet header()}
+        <div class="content-padded">
+          <div class="view-header">
+            <div class="header-art" style={resolveHeaderStyle(currentView.data)}>
+              <div class="header-icon-wrap">
+                {@html isFavPlaylist ? ICONS.HEART_FILLED : ICONS.PLAYLISTS}
               </div>
             </div>
 
-            <div class="header-actions">
-              <button
-                class="btn-primary"
-                onclick={handlePlayAll}
-                disabled={pressedPlayAll}
-              >
-                {pressedPlayAll ? "Playing..." : "Play All"}
-              </button>
-              <button
-                class="btn-secondary"
-                onclick={handleAddToQueue}
-                disabled={pressedAddToQueue}
-              >
-                {pressedAddToQueue ? "Added" : "To Queue"}
-              </button>
-              <button
-                class="btn-action"
-                class:active={isEditMode}
-                title="Edit"
-                onclick={toggleEditMode}
-              >
-                {@html isEditMode ? ICONS.ACCEPT : ICONS.EDIT}
-              </button>
+            <div class="header-info">
+              <div class="header-text-group">
+                <div class="header-label">Playlist</div>
+                <h1 class="header-title" title={currentView.data.name}>
+                  {currentView.data.name}
+                </h1>
+
+                <div class="meta-badges">
+                  {#if $isLoadingTracks}
+                    <span class="meta-tag">Loading...</span>
+                  {:else}
+                    <span class="meta-tag"
+                      >{$activePlaylistTracks.length} tracks</span
+                    >
+                    {#if headerTotalDuration}<span class="meta-tag"
+                        >{headerTotalDuration}</span
+                      >{/if}
+                    {#if headerQuality}<span class="meta-tag quality"
+                        >{headerQuality}</span
+                      >{/if}
+                  {/if}
+                </div>
+              </div>
+
+              <div class="header-actions">
+                <button
+                  class="btn-primary"
+                  onclick={handlePlayAll}
+                  disabled={pressedPlayAll}
+                >
+                  {pressedPlayAll ? "Playing..." : "Play All"}
+                </button>
+                <button
+                  class="btn-secondary"
+                  onclick={handleAddToQueue}
+                  disabled={pressedAddToQueue}
+                >
+                  {pressedAddToQueue ? "Added" : "To Queue"}
+                </button>
+                <button
+                  class="btn-action"
+                  class:active={isEditMode}
+                  title="Edit"
+                  onclick={toggleEditMode}
+                >
+                  {@html isEditMode ? ICONS.ACCEPT : ICONS.EDIT}
+                </button>
+              </div>
             </div>
           </div>
         </div>
-      </div>
+      {/snippet}
 
-      <div slot="row" let:item let:index let:startDrag>
+      {#snippet row({ item, index, startDrag })}
         <TrackRow
           track={item}
           {index}
@@ -416,7 +418,7 @@
           onremove={() => handleRemoveTrack(index)}
           onstartdrag={startDrag}
         />
-      </div>
+      {/snippet}
     </BaseList>
   {:else if $isLoadingPlaylists}
     <div class="content-padded">
@@ -463,7 +465,6 @@
 </div>
 
 <style>
-  @import "./MusicViews.css";
 
   .header-icon-wrap {
     width: 64px;

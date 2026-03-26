@@ -100,12 +100,14 @@
           >
             {#if isFav}
               <div class="icon-wrap">{@html ICONS.HEART_FILLED}</div>
-            {:else}
+            {:else if pl.cover}
               <ImageLoader src={pl.cover} alt={pl.title} radius="8px">
-                <div slot="fallback" class="icon-fallback">
-                  {@html ICONS.PLAYLISTS}
-                </div>
+                {#snippet fallback()}
+                  <div class="icon-wrap">{@html ICONS.PLAYLISTS}</div>
+                {/snippet}
               </ImageLoader>
+            {:else}
+              <div class="icon-wrap">{@html ICONS.PLAYLISTS}</div>
             {/if}
             <div class="play-overlay">
               <span class="overlay-icon">{@html ICONS.PLAY}</span>
@@ -122,7 +124,6 @@
 {/if}
 
 <style>
-  @import "./MusicViews.css";
 
   .card-img-container.is-vibe {
     background: linear-gradient(135deg, #ffcc00, #ff3333);

@@ -70,7 +70,6 @@
 {/if}
 
 <style>
-  @import "./MusicViews.css";
 
   .card-title.center {
     text-align: center;

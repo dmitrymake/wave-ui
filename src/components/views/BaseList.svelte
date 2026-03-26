@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onDestroy, onMount, tick } from "svelte";
   import { fade } from "svelte/transition";
+  import type { Snippet } from "svelte";
   import Skeleton from "../Skeleton.svelte";
   import { createPlaylistDrag } from "../../lib/playlistDrag";
   import type { Writable } from "svelte/store";
@@ -13,12 +14,24 @@
     getScrollPosition,
   } from "../../lib/store";
 
-  let { itemsStore, isEditMode = false, isLoading = false, emptyText = "List is empty", onMoveItem = (from: number, to: number) => {} }: {
+  let {
+    itemsStore,
+    isEditMode = false,
+    isLoading = false,
+    emptyText = "List is empty",
+    onMoveItem = (from: number, to: number) => {},
+    row,
+    header,
+    footer,
+  }: {
     itemsStore: Writable<Track[]>;
     isEditMode?: boolean;
     isLoading?: boolean;
     emptyText?: string;
     onMoveItem?: (from: number, to: number) => void;
+    row?: Snippet<[{ item: Track; index: number; isGhost: boolean; startDrag: (e: MouseEvent | TouchEvent) => void }]>;
+    header?: Snippet;
+    footer?: Snippet;
   } = $props();
 
   let scrollKey = $state("");
@@ -125,13 +138,9 @@
         "
     >
       <div style="pointer-events: none; width: 100%; height: 100%;">
-        <slot
-          name="row"
-          item={$draggedItemData}
-          index={$draggingIndex}
-          isGhost={true}
-          startDrag={() => {}}
-        />
+        {#if row}
+          {@render row({ item: $draggedItemData, index: $draggingIndex, isGhost: true, startDrag: () => {} })}
+        {/if}
       </div>
     </div>
   {/if}
@@ -141,7 +150,9 @@
     bind:this={refs.listBodyContainer}
     in:fade={{ duration: 200 }}
   >
-    <slot name="header"></slot>
+    {#if header}
+      {@render header()}
+    {/if}
 
     {#if isLoading}
       <div class="skeletons-wrapper">
@@ -200,13 +211,9 @@
             $isReordering,
           )}
         >
-          <slot
-            name="row"
-            {item}
-            index={i}
-            isGhost={false}
-            startDrag={(e) => startDrag(e, i, item)}
-          />
+          {#if row}
+            {@render row({ item, index: i, isGhost: false, startDrag: (e) => startDrag(e, i, item) })}
+          {/if}
         </div>
       {/each}
 
@@ -216,13 +223,15 @@
         </div>
       {/if}
 
-      <slot name="footer"></slot>
+      {#if footer}
+        {@render footer()}
+      {/if}
     {/if}
   </div>
 </div>
 
 <style>
-  @import "./MusicViews.css";
+
 
   .skeletons-wrapper {
     padding: 0 16px;

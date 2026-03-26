@@ -570,48 +570,51 @@
         isEditMode={false}
         emptyText="No tracks found"
       >
-        <div slot="header" class="content-padded">
-          <YandexContentHeader
-            headerData={currentView?.data}
-            {viewMode}
-            {isLoading}
-            tracksCount={$tracksStore.length}
-            {albumsStore}
-            onPlayAll={playAll}
-            onAddAllToQueue={addAllToQueue}
-            onPlayVibe={(type) => playVibe(type)}
-            onOpenAlbum={(album) => openAlbum(album)}
-          />
-
-          {#if viewMode === "search"}
-            <YandexSearchResults
-              {searchResults}
+        {#snippet header()}
+          <div class="content-padded">
+            <YandexContentHeader
+              headerData={currentView?.data}
+              {viewMode}
               {isLoading}
-              onOpenArtist={(artist) => openArtist(artist)}
+              tracksCount={$tracksStore.length}
+              {albumsStore}
+              onPlayAll={playAll}
+              onAddAllToQueue={addAllToQueue}
+              onPlayVibe={(type) => playVibe(type)}
               onOpenAlbum={(album) => openAlbum(album)}
             />
-          {/if}
-        </div>
 
-        <div slot="row" let:item let:index>
+            {#if viewMode === "search"}
+              <YandexSearchResults
+                {searchResults}
+                {isLoading}
+                onOpenArtist={(artist) => openArtist(artist)}
+                onOpenAlbum={(album) => openAlbum(album)}
+              />
+            {/if}
+          </div>
+        {/snippet}
+
+        {#snippet row({ item, index })}
           <TrackRow
             track={item}
             {index}
             onplay={() => YandexApi.playTrack(item.id)}
           />
-        </div>
+        {/snippet}
 
-        <div slot="footer" class="loading-footer">
-          {#if isLoadingMore}<div class="spinner"></div>{/if}
-          <div bind:this={loadMoreSentinel} style="height:20px;"></div>
-        </div>
+        {#snippet footer()}
+          <div class="loading-footer">
+            {#if isLoadingMore}<div class="spinner"></div>{/if}
+            <div bind:this={loadMoreSentinel} style="height:20px;"></div>
+          </div>
+        {/snippet}
       </BaseList>
     {/if}
   {/if}
 </div>
 
 <style>
-  @import "./MusicViews.css";
 
   .relative-parent {
     position: relative;

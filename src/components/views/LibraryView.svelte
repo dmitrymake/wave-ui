@@ -287,89 +287,93 @@
       isEditMode={false}
       emptyText="No tracks found"
     >
-      <div slot="header" class="content-padded">
-        <div class="view-header">
-          <div class="header-art">
-            <div style="width: 100%; height: 100%;">
-              <ImageLoader
-                src={getTrackCoverUrl(headerItem)}
-                alt="Art"
-                radius="8px"
-              >
-                <div slot="fallback" class="icon-fallback">
-                  {@html ICONS.ALBUMS}
-                </div>
-              </ImageLoader>
-            </div>
-          </div>
-
-          <div class="header-info">
-            <div class="header-text-group">
-              <div class="header-label">
-                {currentView.view === "albums_by_artist" ? "Artist" : "Album"}
+      {#snippet header()}
+        <div class="content-padded">
+          <div class="view-header">
+            <div class="header-art">
+              <div style="width: 100%; height: 100%;">
+                <ImageLoader
+                  src={getTrackCoverUrl(headerItem)}
+                  alt="Art"
+                  radius="8px"
+                >
+                  {#snippet fallback()}
+                    <div class="icon-fallback">
+                      {@html ICONS.ALBUMS}
+                    </div>
+                  {/snippet}
+                </ImageLoader>
               </div>
-              <h1
-                class="header-title"
-                title={currentView.data.name || currentView.data.displayName}
-              >
-                {currentView.data.name ||
-                  currentView.data.displayName ||
-                  "Unknown"}
-              </h1>
+            </div>
 
-              {#if headerItem && headerItem.artist}
-                <div class="header-subtitle-row">
-                  <h2 class="header-sub-text">
-                    {headerItem.artist}
-                  </h2>
-                  {#if headerSubtitle && headerSubtitle !== "0"}
-                    <span class="meta-tag">{headerSubtitle}</span>
+            <div class="header-info">
+              <div class="header-text-group">
+                <div class="header-label">
+                  {currentView.view === "albums_by_artist" ? "Artist" : "Album"}
+                </div>
+                <h1
+                  class="header-title"
+                  title={currentView.data.name || currentView.data.displayName}
+                >
+                  {currentView.data.name ||
+                    currentView.data.displayName ||
+                    "Unknown"}
+                </h1>
+
+                {#if headerItem && headerItem.artist}
+                  <div class="header-subtitle-row">
+                    <h2 class="header-sub-text">
+                      {headerItem.artist}
+                    </h2>
+                    {#if headerSubtitle && headerSubtitle !== "0"}
+                      <span class="meta-tag">{headerSubtitle}</span>
+                    {/if}
+                  </div>
+                {/if}
+
+                <div class="meta-badges">
+                  {#if trackCount > 0}
+                    <span class="meta-tag">{trackCount} tracks</span>
+                  {/if}
+                  {#if headerTotalDuration}
+                    <span class="meta-tag">{headerTotalDuration}</span>
+                  {/if}
+                  {#if headerQuality}
+                    <span class="meta-tag quality">{headerQuality}</span>
                   {/if}
                 </div>
-              {/if}
-
-              <div class="meta-badges">
-                {#if trackCount > 0}
-                  <span class="meta-tag">{trackCount} tracks</span>
-                {/if}
-                {#if headerTotalDuration}
-                  <span class="meta-tag">{headerTotalDuration}</span>
-                {/if}
-                {#if headerQuality}
-                  <span class="meta-tag quality">{headerQuality}</span>
-                {/if}
               </div>
-            </div>
 
-            <div class="header-actions">
-              <button
-                class="btn-primary"
-                onclick={handlePlayAll}
-                disabled={pressedPlayAll}
-              >
-                {pressedPlayAll ? "Playing..." : "Play All"}
-              </button>
+              <div class="header-actions">
+                <button
+                  class="btn-primary"
+                  onclick={handlePlayAll}
+                  disabled={pressedPlayAll}
+                >
+                  {pressedPlayAll ? "Playing..." : "Play All"}
+                </button>
 
-              <button
-                class="btn-secondary"
-                onclick={handleAddToQueue}
-                disabled={pressedAddToQueue}
-              >
-                {pressedAddToQueue ? "Added" : "To Queue"}
-              </button>
+                <button
+                  class="btn-secondary"
+                  onclick={handleAddToQueue}
+                  disabled={pressedAddToQueue}
+                >
+                  {pressedAddToQueue ? "Added" : "To Queue"}
+                </button>
+              </div>
             </div>
           </div>
         </div>
-      </div>
+      {/snippet}
 
-      <div slot="row" let:item let:index>
+      {#snippet row({ item, index })}
         <TrackRow
           track={item}
           {index}
           isEditable={false}
           onplay={() => MPD.playTrackOptimistic(item)}
         />
-      </div>
+      {/snippet}
     </BaseList>
   {:else}
     <div class="content-padded">
@@ -458,13 +462,15 @@
                     alt={item.displayName}
                     radius="8px"
                   >
-                    <div slot="fallback" class="icon-fallback">
-                      {#if activeCategory === "artists"}
-                        {@html ICONS.ARTISTS}
-                      {:else}
-                        {@html ICONS.ALBUMS}
-                      {/if}
-                    </div>
+                    {#snippet fallback()}
+                      <div class="icon-fallback">
+                        {#if activeCategory === "artists"}
+                          {@html ICONS.ARTISTS}
+                        {:else}
+                          {@html ICONS.ALBUMS}
+                        {/if}
+                      </div>
+                    {/snippet}
                   </ImageLoader>
 
                   <div class="play-overlay">
@@ -500,7 +506,7 @@
 </div>
 
 <style>
-  @import "./MusicViews.css";
+
   @import "../../styles/SortMenu.css";
 
   .music-card.skeleton-card .card-img-container {

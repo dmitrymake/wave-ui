@@ -84,9 +84,11 @@
             alt={headerData.title}
             radius="8px"
           >
-            <div slot="fallback" class="icon-fallback">
-              {@html ICONS.ALBUMS}
-            </div>
+            {#snippet fallback()}
+              <div class="icon-fallback">
+                {@html ICONS.ALBUMS}
+              </div>
+            {/snippet}
           </ImageLoader>
         {/if}
       </div>
@@ -170,7 +172,6 @@
 {/if}
 
 <style>
-  @import "./MusicViews.css";
 
   .icon-wrap {
     width: 100%;

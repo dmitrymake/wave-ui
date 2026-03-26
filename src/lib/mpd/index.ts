@@ -35,7 +35,6 @@ export const {
 
 export const {
   syncLibrary,
-  loadRadioStations,
   loadPlaylists,
   openPlaylistDetails,
   createEmptyPlaylist,
@@ -81,7 +80,6 @@ export function playStation(station: Station | null): void {
 
   selectedStationName.set(station.name);
   const streamUrl =
-    (station as Record<string, unknown>)[1] as string | undefined ||
     station.station ||
     station.file ||
     station.url;

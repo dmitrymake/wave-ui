@@ -3,6 +3,7 @@ const isDev: boolean = import.meta.env.DEV;
 interface Config {
   DEFAULT_IP: string;
   readonly MOODE_IP: string;
+  readonly WS_PORT: string;
   setMoodeIp(ip: string): void;
 }
 
@@ -12,6 +13,10 @@ export const CONFIG: Config = {
     : typeof window !== "undefined"
       ? window.location.hostname
       : "localhost",
+
+  get WS_PORT(): string {
+    return "8080";
+  },
 
   get MOODE_IP(): string {
     try {

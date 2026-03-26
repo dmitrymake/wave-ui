@@ -1,5 +1,6 @@
 <script lang="ts">
   import { fade } from "svelte/transition";
+  import type { Snippet } from "svelte";
   import Skeleton from "./Skeleton.svelte";
 
   interface Props {
@@ -7,9 +8,10 @@
     alt?: string;
     radius?: string;
     onError?: (e: Event) => void;
+    fallback?: Snippet;
   }
 
-  let { src, alt = "", radius = "0px", onError: onErrorCallback }: Props = $props();
+  let { src, alt = "", radius = "0px", onError: onErrorCallback, fallback }: Props = $props();
 
   let status = $state<"loading" | "loaded" | "error">("loading");
 
@@ -48,7 +50,9 @@
   {/if}
 
   {#if status === "error"}
-    <slot name="fallback" />
+    {#if fallback}
+      {@render fallback()}
+    {/if}
   {/if}
 </div>
 

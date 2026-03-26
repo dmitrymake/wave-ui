@@ -79,7 +79,7 @@ export function getTrackCoverUrl(
 
   if (isRadioTrack(track.file) || track.genre === "Radio") {
     if (track.image) {
-      return getStationImageUrl(track as Pick<Station, "name" | "image">) || "/images/radio_placeholder.png";
+      return getStationImageUrl({ name: track.stationName || track.title, image: track.image! } as Pick<Station, "name" | "image">) || "/images/radio_placeholder.png";
     }
     return (
       resolveRadioImage(track, stationList, selectedRadioName) ||
@@ -111,7 +111,7 @@ export function getTrackThumbUrl(
       track.genre === "Radio")
   ) {
     if (track.image) {
-      return getStationImageUrl(track as Pick<Station, "name" | "image">) || "/images/radio_icon.png";
+      return getStationImageUrl({ name: track.stationName || track.title, image: track.image! } as Pick<Station, "name" | "image">) || "/images/radio_icon.png";
     }
     return (
       resolveRadioImage(track, stationList, selectedRadioName) ||

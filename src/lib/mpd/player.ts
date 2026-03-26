@@ -32,6 +32,20 @@ let forceHardSync: boolean = false;
 let ignoreUpdatesUntil: number = 0;
 let queueUnlockTimer: ReturnType<typeof setTimeout> | null = null;
 
+const STREAM_CACHE_MAX = 300;
+const STREAM_CACHE_TRIM_TO = 200;
+
+function trimStreamCache(cache: Record<string, YandexTrack & { file: string }>): Record<string, YandexTrack & { file: string }> {
+  const keys = Object.keys(cache);
+  if (keys.length <= STREAM_CACHE_MAX) return cache;
+  const trimmed: Record<string, YandexTrack & { file: string }> = {};
+  const keep = keys.slice(-STREAM_CACHE_TRIM_TO);
+  for (const k of keep) {
+    trimmed[k] = cache[k];
+  }
+  return trimmed;
+}
+
 function escapePath(str: string | null | undefined): string {
   if (!str) return "";
   return String(str)
@@ -201,22 +215,39 @@ async function fetchYandexMetaForTrack(url: string): Promise<void> {
 
   const meta = await ApiActions.getYandexMeta(url);
   if (meta) {
+    const cacheEntry = {
+      id: String(meta.id ?? ""),
+      title: String(meta.title ?? ""),
+      artist: String(meta.artist ?? ""),
+      album: meta.album as string | undefined,
+      image: meta.image as string | undefined,
+      time: meta.time as number | undefined,
+      isYandex: true as const,
+      file: url,
+    };
     yandexContext.update((ctx) => {
       const newCache = { ...ctx.streamCache };
-      newCache[url] = { ...meta, isYandex: true as const, file: url };
+      newCache[url] = cacheEntry;
       if (meta.id) {
-        newCache[String(meta.id)] = { ...meta, isYandex: true as const, file: url };
+        newCache[String(meta.id)] = cacheEntry;
       }
-      return { ...ctx, streamCache: newCache };
+      return { ...ctx, streamCache: trimStreamCache(newCache) };
     });
 
     const song: CurrentSong = get(currentSong);
     if (song.file === url) {
-      currentSong.update((s) => ({ ...s, ...meta, isYandex: true }));
+      currentSong.update((s) => ({
+        ...s,
+        title: cacheEntry.title,
+        artist: cacheEntry.artist,
+        album: cacheEntry.album || s.album,
+        image: cacheEntry.image,
+        isYandex: true,
+      }));
 
       status.update((s) => {
-        if (meta.time && (s.duration === 0 || isNaN(s.duration))) {
-          return { ...s, duration: parseFloat(String(meta.time)) };
+        if (cacheEntry.time && (s.duration === 0 || isNaN(s.duration))) {
+          return { ...s, duration: cacheEntry.time };
         }
         return s;
       });
@@ -225,7 +256,15 @@ async function fetchYandexMetaForTrack(url: string): Promise<void> {
     queue.update((q) =>
       q.map((t) => {
         if (t.file === url)
-          return { ...t, ...meta, isYandex: true, time: meta.time || t.time };
+          return {
+            ...t,
+            title: cacheEntry.title || t.title,
+            artist: cacheEntry.artist || t.artist,
+            album: cacheEntry.album || t.album,
+            image: cacheEntry.image,
+            isYandex: true,
+            time: cacheEntry.time || t.time,
+          };
         return t;
       }),
     );
@@ -251,7 +290,7 @@ function enrichWithYandexMeta(
   if (yMeta) {
     serverSong.title = yMeta.title;
     serverSong.artist = yMeta.artist;
-    serverSong.album = yMeta.album;
+    serverSong.album = yMeta.album || serverSong.album;
     serverSong.image = yMeta.image;
     serverSong.isYandex = true;
     serverSong.id = String(yMeta.id);
@@ -414,6 +453,20 @@ async function sendTracksInChunks(tracks: Track[], playAfter: boolean = false): 
   }
 }
 
+function applyOptimisticTrack(track: Track): void {
+  currentSong.update((s) => ({
+    ...s,
+    title: track.title,
+    artist: track.artist,
+    album: track.album,
+    file: track.file,
+    image: track.image,
+    isYandex: track.isYandex,
+    id: track.id,
+    stationName: track.stationName,
+  }));
+}
+
 export const PlayerActions = {
   async togglePlay(): Promise<void> {
     const s: MpdStatus = get(status);
@@ -431,8 +484,17 @@ export const PlayerActions = {
 
   async next(): Promise<void> {
     forceHardSync = true;
-    ignoreUpdatesUntil = performance.now() + 1000;
-    currentSong.update((s) => ({ ...s, title: "Loading...", artist: "" }));
+    const s: MpdStatus = get(status);
+    const q: Track[] = get(queue);
+    const nextPos = s.song + 1;
+
+    if (nextPos < q.length && q[nextPos].title) {
+      applyOptimisticTrack(q[nextPos]);
+    } else {
+      currentSong.update((s) => ({ ...s, title: "Loading...", artist: "" }));
+    }
+
+    ignoreUpdatesUntil = performance.now() + 600;
     status.update((s) => ({ ...s, elapsed: 0 }));
     stopTicker();
     await mpdClient.send("next");
@@ -441,8 +503,17 @@ export const PlayerActions = {
 
   async previous(): Promise<void> {
     forceHardSync = true;
-    ignoreUpdatesUntil = performance.now() + 1000;
-    currentSong.update((s) => ({ ...s, title: "Loading...", artist: "" }));
+    const s: MpdStatus = get(status);
+    const q: Track[] = get(queue);
+    const prevPos = s.song - 1;
+
+    if (prevPos >= 0 && q[prevPos] && q[prevPos].title) {
+      applyOptimisticTrack(q[prevPos]);
+    } else {
+      currentSong.update((s) => ({ ...s, title: "Loading...", artist: "" }));
+    }
+
+    ignoreUpdatesUntil = performance.now() + 600;
     status.update((s) => ({ ...s, elapsed: 0 }));
     stopTicker();
     await mpdClient.send("previous");

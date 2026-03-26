@@ -276,7 +276,6 @@
 </div>
 
 <style>
-  @import "../views/MusicViews.css";
 
   .header-title.big {
     font-size: 32px;
