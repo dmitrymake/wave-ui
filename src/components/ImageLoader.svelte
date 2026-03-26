@@ -13,12 +13,15 @@
 
   let { src, alt = "", radius = "0px", onError: onErrorCallback, fallback }: Props = $props();
 
-  let status = $state<"loading" | "loaded" | "error">("loading");
+  let status = $state<"loading" | "loaded" | "error">(src ? "loading" : "error");
+  let lastSrc = src;
 
-  // reset on src change
+  // reset only when src actually changes, not on initial mount
   $effect(() => {
-    if (src) status = "loading";
-    else status = "error";
+    if (src !== lastSrc) {
+      lastSrc = src;
+      status = src ? "loading" : "error";
+    }
   });
 
   function onLoad() {

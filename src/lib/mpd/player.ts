@@ -105,7 +105,10 @@ async function refreshStatus(): Promise<void> {
 
 function getYandexIdFromUrl(url: string | null | undefined): string | null {
   if (!url) return null;
-  let match: RegExpMatchArray | null = url.match(/[?&]track-id=([^&]+)/);
+  // Local cached file: /dev/shm/yandex_music/tracks/{id}.{ext}
+  let match: RegExpMatchArray | null = url.match(/\/tracks\/(\d+)\.\w+/);
+  if (match) return match[1];
+  match = url.match(/[?&]track-id=([^&]+)/);
   if (match) return match[1];
   match = url.match(/[?&]id=([^&]+)/);
   if (match) return match[1];
@@ -143,7 +146,8 @@ async function syncQueue(newVersion: number): Promise<void> {
         fileUrl.includes("yandex.net") ||
         fileUrl.includes("get-mp3") ||
         fileUrl.startsWith("yandex:") ||
-        fileUrl.includes("storage.yandex.net");
+        fileUrl.includes("storage.yandex.net") ||
+        fileUrl.includes("/dev/shm/yandex_music/tracks/");
 
       if (isYandex && yCtx.streamCache) {
         let yMeta = yCtx.streamCache[fileUrl];
@@ -299,7 +303,8 @@ function enrichWithYandexMeta(
     }
   } else if (
     serverSong.file.includes("yandex.net") ||
-    serverSong.file.includes("get-mp3")
+    serverSong.file.includes("get-mp3") ||
+    serverSong.file.includes("/dev/shm/yandex_music/tracks/")
   ) {
     fetchYandexMetaForTrack(serverSong.file);
   }

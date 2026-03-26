@@ -3,12 +3,15 @@ define('INC', '/var/www/inc');
 require_once INC . '/yandex-music.php';
 
 define('STORAGE_DIR', '/dev/shm/yandex_music/');
+define('TRACKS_DIR', STORAGE_DIR . 'tracks/');
 define('STATE_FILE', STORAGE_DIR . 'state.json');
 define('META_CACHE_FILE', STORAGE_DIR . 'meta_cache.json');
 define('TOKEN_FILE', '/var/local/www/yandex_token.dat');
 define('LOG_FILE', '/dev/shm/wave_daemon.log');
+define('MAX_CACHED_FILES', 12);
 
 if (!is_dir(STORAGE_DIR)) @mkdir(STORAGE_DIR, 0777, true);
+if (!is_dir(TRACKS_DIR)) @mkdir(TRACKS_DIR, 0777, true);
 
 $pollInterval = 2;
 
@@ -78,6 +81,123 @@ function updateMetaCache($url, $track) {
     file_put_contents(META_CACHE_FILE, json_encode($cache));
 }
 
+/**
+ * Download MP3 from Yandex CDN to RAM (/dev/shm).
+ * Returns local file path on success, null on failure.
+ */
+function downloadTrack($url, $trackId, $codec = 'mp3') {
+    $ext = $codec === 'aac' ? 'aac' : ($codec === 'flac' ? 'flac' : 'mp3');
+    $localPath = TRACKS_DIR . $trackId . '.' . $ext;
+
+    // Already cached
+    if (file_exists($localPath) && filesize($localPath) > 0) {
+        return $localPath;
+    }
+
+    $ch = curl_init($url);
+    $fp = fopen($localPath, 'w');
+    if (!$fp) return null;
+
+    curl_setopt_array($ch, [
+        CURLOPT_FILE => $fp,
+        CURLOPT_FOLLOWLOCATION => true,
+        CURLOPT_TIMEOUT => 30,
+        CURLOPT_CONNECTTIMEOUT => 10,
+        CURLOPT_FAILONERROR => true,
+        CURLOPT_USERAGENT => 'Yandex-Music-API',
+    ]);
+
+    $ok = curl_exec($ch);
+    $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    curl_close($ch);
+    fclose($fp);
+
+    if (!$ok || $httpCode !== 200 || filesize($localPath) === 0) {
+        @unlink($localPath);
+        return null;
+    }
+
+    return $localPath;
+}
+
+/**
+ * Get set of track files currently in MPD queue.
+ */
+function getMpdQueueFiles() {
+    $raw = mpdSend("playlistinfo");
+    $files = [];
+    foreach (explode("\n", $raw) as $line) {
+        if (strpos($line, 'file: ') === 0) {
+            $files[] = trim(substr($line, 6));
+        }
+    }
+    return $files;
+}
+
+/**
+ * Remove cached MP3 files that are no longer in the MPD queue.
+ * Keeps files within MAX_CACHED_FILES limit.
+ */
+function cleanupCachedTracks() {
+    $queueFiles = getMpdQueueFiles();
+
+    // Collect local paths that are still referenced by MPD
+    $activeFiles = [];
+    foreach ($queueFiles as $f) {
+        if (strpos($f, TRACKS_DIR) === 0 || strpos($f, 'file://' . TRACKS_DIR) === 0) {
+            $activeFiles[] = str_replace('file://', '', $f);
+        }
+    }
+
+    $cached = glob(TRACKS_DIR . '*.*');
+    if (!$cached) return;
+
+    // Remove files not in MPD queue
+    $removed = 0;
+    foreach ($cached as $file) {
+        if (!in_array($file, $activeFiles)) {
+            @unlink($file);
+            $removed++;
+        }
+    }
+
+    // Safety net: if still over limit, remove oldest by mtime
+    $cached = glob(TRACKS_DIR . '*.*');
+    if ($cached && count($cached) > MAX_CACHED_FILES) {
+        usort($cached, function($a, $b) {
+            return filemtime($a) - filemtime($b);
+        });
+        while (count($cached) > MAX_CACHED_FILES) {
+            @unlink(array_shift($cached));
+            $removed++;
+        }
+    }
+
+    if ($removed > 0) {
+        logMsg("Cleanup: removed $removed cached files");
+    }
+}
+
+/**
+ * Wipe all cached tracks (used when daemon stops).
+ */
+function clearAllCachedTracks() {
+    $files = glob(TRACKS_DIR . '*.*');
+    if ($files) {
+        foreach ($files as $f) @unlink($f);
+        logMsg("Cleared all cached tracks");
+    }
+}
+
+/**
+ * Check if a file path belongs to Yandex (remote URL or local cache).
+ */
+function isYandexFile($file) {
+    return strpos($file, 'yandex') !== false
+        || strpos($file, 'get-mp3') !== false
+        || strpos($file, TRACKS_DIR) === 0;
+}
+
 logMsg("Daemon Started");
 
 $api = null;
@@ -108,12 +228,10 @@ while (true) {
         $currentFile = $mpdStatus['file'] ?? '';
         $stateStr = $mpdStatus['state'] ?? 'stop';
 
-        if ($stateStr === 'play' && !empty($currentFile)
-            && strpos($currentFile, 'yandex') === false
-            && strpos($currentFile, 'get-mp3') === false) {
-
+        if ($stateStr === 'play' && !empty($currentFile) && !isYandexFile($currentFile)) {
             $state['active'] = false;
             saveState($state);
+            clearAllCachedTracks();
             logMsg("External track detected. Daemon paused.");
             sleep(2);
             continue;
@@ -133,6 +251,10 @@ while (true) {
                 mpdSend("delete 0");
             }
             logMsg("Cleaned $toDelete old tracks from queue");
+
+            // Clean up cached files that were removed from queue
+            cleanupCachedTracks();
+
             $mpdStatus = getMpdStatus();
             $playlistLen = intval($mpdStatus['playlistlength'] ?? 0);
             $currentPos = intval($mpdStatus['song'] ?? -1);
@@ -192,19 +314,30 @@ while (true) {
                         continue;
                     }
 
-                    $url = $api->getDirectLink($nextTrack['id']);
+                    $linkInfo = $api->getDirectLinkInfo($nextTrack['id']);
+                    $url = $linkInfo ? $linkInfo['url'] : null;
+                    $codec = $linkInfo ? ($linkInfo['codec'] ?? 'mp3') : 'mp3';
 
                     if ($url) {
                         updateMetaCache($url, $nextTrack);
 
                         $checkState = getState();
                         if (empty($checkState['active'])) {
-                            logMsg("Daemon stopped before MPD Add. Aborting.");
+                            logMsg("Daemon stopped before download. Aborting.");
                             continue;
                         }
 
-                        mpdSend("add \"$url\"");
-                        logMsg("Added: " . $nextTrack['title']);
+                        // Download track to RAM, fall back to remote URL on failure
+                        $localPath = downloadTrack($url, $nextTrack['id'], $codec);
+                        if ($localPath) {
+                            // Also cache meta under local path for client lookup
+                            updateMetaCache($localPath, $nextTrack);
+                            mpdSend('add "file://' . $localPath . '"');
+                            logMsg("Added (cached): " . $nextTrack['title']);
+                        } else {
+                            mpdSend("add \"$url\"");
+                            logMsg("Added (stream): " . $nextTrack['title']);
+                        }
 
                         if (!isset($state['played_history'])) $state['played_history'] = [];
                         $state['played_history'][] = (string)$nextTrack['id'];
@@ -226,6 +359,12 @@ while (true) {
                     saveState($currentState);
                 }
             }
+        }
+    } else {
+        // Daemon inactive — clean up any leftover cached tracks
+        $cached = glob(TRACKS_DIR . '*.*');
+        if ($cached && count($cached) > 0) {
+            clearAllCachedTracks();
         }
     }
 

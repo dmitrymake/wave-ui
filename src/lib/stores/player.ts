@@ -43,7 +43,7 @@ export const isQueueLocked = writable<boolean>(false);
 
 function isRadioTrack(file: string): boolean {
   if (!file) return false;
-  if (file.includes("yandex.net") || file.includes("get-mp3")) return false;
+  if (file.includes("yandex.net") || file.includes("get-mp3") || file.includes("/dev/shm/yandex_music/tracks/")) return false;
   return isRemoteUrl(file) || file.includes("RADIO");
 }
 

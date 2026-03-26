@@ -111,26 +111,41 @@ class YandexMusic {
         return $tracks;
     }
 
-    public function getDirectLink($trackId) {
+    /**
+     * Returns ['url' => string, 'codec' => string] or null.
+     */
+    public function getDirectLinkInfo($trackId) {
         if (!$trackId) return null;
-        
+
         $data = $this->request("/tracks/{$trackId}/download-info");
         if (empty($data['result'][0]['downloadInfoUrl'])) return null;
 
         usort($data['result'], function($a, $b) {
             return ($b['bitrateInKbps'] ?? 0) - ($a['bitrateInKbps'] ?? 0);
         });
-        
-        $infoUrl = $data['result'][0]['downloadInfoUrl'];
+
+        $best = $data['result'][0];
+        $codec = $best['codec'] ?? 'mp3';
+        $infoUrl = $best['downloadInfoUrl'];
         $xml = $this->request($infoUrl, null, true);
-        
+
         if (!preg_match('/<host>(.*?)<\/host>/', $xml, $host)) return null;
         if (!preg_match('/<path>(.*?)<\/path>/', $xml, $path)) return null;
         if (!preg_match('/<ts>(.*?)<\/ts>/', $xml, $ts)) return null;
         if (!preg_match('/<s>(.*?)<\/s>/', $xml, $s)) return null;
 
         $sign = md5($this->salt . substr($path[1], 1) . $s[1]);
-        return "https://{$host[1]}/get-mp3/{$sign}/{$ts[1]}{$path[1]}";
+        $url = "https://{$host[1]}/get-mp3/{$sign}/{$ts[1]}{$path[1]}";
+
+        return ['url' => $url, 'codec' => $codec];
+    }
+
+    /**
+     * Returns stream URL string or null (back-compat wrapper).
+     */
+    public function getDirectLink($trackId) {
+        $info = $this->getDirectLinkInfo($trackId);
+        return $info ? $info['url'] : null;
     }
 
     public function search($text, $type = 'all', $page = 0) {
