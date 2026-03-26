@@ -427,13 +427,13 @@
               <div class="card-img-container">
                 <Skeleton width="100%" height="100%" radius="8px" />
               </div>
-              <div class="card-title" style="margin-top: 12px;">
-                <Skeleton width="80%" height="14px" radius="4px" />
+              <div style="margin-top: 12px; margin-bottom: 4px;">
+                <Skeleton width="80%" height="15px" radius="4px" />
               </div>
-              <div class="card-sub-row" style="margin-top: 6px;">
+              <div>
                 <Skeleton
                   width="50%"
-                  height="12px"
+                  height="13px"
                   radius="4px"
                   style="opacity: 0.6"
                 />

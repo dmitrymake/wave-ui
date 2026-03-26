@@ -426,10 +426,13 @@
         {#each Array(8) as _}
           <div class="music-card skeleton-card">
             <div class="card-img-container">
-              <Skeleton width="100%" height="100%" radius="12px" />
+              <Skeleton width="100%" height="100%" radius="8px" />
             </div>
-            <div style="margin-top: 8px;">
-              <Skeleton width="60%" height="16px" radius="4px" />
+            <div style="margin-bottom: 4px;">
+              <Skeleton width="60%" height="15px" radius="4px" />
+            </div>
+            <div>
+              <Skeleton width="40%" height="13px" radius="4px" style="opacity: 0.6" />
             </div>
           </div>
         {/each}

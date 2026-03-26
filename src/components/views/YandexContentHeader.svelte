@@ -50,16 +50,16 @@
         <Skeleton
           width="100px"
           height="14px"
-          style="margin-bottom:8px"
+          style="margin-bottom:6px"
         />
         <Skeleton
           width="80%"
-          height="28px"
+          height="40px"
           style="margin-bottom:8px"
         />
         <Skeleton
           width="60%"
-          height="16px"
+          height="20px"
           style="margin-bottom:16px"
         />
         <div class="header-actions">

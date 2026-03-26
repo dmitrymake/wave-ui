@@ -27,11 +27,15 @@
   <div class="music-grid horizontal section-mb">
     {#each Array(4) as _}
       <div class="music-card">
-        <Skeleton
-          width="100%"
-          style="aspect-ratio: 1; border-radius: 8px; margin-bottom: 8px;"
-        />
-        <Skeleton width="80%" height="16px" />
+        <div class="card-img-container">
+          <Skeleton width="100%" height="100%" radius="8px" />
+        </div>
+        <div style="margin-bottom: 4px;">
+          <Skeleton width="80%" height="15px" radius="4px" />
+        </div>
+        <div>
+          <Skeleton width="40%" height="13px" radius="4px" style="opacity: 0.6" />
+        </div>
       </div>
     {/each}
   </div>
@@ -39,11 +43,15 @@
   <div class="music-grid horizontal section-mb">
     {#each Array(4) as _}
       <div class="music-card">
-        <Skeleton
-          width="100%"
-          style="aspect-ratio: 1; border-radius: 8px; margin-bottom: 8px;"
-        />
-        <Skeleton width="80%" height="16px" />
+        <div class="card-img-container">
+          <Skeleton width="100%" height="100%" radius="8px" />
+        </div>
+        <div style="margin-bottom: 4px;">
+          <Skeleton width="80%" height="15px" radius="4px" />
+        </div>
+        <div>
+          <Skeleton width="40%" height="13px" radius="4px" style="opacity: 0.6" />
+        </div>
       </div>
     {/each}
   </div>

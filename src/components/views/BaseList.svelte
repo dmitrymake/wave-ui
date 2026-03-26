@@ -176,20 +176,20 @@
             <div class="sk-info">
               <Skeleton
                 width="40%"
-                height="14px"
+                height="15px"
                 radius="4px"
-                style="margin-bottom: 6px;"
+                style="margin-bottom: 4px;"
               />
               <Skeleton
                 width="25%"
-                height="12px"
+                height="13px"
                 radius="4px"
                 style="opacity: 0.6"
               />
             </div>
 
             <div class="sk-right">
-              <Skeleton width="30px" height="12px" radius="4px" />
+              <Skeleton width="30px" height="13px" radius="4px" />
             </div>
           </div>
         {/each}

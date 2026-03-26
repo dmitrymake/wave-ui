@@ -179,7 +179,7 @@
       {:else if track.file && !isYandexTrack}
         <div class="title text-ellipsis">{track.file.split("/").pop()}</div>
       {:else}
-        <Skeleton width="60%" height="16px" radius="4px" />
+        <Skeleton width="60%" height="15px" radius="4px" />
       {/if}
       {#if quality && !isRadio}
         <span class="meta-tag quality">{quality}</span>
@@ -200,7 +200,7 @@
     {:else if track.title || (track.file && !isYandexTrack)}
       <div class="artist text-ellipsis">Unknown Artist</div>
     {:else}
-      <Skeleton width="40%" height="12px" radius="4px" style="margin-top: 4px;" />
+      <Skeleton width="40%" height="13px" radius="4px" style="margin-top: 4px;" />
     {/if}
   </div>
 
