@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2025 dmitrymake
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { longpress } from "../actions.js";
 

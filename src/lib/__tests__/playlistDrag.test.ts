@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2025 dmitrymake
 import { describe, it, expect, vi } from "vitest";
 import { writable, get } from "svelte/store";
 import type { Track } from "../types";

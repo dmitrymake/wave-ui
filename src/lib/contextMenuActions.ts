@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2025 dmitrymake
 import { PlayerActions } from "./mpd/player";
 import { LibraryActions } from "./mpd/library";
 import { mpdClient } from "./mpd/client";

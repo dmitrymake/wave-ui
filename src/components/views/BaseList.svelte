@@ -1,3 +1,5 @@
+<!-- SPDX-License-Identifier: MIT -->
+<!-- Copyright (c) 2025 dmitrymake -->
 <script lang="ts">
   import { onDestroy, onMount, tick } from "svelte";
   import type { Snippet } from "svelte";

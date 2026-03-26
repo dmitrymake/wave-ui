@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2025 dmitrymake
 import { db } from "../db";
 import md5 from "md5";
 import type { DbTrack } from "../types";

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2025 dmitrymake
 // ─── Track & Music Data ───
 
 export interface Track {

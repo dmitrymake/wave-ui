@@ -1,4 +1,6 @@
 /// <reference lib="webworker" />
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2025 dmitrymake
 
 const sw = /** @type {ServiceWorkerGlobalScope} */ (/** @type {unknown} */ (self));
 

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2025 dmitrymake
 import { DATABASE } from "./constants";
 import { logger } from "./logger";
 import type { DbTrack } from "./types";

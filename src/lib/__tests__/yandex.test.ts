@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2025 dmitrymake
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
 vi.mock("../constants", () => ({

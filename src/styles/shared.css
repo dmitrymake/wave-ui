@@ -1,3 +1,5 @@
+/* SPDX-License-Identifier: MIT */
+/* Copyright (c) 2025 dmitrymake */
 :root {
   /* --- 0. ATOMIC TRANSPARENCIES (THE SOURCE OF TRUTH) --- */
   --c-white-10: rgba(255, 255, 255, 0.1);

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2025 dmitrymake
 import { vitePreprocess } from '@sveltejs/vite-plugin-svelte'
 
 /** @type {import("@sveltejs/vite-plugin-svelte").SvelteConfig} */

@@ -1,3 +1,5 @@
+<!-- SPDX-License-Identifier: MIT -->
+<!-- Copyright (c) 2025 dmitrymake -->
 <script lang="ts">
   import { fade } from "svelte/transition";
   import logo from "../assets/wave-logo.svg?raw";

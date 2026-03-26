@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2025 dmitrymake
 export function longpress(node: HTMLElement, duration = 2000): { destroy(): void } {
   let timer: ReturnType<typeof setTimeout>;
 

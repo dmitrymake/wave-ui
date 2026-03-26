@@ -1,3 +1,5 @@
+<!-- SPDX-License-Identifier: MIT -->
+<!-- Copyright (c) 2025 dmitrymake -->
 <script lang="ts">
   import type { Track } from "../lib/types";
   import { ICONS } from "../lib/icons";

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2025 dmitrymake
 export const MSG = {
   // Sync
   SYNC_REQUESTING: "Requesting library...",

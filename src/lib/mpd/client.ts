@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2025 dmitrymake
 import { CONFIG } from "../../config";
 import { connectionStatus, showToast } from "../store";
 import { logger } from "../logger";

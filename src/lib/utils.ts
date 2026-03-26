@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2025 dmitrymake
 import { API_ENDPOINTS } from "./constants";
 import type { Station, Track } from "./types";
 

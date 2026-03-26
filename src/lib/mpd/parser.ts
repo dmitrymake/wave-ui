@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2025 dmitrymake
 /**
  * Robust MPD Parser.
  * Handles parsing iteratively to avoid memory spikes on large libraries.

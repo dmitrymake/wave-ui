@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2025 dmitrymake
 /**
  * Icon Collection for Wave-UI Moode.
  * Strictly using existing files from ./lib/svg

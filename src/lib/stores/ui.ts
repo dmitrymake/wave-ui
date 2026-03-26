@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2025 dmitrymake
 import { writable, get } from "svelte/store";
 import { THEMES } from "../theme";
 import type { ToastMessage, ModalState, ContextMenuState, ContextMenuContext, Track, Playlist } from "../types";

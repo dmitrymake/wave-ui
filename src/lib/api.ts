@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2025 dmitrymake
 import { get } from "svelte/store";
 import { API_ENDPOINTS } from "./constants";
 import {

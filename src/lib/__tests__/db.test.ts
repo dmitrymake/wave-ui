@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2025 dmitrymake
 import { describe, it, expect, beforeEach } from "vitest";
 import { db } from "../db.js";
 import type { DbTrack } from "../types";

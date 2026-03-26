@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2025 dmitrymake
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import { get } from "svelte/store";
 

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2025 dmitrymake
 import { describe, it, expect } from "vitest";
 import { MpdParser } from "../../mpd/parser.js";
 

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2025 dmitrymake
 import type { Theme } from "./types";
 
 export const THEMES: Theme[] = [

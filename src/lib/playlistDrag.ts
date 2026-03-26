@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2025 dmitrymake
 import { writable, get } from "svelte/store";
 import type { Writable } from "svelte/store";
 import { tick } from "svelte";

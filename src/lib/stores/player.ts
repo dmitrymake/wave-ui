@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2025 dmitrymake
 import { writable, derived, get } from "svelte/store";
 import { stations, selectedStationName } from "./library";
 import { getStationImageUrl, isRemoteUrl, findStationByName } from "../utils";
