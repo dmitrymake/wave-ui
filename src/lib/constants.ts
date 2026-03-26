@@ -58,6 +58,7 @@ export const PLAYER_CONFIG = {
   UI_LOCK_SYNC: 1000,
   RECONNECT_DELAY: 3000,
   WATCHDOG_TIMEOUT: 5000,
+  SYNC_WORKER_TIMEOUT: 120_000,
 } as const;
 
 export const FAVORITES_PLAYLIST = "Favorites";

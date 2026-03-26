@@ -47,8 +47,15 @@ class MpdClient {
       .replace(/^https?:\/\//, "")
       .split(":")[0]
       .split("/")[0];
-    const port = CONFIG.WS_PORT || "8080";
-    const wsUrl = `ws://${host}:${port}`;
+    const isSecure = typeof window !== "undefined" && window.location.protocol === "https:";
+    let wsUrl: string;
+    if (isSecure) {
+      const sslPort = window.location.port || "443";
+      wsUrl = `wss://${host}:${sslPort}/ws`;
+    } else {
+      const port = CONFIG.WS_PORT || "8080";
+      wsUrl = `ws://${host}:${port}`;
+    }
 
     logger.log("[MPD] Connecting to:", wsUrl);
 

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2025 dmitrymake
 import { get } from "svelte/store";
-import { API_ENDPOINTS } from "./constants";
+import { API_ENDPOINTS, PLAYER_CONFIG } from "./constants";
 import {
   isSyncingLibrary,
   showToast,
@@ -47,6 +47,13 @@ export const ApiActions = {
       },
     });
 
+    const watchdog = setTimeout(() => {
+      logger.error("[API] Sync worker timed out");
+      showToast(MSG.SYNC_FAILED, "error");
+      isSyncingLibrary.set(false);
+      worker.terminate();
+    }, PLAYER_CONFIG.SYNC_WORKER_TIMEOUT);
+
     worker.onmessage = (e: MessageEvent<SyncWorkerMessage>): void => {
       const { type, status, count, message } = e.data;
 
@@ -61,12 +68,14 @@ export const ApiActions = {
       }
 
       if (type === "DONE") {
+        clearTimeout(watchdog);
         showToast(MSG.libraryUpdated(count ?? 0), "success");
         isSyncingLibrary.set(false);
         worker.terminate();
       }
 
       if (type === "ERROR") {
+        clearTimeout(watchdog);
         logger.error("[API] Sync Error:", message);
         showToast(MSG.syncFailed(message ?? ""), "error");
         isSyncingLibrary.set(false);
@@ -75,6 +84,7 @@ export const ApiActions = {
     };
 
     worker.onerror = (err: ErrorEvent): void => {
+      clearTimeout(watchdog);
       logger.error("[API] Worker crash:", err);
       showToast(MSG.SYNC_WORKER_CRASHED, "error");
       isSyncingLibrary.set(false);

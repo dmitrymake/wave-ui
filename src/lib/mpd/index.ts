@@ -36,7 +36,6 @@ export const {
 } = PlayerActions;
 
 export const {
-  syncLibrary,
   loadPlaylists,
   openPlaylistDetails,
   createEmptyPlaylist,

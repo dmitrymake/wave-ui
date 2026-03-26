@@ -5,12 +5,13 @@ import { THEMES } from "../theme";
 import type { ToastMessage, ModalState, ContextMenuState, ContextMenuContext, Track, Playlist } from "../types";
 
 
-const savedTheme = localStorage.getItem("app_theme") || "default";
+let savedTheme = "default";
+try { savedTheme = localStorage.getItem("app_theme") || "default"; } catch {}
 export const currentTheme = writable<string>(savedTheme);
 
 currentTheme.subscribe((id: string) => {
   if (typeof document === "undefined") return;
-  localStorage.setItem("app_theme", id);
+  try { localStorage.setItem("app_theme", id); } catch {}
   const theme = THEMES.find((t) => t.id === id);
   if (!theme) return;
   const root = document.documentElement;
@@ -91,13 +92,12 @@ export const isFullPlayerOpen = writable<boolean>(false);
 export const activeMenuTab = writable<string>("library");
 export const connectionStatus = writable<string>("Disconnected");
 
-const storedSidebar = localStorage.getItem("sidebarCollapsed") === "true";
+let storedSidebar = false;
+try { storedSidebar = localStorage.getItem("sidebarCollapsed") === "true"; } catch {}
 export const isSidebarCollapsed = writable<boolean>(storedSidebar);
 
 isSidebarCollapsed.subscribe((val: boolean) => {
-  if (typeof localStorage !== "undefined") {
-    localStorage.setItem("sidebarCollapsed", String(val));
-  }
+  try { localStorage.setItem("sidebarCollapsed", String(val)); } catch {}
 });
 
 

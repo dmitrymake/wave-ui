@@ -3,9 +3,7 @@
 import { get } from "svelte/store";
 import { mpdClient } from "./client";
 import { MpdParser } from "./parser";
-import { CONFIG } from "../../config";
 import {
-  isSyncingLibrary,
   isLoadingPlaylists,
   playlists,
   isLoadingTracks,
@@ -15,7 +13,6 @@ import {
   favorites,
 } from "../store";
 import { db } from "../db";
-import SyncWorker from "../workers/sync.worker.js?worker";
 import { generateUid, isRemoteUrl } from "../utils";
 import { MSG } from "../messages";
 import { logger } from "../logger";
@@ -69,35 +66,6 @@ function assignColorVar(name: string): string {
 }
 
 export const LibraryActions = {
-  async syncLibrary(): Promise<void> {
-    if (get(isSyncingLibrary)) return;
-    isSyncingLibrary.set(true);
-
-    const worker = new SyncWorker();
-    worker.postMessage({
-      type: "START_SYNC",
-      payload: { url: `http://${CONFIG.MOODE_IP}/wave-api.php` },
-    });
-
-    worker.onmessage = (e: MessageEvent) => {
-      const { type, count } = e.data;
-      if (type === "DONE") {
-        showToast(MSG.libraryUpdated(count), "success");
-        isSyncingLibrary.set(false);
-        worker.terminate();
-      }
-      if (type === "ERROR") {
-        showToast(MSG.SYNC_FAILED, "error");
-        isSyncingLibrary.set(false);
-        worker.terminate();
-      }
-    };
-    worker.onerror = () => {
-      isSyncingLibrary.set(false);
-      worker.terminate();
-    };
-  },
-
   async loadPlaylists(): Promise<void> {
     isLoadingPlaylists.set(true);
     try {

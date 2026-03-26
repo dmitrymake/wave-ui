@@ -12,6 +12,7 @@ FINAL_WEB_DIR="/var/www/wave-ui"
 NGINX_CONF="/etc/nginx/sites-available/wave-ui"
 PHP_FPM_SOCK=$(ls /run/php/php*-fpm.sock | head -n 1)
 PORT=3000
+SSL_PORT=3443
 
 echo "-------------------------------------------------------"
 echo "Deploying WaveUI to Port $PORT"
@@ -112,8 +113,24 @@ sudo systemctl enable --now websockify-mpd.service
 sudo systemctl enable --now wave-yandex.service
 
 # 7. Nginx Configuration
-echo ">>> [7/7] Configuring Nginx on Port $PORT..."
+echo ">>> [7/7] Configuring Nginx on Port $PORT (HTTP) + $SSL_PORT (HTTPS)..."
+
+# Generate self-signed certificate if moOde certs don't exist
+SSL_CERT="/etc/ssl/certs/moode.crt"
+SSL_KEY="/etc/ssl/private/moode.key"
+if [ ! -f "$SSL_CERT" ] || [ ! -f "$SSL_KEY" ]; then
+    echo ">>> Generating self-signed SSL certificate..."
+    SSL_CERT="/etc/ssl/certs/wave-ui.crt"
+    SSL_KEY="/etc/ssl/private/wave-ui.key"
+    sudo openssl req -x509 -nodes -days 3650 \
+        -newkey rsa:2048 \
+        -keyout "$SSL_KEY" \
+        -out "$SSL_CERT" \
+        -subj "/CN=wave-ui" 2>/dev/null
+fi
+
 sudo bash -c "cat > $NGINX_CONF" <<EOF
+# HTTP — backward compatibility
 server {
     listen $PORT;
     server_name _;
@@ -125,7 +142,6 @@ server {
         try_files \$uri \$uri/ /index.html;
     }
 
-    # API Proxy to PHP files in root
     location ~ \.php$ {
         root $WEB_ROOT;
         include snippets/fastcgi-php.conf;
@@ -133,11 +149,51 @@ server {
         fastcgi_param SCRIPT_FILENAME \$document_root\$fastcgi_script_name;
     }
 
-    # Proxy covers and assets from main Moode
     location /imagesw/ {
         proxy_pass http://127.0.0.1/imagesw/;
     }
-    
+
+    location /coverart.php {
+        proxy_pass http://127.0.0.1/coverart.php;
+    }
+}
+
+# HTTPS — required for PWA install on Android
+server {
+    listen $SSL_PORT ssl;
+    server_name _;
+
+    ssl_certificate $SSL_CERT;
+    ssl_certificate_key $SSL_KEY;
+
+    root $FINAL_WEB_DIR;
+    index index.html;
+
+    location / {
+        try_files \$uri \$uri/ /index.html;
+    }
+
+    # WebSocket proxy (wss:// -> ws://websockify)
+    location /ws {
+        proxy_pass http://127.0.0.1:8080;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade \$http_upgrade;
+        proxy_set_header Connection "upgrade";
+        proxy_set_header Host \$host;
+        proxy_read_timeout 86400;
+    }
+
+    location ~ \.php$ {
+        root $WEB_ROOT;
+        include snippets/fastcgi-php.conf;
+        fastcgi_pass unix:$PHP_FPM_SOCK;
+        fastcgi_param SCRIPT_FILENAME \$document_root\$fastcgi_script_name;
+    }
+
+    location /imagesw/ {
+        proxy_pass http://127.0.0.1/imagesw/;
+    }
+
     location /coverart.php {
         proxy_pass http://127.0.0.1/coverart.php;
     }
@@ -152,10 +208,12 @@ sudo systemctl restart nginx
 # Cleanup Temp
 rm -rf "$TEMP_DIR"
 
+IP_ADDR=$(hostname -I | awk '{print $1}')
 echo "-------------------------------------------------------"
 echo "DEPLOYMENT COMPLETE!"
 echo "-------------------------------------------------------"
-echo "URL: http://$(hostname -I | awk '{print $1}'):$PORT"
+echo "HTTP:  http://$IP_ADDR:$PORT"
+echo "HTTPS: https://$IP_ADDR:$SSL_PORT  (PWA install ready)"
 echo "Daemon Log: tail -f /tmp/wave_daemon.log"
 echo "-------------------------------------------------------"
 
