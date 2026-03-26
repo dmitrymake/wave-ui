@@ -1,6 +1,5 @@
 <script lang="ts">
   import { onDestroy, onMount, tick } from "svelte";
-  import { fade } from "svelte/transition";
   import type { Snippet } from "svelte";
   import Skeleton from "../Skeleton.svelte";
   import { createPlaylistDrag } from "../../lib/playlistDrag";
@@ -148,7 +147,6 @@
   <div
     class="list-body"
     bind:this={refs.listBodyContainer}
-    in:fade={{ duration: 200 }}
   >
     {#if header}
       {@render header()}
