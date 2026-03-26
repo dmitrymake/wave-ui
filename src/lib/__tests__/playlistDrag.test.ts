@@ -1,5 +1,6 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import { writable, get } from "svelte/store";
+import type { Track } from "../types";
 import { createPlaylistDrag } from "../playlistDrag.js";
 
 function createDrag() {
@@ -9,7 +10,7 @@ function createDrag() {
     { file: "c.mp3", _uid: "3" },
     { file: "d.mp3", _uid: "4" },
     { file: "e.mp3", _uid: "5" },
-  ]);
+  ] as Track[]);
 
   const onMoveTrack = vi.fn();
   const drag = createPlaylistDrag({ tracksStore, onMoveTrack });

@@ -32,7 +32,7 @@
 </script>
 
 <div class="music-grid playlists-grid-override">
-  <div class="music-card" onclick={() => onNewPlaylist?.()}>
+  <div class="music-card" role="button" tabindex="0" onclick={() => onNewPlaylist?.()} onkeydown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onNewPlaylist?.(); }}}>
     <div class="card-img-container dashed-cover">
       <div class="icon-wrap">{@html ICONS.ADD}</div>
     </div>
@@ -43,7 +43,10 @@
     {@const isFav = playlist.name === "Favorites"}
     <div
       class="music-card"
+      role="button"
+      tabindex="0"
       onclick={() => onOpenPlaylist?.(playlist)}
+      onkeydown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onOpenPlaylist?.(playlist); }}}
       use:longpress
       onlongpress={(e) => handleContext(e.detail.originalEvent, playlist)}
       oncontextmenu={(e) => handleContext(e, playlist)}

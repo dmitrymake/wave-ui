@@ -98,6 +98,7 @@
       ontouchmove={handleTouchMove}
       ontouchend={handleTouchEnd}
       onclick={close}
+      role="presentation"
     >
       <div class="drag-handle-icon">
         {@html ICONS.CHEVRON_DOWN}
@@ -150,6 +151,12 @@
           ontouchmove={isDraggingBar ? handleSeekMove : null}
           onmouseup={handleSeekEnd}
           ontouchend={handleSeekEnd}
+          role="slider"
+          aria-label="Seek"
+          aria-valuemin={0}
+          aria-valuemax={100}
+          aria-valuenow={Math.round(progressPct)}
+          tabindex="0"
         >
           <div class="common-track">
             <div
@@ -346,5 +353,5 @@
   .is-docked .play-btn-large { width: 44px; height: 44px; }
   .is-docked .play-btn-large :global(svg) { width: 20px; height: 20px; }
 
-  .is-docked .volume-row { gap: 8px; }
+  .is-docked :global(.volume-row) { gap: 8px; }
 </style>

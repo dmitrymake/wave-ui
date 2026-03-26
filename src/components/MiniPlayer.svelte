@@ -74,6 +74,9 @@
     onclick={() => isFullPlayerOpen.set(true)}
     use:longpress={500}
     onlongpress={handleLongPress}
+    role="button"
+    tabindex="0"
+    onkeydown={(e) => { if (e.key === "Enter") isFullPlayerOpen.set(true); }}
   >
     <div
       class="progress-shadow"
@@ -88,6 +91,13 @@
       onmouseleave={() => (isHoveringBar = false)}
       onmousedown={(e) => { e.stopPropagation(); handleMouseDown(e); }}
       onclick={(e) => e.stopPropagation()}
+      onkeydown={(e) => e.stopPropagation()}
+      role="slider"
+      aria-label="Playback progress"
+      aria-valuemin={0}
+      aria-valuemax={100}
+      aria-valuenow={Math.round(pct)}
+      tabindex="0"
     >
       <div class="rail"></div>
       <div

@@ -152,7 +152,7 @@
     onwheel={handleHorizontalScroll}
   >
     {#each $albumsStore as album}
-      <div class="music-card" onclick={() => openAlbum(album)}>
+      <div class="music-card" role="button" tabindex="0" onclick={() => openAlbum(album)} onkeydown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); openAlbum(album); }}}>
         <div class="card-img-container">
           <ImageLoader
             src={album.image}

@@ -113,11 +113,14 @@
       </div>
       <div class="card">
         <div class="row space-between">
-          <label>Enable Yandex Music (Beta)</label>
+          <label for="toggle-yandex">Enable Yandex Music (Beta)</label>
           <button
+            id="toggle-yandex"
             class="toggle-btn"
             class:active={$isYandexEnabled}
             onclick={toggleYandex}
+            aria-pressed={$isYandexEnabled}
+            aria-label="Enable Yandex Music"
           >
             <div class="toggle-circle"></div>
           </button>
@@ -127,7 +130,7 @@
           <div class="separator" in:fade></div>
 
           <div class="row space-between" in:fade>
-            <label>Connection Status</label>
+            <span>Connection Status</span>
             {#if $yandexAuthStatus}
               <span class="status-badge connected">Connected</span>
             {:else}
@@ -174,11 +177,14 @@
         <div class="separator"></div>
 
         <div class="row space-between">
-          <label>Enable Alarm</label>
+          <label for="toggle-alarm">Enable Alarm</label>
           <button
+            id="toggle-alarm"
             class="toggle-btn"
             class:active={$isAlarmEnabled}
             onclick={toggleAlarm}
+            aria-pressed={$isAlarmEnabled}
+            aria-label="Enable Alarm"
           >
             <div class="toggle-circle"></div>
           </button>
@@ -222,7 +228,7 @@
       <div class="section-header">
         <span>Appearance</span>
       </div>
-      <div class="card clickable" onclick={openThemeSelector}>
+      <div class="card clickable" onclick={openThemeSelector} role="button" tabindex="0" onkeydown={(e) => { if (e.key === "Enter") openThemeSelector(); }}>
         <div class="row space-between">
           <span>Interface Theme</span>
           <div class="row-gap">

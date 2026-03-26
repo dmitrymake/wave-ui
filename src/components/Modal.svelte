@@ -56,12 +56,16 @@
   <div
     class="backdrop"
     onclick={handleBackdropClick}
+    role="presentation"
     transition:fade={{ duration: 150 }}
   >
     <div
       class="modal-card"
       transition:scale={{ start: 0.95, duration: 200 }}
       onclick={(e) => e.stopPropagation()}
+      role="dialog"
+      tabindex="-1"
+      onkeydown={(e) => { if (e.key === "Escape") closeModal(); }}
     >
       <div class="modal-header">
         <span class="modal-title">{$modal.title}</span>
@@ -74,6 +78,7 @@
 
         {#if $modal.type === "prompt"}
           <div class="input-wrapper">
+            <!-- svelte-ignore a11y_autofocus -->
             <input
               bind:this={inputRef}
               type="text"
@@ -82,7 +87,7 @@
               placeholder={$modal.placeholder}
               bind:value={$modal.inputValue}
               onkeydown={handleKeydown}
-              autoFocus
+              autofocus
             />
           </div>
         {:else if $modal.type === "select"}

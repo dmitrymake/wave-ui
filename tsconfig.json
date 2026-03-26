@@ -8,7 +8,7 @@
     "resolveJsonModule": true,
     "sourceMap": true,
     "esModuleInterop": true,
-    "types": ["vite/client"],
+    "types": ["vite/client", "node"],
     "skipLibCheck": true,
     "strict": true,
     "allowJs": true,

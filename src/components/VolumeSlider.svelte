@@ -52,7 +52,7 @@
   }
 </script>
 
-<div class="volume-row" class:compact onclick={(e: MouseEvent) => e.stopPropagation()}>
+<div class="volume-row" class:compact onclick={(e) => e.stopPropagation()} onkeydown={(e) => e.stopPropagation()} role="presentation">
   <button class="vol-btn" onclick={toggleMute} title="Mute/Unmute">
     {@html volumeIcon}
   </button>
@@ -62,6 +62,12 @@
     bind:this={volumeBar}
     onmousedown={(e) => { e.stopPropagation(); handleVolStart(e); }}
     ontouchstart={(e) => { e.stopPropagation(); handleVolStart(e); }}
+    role="slider"
+    aria-label="Volume"
+    aria-valuemin={0}
+    aria-valuemax={100}
+    aria-valuenow={$status.volume}
+    tabindex="0"
   >
     <div class="common-track">
       <div class="common-fill" style="width: {$status.volume}%"></div>

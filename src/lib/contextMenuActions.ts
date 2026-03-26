@@ -132,7 +132,7 @@ export async function radioByArtist(track: Track | null): Promise<void> {
   if (track && track.isYandex && track.artist) {
     showToast(MSG.searchingArtist(track.artist), "info");
     try {
-      const searchRes = await YandexApi.search(track.artist);
+      const searchRes = await YandexApi.search(track.artist) as { artists?: { id: string; title: string }[] };
       if (searchRes && searchRes.artists && searchRes.artists.length > 0) {
         const artistId = searchRes.artists[0].id;
         showToast(

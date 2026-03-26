@@ -396,9 +396,11 @@
             </button>
 
             {#if isSortMenuOpen}
+              <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
               <div
                 class="sort-backdrop"
                 onclick={toggleSortMenu}
+                role="presentation"
                 transition:fade={{ duration: 100 }}
               ></div>
               <div

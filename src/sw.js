@@ -1,12 +1,16 @@
+/// <reference lib="webworker" />
+
+const sw = /** @type {ServiceWorkerGlobalScope} */ (/** @type {unknown} */ (self));
+
 const CACHE_NAME = "covers-v1";
 
 const ASSET_REGEX = /\/coverart\.php|\/imagesw\//;
 
-self.addEventListener("install", (event) => {
-  self.skipWaiting();
+sw.addEventListener("install", (_event) => {
+  sw.skipWaiting();
 });
 
-self.addEventListener("activate", (event) => {
+sw.addEventListener("activate", (event) => {
   event.waitUntil(
     caches
       .keys()
@@ -19,11 +23,11 @@ self.addEventListener("activate", (event) => {
           }),
         );
       })
-      .then(() => self.clients.claim()),
+      .then(() => sw.clients.claim()),
   );
 });
 
-self.addEventListener("fetch", (event) => {
+sw.addEventListener("fetch", (event) => {
   const request = event.request;
   const url = new URL(request.url);
 
@@ -52,7 +56,7 @@ self.addEventListener("fetch", (event) => {
 
             return networkResponse;
           })
-          .catch(() => {});
+          .catch(() => new Response("", { status: 408 }));
       });
     }),
   );

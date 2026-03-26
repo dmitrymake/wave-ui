@@ -47,7 +47,7 @@
   >
     {#each matchedPlaylists as playlist (playlist.name)}
       {@const isFav = playlist.name === "Favorites"}
-      <div class="music-card" onclick={() => onOpenPlaylist?.(playlist)}>
+      <div class="music-card" role="button" tabindex="0" onclick={() => onOpenPlaylist?.(playlist)} onkeydown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onOpenPlaylist?.(playlist); }}}>
         <div
           class="card-img-container"
           style={resolveCardStyle(playlist)}
@@ -72,7 +72,10 @@
       <div class="group-container">
         <div
           class="group-header"
+          role="button"
+          tabindex="0"
           onclick={() => onOpenPlaylist?.(group.playlist)}
+          onkeydown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onOpenPlaylist?.(group.playlist); }}}
         >
           <div class="group-icon">{@html ICONS.PLAYLISTS}</div>
           <div class="group-title">{group.playlist.name}</div>

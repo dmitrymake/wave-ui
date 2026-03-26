@@ -661,27 +661,6 @@
     padding: 0;
     cursor: pointer;
   }
-  .filter-tabs {
-    display: flex;
-    gap: 10px;
-    margin-bottom: 20px;
-    overflow-x: auto;
-  }
-  .filter-tabs button {
-    background: var(--c-surface-button);
-    border: 1px solid var(--c-border);
-    color: var(--c-text-secondary);
-    padding: 6px 12px;
-    border-radius: 16px;
-    font-size: 13px;
-    cursor: pointer;
-    white-space: nowrap;
-  }
-  .filter-tabs button.active {
-    background: var(--c-accent);
-    color: #fff;
-    border-color: var(--c-accent);
-  }
 
   .loading-footer {
     padding: 20px;

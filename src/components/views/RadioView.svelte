@@ -73,6 +73,7 @@
             role="button"
             tabindex="0"
             onclick={() => MPD.playStation(station)}
+            onkeydown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); MPD.playStation(station); }}}
           >
             <div class="card-img-container">
               <ImageLoader src={imgUrl} alt={station.name} radius="8px">

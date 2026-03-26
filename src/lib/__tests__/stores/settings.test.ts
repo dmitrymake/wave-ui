@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from "vitest";
+import { describe, it, expect, beforeEach, vi } from "vitest";
 import { get } from "svelte/store";
 
 // Settings store reads localStorage on import, so we set values before importing

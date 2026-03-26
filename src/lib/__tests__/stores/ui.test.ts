@@ -25,6 +25,11 @@ import {
   openPlaylistSelector,
   closePlaylistSelector,
 } from "../../stores/ui.js";
+import type { Track } from "../../types";
+
+// Cast partial test data
+const asTrack = (obj: Partial<Track>) => obj as Track;
+const asEvent = (obj: Record<string, unknown>) => obj as any;
 
 describe("showToast / toastMessage", () => {
   beforeEach(() => {
@@ -114,7 +119,7 @@ describe("contextMenu", () => {
       clientY: 200,
     };
 
-    openContextMenu(fakeEvent, track, { type: "queue", index: 3 });
+    openContextMenu(asEvent(fakeEvent), asTrack(track), { type: "queue", index: 3 });
     const cm = get(contextMenu);
     expect(cm.isOpen).toBe(true);
     expect(cm.track).toEqual(track);
@@ -128,7 +133,7 @@ describe("contextMenu", () => {
     // Reset context menu to closed state first
     closeContextMenu();
     const fakeEvent = { currentTarget: null, clientX: 0, clientY: 0 };
-    openContextMenu(fakeEvent, null);
+    openContextMenu(asEvent(fakeEvent), null);
     // Guard only checks: !track && contextData.type !== "playlist-card"
     // Default contextData is {}, type is undefined, so it should not open
     // But if previous test left it open, we need to verify fresh state
@@ -142,7 +147,7 @@ describe("contextMenu", () => {
       clientX: 100,
       clientY: 200,
     };
-    openContextMenu(fakeEvent, null, { type: "playlist-card" });
+    openContextMenu(asEvent(fakeEvent), null, { type: "playlist-card" });
     expect(get(contextMenu).isOpen).toBe(true);
   });
 
@@ -161,7 +166,7 @@ describe("contextMenu", () => {
       },
       touches: [{ clientX: 50, clientY: 80 }],
     };
-    openContextMenu(fakeEvent, track);
+    openContextMenu(asEvent(fakeEvent), asTrack(track));
     const cm = get(contextMenu);
     expect(cm.x).toBe(50);
     expect(cm.y).toBe(80);
@@ -170,7 +175,7 @@ describe("contextMenu", () => {
 
 describe("playlistSelector", () => {
   it("opens and closes playlist selector", () => {
-    const track = { file: "test.mp3" };
+    const track = asTrack({ file: "test.mp3" });
     openPlaylistSelector(track);
     const ps = get(playlistSelector);
     expect(ps.isOpen).toBe(true);
@@ -184,13 +189,13 @@ describe("playlistSelector", () => {
 
   it("closes context menu when opening playlist selector", () => {
     // First open context menu
-    const track = { file: "test.mp3" };
+    const track = asTrack({ file: "test.mp3" });
     const fakeEvent = {
       currentTarget: { getBoundingClientRect: () => ({}) },
       clientX: 0,
       clientY: 0,
     };
-    openContextMenu(fakeEvent, track);
+    openContextMenu(asEvent(fakeEvent), track);
     expect(get(contextMenu).isOpen).toBe(true);
 
     // Then open playlist selector — context menu should close

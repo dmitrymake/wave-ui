@@ -30,6 +30,10 @@ vi.mock("../../stores/library", () => ({
 }));
 
 import { getTrackCoverUrl, getTrackThumbUrl } from "../../stores/player.js";
+import type { Track } from "../../types";
+
+// Cast partial test data to Track
+const t = (obj: Partial<Track> | null) => obj as Track;
 
 describe("getTrackCoverUrl", () => {
   it("returns default cover for null track", () => {
@@ -37,38 +41,38 @@ describe("getTrackCoverUrl", () => {
   });
 
   it("returns default cover for track without file", () => {
-    expect(getTrackCoverUrl({ title: "Test" })).toBe("/images/default_cover.png");
+    expect(getTrackCoverUrl(t({ title: "Test" }))).toBe("/images/default_cover.png");
   });
 
   it("returns track.image if it starts with http", () => {
-    const track = { file: "test.mp3", image: "http://example.com/img.jpg" };
+    const track = t({ file: "test.mp3", image: "http://example.com/img.jpg" });
     expect(getTrackCoverUrl(track)).toBe("http://example.com/img.jpg");
   });
 
   it("returns track.cover if it starts with http", () => {
-    const track = { file: "test.mp3", cover: "http://example.com/cover.jpg" };
+    const track = t({ file: "test.mp3", cover: "http://example.com/cover.jpg" });
     expect(getTrackCoverUrl(track)).toBe("http://example.com/cover.jpg");
   });
 
   it("returns coverart URL for local files", () => {
-    const track = { file: "Music/track.flac" };
+    const track = t({ file: "Music/track.flac" });
     expect(getTrackCoverUrl(track)).toBe("/coverart.php/Music/track.flac");
   });
 
   it("returns radio placeholder for radio tracks without image", () => {
-    const track = { file: "http://stream.example.com/live" };
+    const track = t({ file: "http://stream.example.com/live" });
     expect(getTrackCoverUrl(track, [], null)).toBe("/images/radio_placeholder.png");
   });
 
   it("resolves radio image from station list", () => {
-    const track = { file: "http://stream.example.com", title: "Jazz FM" };
-    const stations = [{ name: "Jazz FM", image: "local" }];
+    const track = t({ file: "http://stream.example.com", title: "Jazz FM" });
+    const stations = [{ name: "Jazz FM", image: "local" }] as any;
     const url = getTrackCoverUrl(track, stations);
     expect(url).toBe("/radio-logos/Jazz FM.jpg");
   });
 
   it("returns coverart for genre Radio with local file", () => {
-    const track = { file: "Music/track.mp3", genre: "Radio" };
+    const track = t({ file: "Music/track.mp3", genre: "Radio" });
     // genre is Radio but file is local — resolveRadioImage returns null, fallback to radio_placeholder
     const url = getTrackCoverUrl(track, [], null);
     expect(url).toBe("/images/radio_placeholder.png");
@@ -81,29 +85,29 @@ describe("getTrackThumbUrl", () => {
   });
 
   it("returns default icon for track without file", () => {
-    expect(getTrackThumbUrl({ title: "Test" })).toBe("/images/default_icon.png");
+    expect(getTrackThumbUrl(t({ title: "Test" }))).toBe("/images/default_icon.png");
   });
 
   it("returns track.image if http", () => {
-    const track = { file: "x.mp3", image: "http://img.com/a.jpg" };
+    const track = t({ file: "x.mp3", image: "http://img.com/a.jpg" });
     expect(getTrackThumbUrl(track)).toBe("http://img.com/a.jpg");
   });
 
   it("uses thumbHash if available", () => {
-    const track = { file: "Music/track.flac", thumbHash: "abc123" };
+    const track = t({ file: "Music/track.flac", thumbHash: "abc123" });
     expect(getTrackThumbUrl(track, "sm")).toBe("/imagesw/thmcache/abc123_sm.jpg");
     expect(getTrackThumbUrl(track, "md")).toBe("/imagesw/thmcache/abc123.jpg");
   });
 
   it("generates md5 hash for directory path", () => {
-    const track = { file: "Music/Artist/Album/track.flac" };
+    const track = t({ file: "Music/Artist/Album/track.flac" });
     const url = getTrackThumbUrl(track, "sm");
     // Should be /imagesw/thmcache/<md5 of "Music/Artist/Album">_sm.jpg
     expect(url).toMatch(/^\/imagesw\/thmcache\/[a-f0-9]{32}_sm\.jpg$/);
   });
 
   it("returns radio icon for radio tracks", () => {
-    const track = { file: "http://stream.example.com/live" };
+    const track = t({ file: "http://stream.example.com/live" });
     expect(getTrackThumbUrl(track, "sm", [], null)).toBe("/images/radio_icon.png");
   });
 });

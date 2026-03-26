@@ -148,6 +148,7 @@
         ontouchstart={(e) => onstartdrag?.(e)}
         onclick={(e) => e.stopPropagation()}
         title="Drag to reorder"
+        role="presentation"
       >
         <div class="icon-small">{@html ICONS.DRAG_HANDLE}</div>
       </div>
@@ -187,16 +188,21 @@
     </div>
 
     {#if track.artist}
-      <div
-        class="artist text-ellipsis"
-        class:link={!isRadio || isYandexTrack}
-        onclick={handleArtistClick}
-        onkeydown={(e) => { if (e.key === "Enter") handleArtistClick(e as unknown as MouseEvent); }}
-        role={(!isRadio || isYandexTrack) ? "link" : undefined}
-        tabindex={(!isRadio || isYandexTrack) ? 0 : undefined}
-      >
-        {track.artist}
-      </div>
+      {#if !isRadio || isYandexTrack}
+        <div
+          class="artist text-ellipsis link"
+          onclick={handleArtistClick}
+          onkeydown={(e) => { if (e.key === "Enter") handleArtistClick(e as unknown as MouseEvent); }}
+          role="link"
+          tabindex="0"
+        >
+          {track.artist}
+        </div>
+      {:else}
+        <div class="artist text-ellipsis">
+          {track.artist}
+        </div>
+      {/if}
     {:else if track.title || (track.file && !isYandexTrack)}
       <div class="artist text-ellipsis">Unknown Artist</div>
     {:else}

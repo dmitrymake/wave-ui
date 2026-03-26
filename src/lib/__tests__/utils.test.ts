@@ -11,12 +11,12 @@ import { getStationImageUrl, getCoverUrl, generateUid } from "../utils.js";
 
 describe("getStationImageUrl", () => {
   it("returns null for null/undefined station", () => {
-    expect(getStationImageUrl(null)).toBeNull();
-    expect(getStationImageUrl(undefined)).toBeNull();
+    expect(getStationImageUrl(null as any)).toBeNull();
+    expect(getStationImageUrl(undefined as any)).toBeNull();
   });
 
   it("returns null if station has no image", () => {
-    expect(getStationImageUrl({ name: "Test" })).toBeNull();
+    expect(getStationImageUrl({ name: "Test" } as any)).toBeNull();
   });
 
   it("returns http URL directly", () => {
@@ -39,12 +39,12 @@ describe("getStationImageUrl", () => {
 
 describe("getCoverUrl", () => {
   it("returns null for null/undefined song", () => {
-    expect(getCoverUrl(null)).toBeNull();
-    expect(getCoverUrl(undefined)).toBeNull();
+    expect(getCoverUrl(null as any)).toBeNull();
+    expect(getCoverUrl(undefined as any)).toBeNull();
   });
 
   it("returns null if song has no file", () => {
-    expect(getCoverUrl({ title: "Test" })).toBeNull();
+    expect(getCoverUrl({ title: "Test" } as any)).toBeNull();
   });
 
   it("returns cover URL for local file", () => {

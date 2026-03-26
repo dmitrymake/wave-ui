@@ -32,7 +32,7 @@
   opacity: 0.7;
   flex-shrink: 0; 
 }
-.sort-trigger-icon svg {
+.sort-trigger-icon :global(svg) {
   width: 16px;
   height: 16px;
 }

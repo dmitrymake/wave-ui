@@ -33,7 +33,7 @@
       onwheel={handleHorizontalScroll}
     >
       {#each searchResults.artists as artist}
-        <div class="music-card" onclick={() => openArtist(artist)}>
+        <div class="music-card" role="button" tabindex="0" onclick={() => openArtist(artist)} onkeydown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); openArtist(artist); }}}>
           <div class="card-img-container">
             <ImageLoader
               src={artist.image}
@@ -53,7 +53,7 @@
       onwheel={handleHorizontalScroll}
     >
       {#each searchResults.albums as album}
-        <div class="music-card" onclick={() => openAlbum(album)}>
+        <div class="music-card" role="button" tabindex="0" onclick={() => openAlbum(album)} onkeydown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); openAlbum(album); }}}>
           <div class="card-img-container">
             <ImageLoader
               src={album.image}

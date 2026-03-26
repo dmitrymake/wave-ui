@@ -94,6 +94,7 @@
   <div
     class="backdrop"
     onclick={handleBackdropClick}
+    role="presentation"
     transition:fade={{ duration: 100 }}
   >
     <div
@@ -104,6 +105,9 @@
       style={stylePosition}
       transition:scale={{ start: 0.95, duration: 100 }}
       onclick={(e) => e.stopPropagation()}
+      role="dialog"
+      tabindex="-1"
+      onkeydown={(e) => { if (e.key === "Escape") closeContextMenu(); }}
     >
       <div class="menu-header">
         {#if view === "playlists"}

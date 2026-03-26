@@ -80,6 +80,7 @@ vi.mock("../../yandex", () => ({
 
 import { PlayerActions } from "../../mpd/player.js";
 import { status, currentSong } from "../../store";
+import type { MpdStatus } from "../../types";
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -93,13 +94,13 @@ afterEach(() => {
 
 describe("PlayerActions.togglePlay", () => {
   it("sends pause when playing", async () => {
-    status.set({ state: "play", volume: 50, elapsed: 10, duration: 100, random: false, repeat: false });
+    status.set({ state: "play", volume: 50, elapsed: 10, duration: 100, random: false, repeat: false } as MpdStatus);
     await PlayerActions.togglePlay();
     expect(mockSend).toHaveBeenCalledWith("pause 1");
   });
 
   it("sends play when stopped", async () => {
-    status.set({ state: "stop", volume: 50, elapsed: 0, duration: 0, random: false, repeat: false });
+    status.set({ state: "stop", volume: 50, elapsed: 0, duration: 0, random: false, repeat: false } as MpdStatus);
     await PlayerActions.togglePlay();
     expect(mockSend).toHaveBeenCalledWith("play");
   });
@@ -117,7 +118,7 @@ describe("PlayerActions.next / previous", () => {
   });
 
   it("resets elapsed on next", async () => {
-    status.set({ state: "play", elapsed: 50, duration: 100 });
+    status.set({ state: "play", elapsed: 50, duration: 100 } as MpdStatus);
     await PlayerActions.next();
     expect(get(status).elapsed).toBe(0);
   });
@@ -141,14 +142,14 @@ describe("PlayerActions.seek", () => {
 
 describe("PlayerActions.toggleRandom", () => {
   it("toggles random on", async () => {
-    status.set({ state: "play", random: false, repeat: false });
+    status.set({ state: "play", random: false, repeat: false } as MpdStatus);
     await PlayerActions.toggleRandom();
     expect(mockSend).toHaveBeenCalledWith("random 1");
     expect(get(status).random).toBe(true);
   });
 
   it("toggles random off", async () => {
-    status.set({ state: "play", random: true, repeat: false });
+    status.set({ state: "play", random: true, repeat: false } as MpdStatus);
     await PlayerActions.toggleRandom();
     expect(mockSend).toHaveBeenCalledWith("random 0");
   });
@@ -156,7 +157,7 @@ describe("PlayerActions.toggleRandom", () => {
 
 describe("PlayerActions.toggleRepeat", () => {
   it("toggles repeat on", async () => {
-    status.set({ state: "play", random: false, repeat: false });
+    status.set({ state: "play", random: false, repeat: false } as MpdStatus);
     await PlayerActions.toggleRepeat();
     expect(mockSend).toHaveBeenCalledWith("repeat 1");
     expect(get(status).repeat).toBe(true);

@@ -75,8 +75,8 @@ describe("LibraryActions.loadPlaylists", () => {
 
     // Favorites should have special gradient
     const favPlaylist = result.find((p: { name: string }) => p.name === "Favorites");
-    expect(favPlaylist.color).toContain("hsl(348");
-    expect(favPlaylist.colorVar).toBe("var(--c-heart)");
+    expect(favPlaylist!.color).toContain("hsl(348");
+    expect(favPlaylist!.colorVar).toBe("var(--c-heart)");
   });
 
   it("sends listplaylists command", async () => {

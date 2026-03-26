@@ -83,6 +83,7 @@
   <div
     class="backdrop"
     onclick={() => onClose?.()}
+    role="presentation"
     transition:fade={{ duration: 200 }}
   ></div>
 {/if}

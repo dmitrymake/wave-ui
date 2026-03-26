@@ -10,8 +10,8 @@ describe("MpdParser.parseKeyValue", () => {
 
   it("returns empty object for empty input", () => {
     expect(MpdParser.parseKeyValue("")).toEqual({});
-    expect(MpdParser.parseKeyValue(null)).toEqual({});
-    expect(MpdParser.parseKeyValue(undefined)).toEqual({});
+    expect(MpdParser.parseKeyValue(null as any)).toEqual({});
+    expect(MpdParser.parseKeyValue(undefined as any)).toEqual({});
   });
 
   it("ignores lines without separator", () => {

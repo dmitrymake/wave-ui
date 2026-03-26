@@ -62,7 +62,7 @@
     onwheel={handleHorizontalScroll}
   >
     {#each vibeCards as item}
-      <div class="music-card" onclick={() => openPlaylist(item)}>
+      <div class="music-card" role="button" tabindex="0" onclick={() => openPlaylist(item)} onkeydown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); openPlaylist(item); }}}>
         <div
           class="card-img-container"
           class:is-vibe={item.kind === "my_vibe"}
@@ -99,7 +99,7 @@
     >
       {#each collectionCards as pl}
         {@const isFav = pl.kind === "favorites"}
-        <div class="music-card" onclick={() => openPlaylist(pl)}>
+        <div class="music-card" role="button" tabindex="0" onclick={() => openPlaylist(pl)} onkeydown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); openPlaylist(pl); }}}>
           <div
             class="card-img-container"
             style={isFav

@@ -111,12 +111,13 @@
   <div class="content-padded no-bottom-pad">
     <div class="search-input-container">
       <span class="search-icon">{@html ICONS.SEARCH}</span>
+      <!-- svelte-ignore a11y_autofocus -->
       <input
         type="text"
         placeholder="Artists, songs, or albums"
         value={$searchQuery}
         oninput={handleInput}
-        autoFocus
+        autofocus
       />
 
       {#if $searchQuery.length > 0}
@@ -155,7 +156,7 @@
               onwheel={handleHorizontalScroll}
             >
               {#each foundAlbums as album (album._uid)}
-                <div class="music-card" onclick={() => goToAlbum(album)}>
+                <div class="music-card" role="button" tabindex="0" onclick={() => goToAlbum(album)} onkeydown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); goToAlbum(album); }}}>
                   <div class="card-img-container">
                     <ImageLoader
                       src={getTrackThumbUrl(album, "md")}
