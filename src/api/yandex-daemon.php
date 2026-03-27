@@ -207,6 +207,8 @@ logMsg("Daemon Started");
 
 $api = null;
 $lastToken = "";
+$lastPlayingTrackId = null;
+$trackStartTime = null;
 
 while (true) {
     if (file_exists(TOKEN_FILE)) {
@@ -237,9 +239,52 @@ while (true) {
             $state['active'] = false;
             saveState($state);
             clearAllCachedTracks();
+            $lastPlayingTrackId = null;
+            $trackStartTime = null;
             logMsg("External track detected. Daemon paused.");
             sleep(2);
             continue;
+        }
+
+        // Send feedback to Yandex when track changes
+        if ($stateStr === 'play' && ($state['mode'] ?? '') === 'station') {
+            $stationId = $state['station_id'] ?? 'user:onyourwave';
+            $batchId = $state['batch_id'] ?? null;
+
+            // Resolve current track ID from meta cache
+            $currentTrackId = null;
+            if (!empty($currentFile) && file_exists(META_CACHE_FILE)) {
+                $metaCache = json_decode(file_get_contents(META_CACHE_FILE), true) ?: [];
+                $filePath = str_replace('file://', '', $currentFile);
+                $key = md5($filePath);
+                if (isset($metaCache[$key]['id'])) {
+                    $currentTrackId = $metaCache[$key]['id'];
+                } elseif (isset($metaCache[$filePath]['id'])) {
+                    $currentTrackId = $metaCache[$filePath]['id'];
+                }
+            }
+
+            if ($currentTrackId && $currentTrackId !== $lastPlayingTrackId) {
+                // Send trackFinished for previous track
+                if ($lastPlayingTrackId && $trackStartTime) {
+                    $playedSeconds = time() - $trackStartTime;
+                    try {
+                        $api->sendFeedback($stationId, 'trackFinished', $lastPlayingTrackId, $batchId, $playedSeconds);
+                    } catch (Exception $e) {
+                        logMsg("Feedback trackFinished error: " . $e->getMessage());
+                    }
+                }
+
+                // Send trackStarted for new track
+                try {
+                    $api->sendFeedback($stationId, 'trackStarted', $currentTrackId, $batchId);
+                } catch (Exception $e) {
+                    logMsg("Feedback trackStarted error: " . $e->getMessage());
+                }
+
+                $lastPlayingTrackId = $currentTrackId;
+                $trackStartTime = time();
+            }
         }
 
         $playlistLen = intval($mpdStatus['playlistlength'] ?? 0);
@@ -283,7 +328,9 @@ while (true) {
                 logMsg("Refilling radio: $stationId Params: " . json_encode($params));
 
                 try {
-                    $newTracks = $api->getStationTracks($stationId, $history, $params);
+                    $result = $api->getStationTracks($stationId, $history, $params);
+                    $newTracks = $result['tracks'];
+                    $batchId = $result['batchId'];
 
                     if (!empty($newTracks)) {
                         $newBuffer = [];
@@ -303,9 +350,12 @@ while (true) {
                              continue;
                         }
                         $state['queue_buffer'] = $newBuffer;
+                        if ($batchId) {
+                            $state['batch_id'] = $batchId;
+                        }
                         saveState($state);
                         $buffer = $newBuffer;
-                        logMsg("Buffer refilled with " . count($newBuffer) . " tracks");
+                        logMsg("Buffer refilled with " . count($newBuffer) . " tracks (batchId=$batchId)");
                     } else {
                         logMsg("Station returned empty tracks");
                     }

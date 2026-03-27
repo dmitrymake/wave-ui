@@ -74,9 +74,9 @@ class YandexMusic {
 
     public function getStationTracks($stationId, $queueHistory = [], $extraParams = []) {
         $this->log("Getting tracks for Station: $stationId with params: " . json_encode($extraParams));
-        
+
         $url = "/rotor/station/{$stationId}/tracks";
-        
+
         $params = [
             "includeTracksInResponse" => "true",
             "recursive" => "true"
@@ -100,13 +100,14 @@ class YandexMusic {
         $fullUrl = $url . '?' . http_build_query($params);
         $data = $this->request($fullUrl);
 
-        if (isset($data['result']['batchId'])) {
-            $this->log("Rotor returned batchId: " . $data['result']['batchId']);
+        $batchId = $data['result']['batchId'] ?? null;
+        if ($batchId) {
+            $this->log("Rotor returned batchId: $batchId");
         }
 
         $tracks = [];
         $sequence = $data['result']['sequence'] ?? [];
-        
+
         foreach ($sequence as $item) {
             $t = $item['track'] ?? $item;
             if (isset($t['id'])) {
@@ -114,7 +115,28 @@ class YandexMusic {
                 if ($formatted) $tracks[] = $formatted;
             }
         }
-        return $tracks;
+        return ['tracks' => $tracks, 'batchId' => $batchId];
+    }
+
+    public function sendFeedback($stationId, $type, $trackId = null, $batchId = null, $totalSeconds = 0) {
+        $url = "/rotor/station/{$stationId}/feedback";
+        $params = [];
+        if ($batchId) $params['batch-id'] = $batchId;
+        if (!empty($params)) $url .= '?' . http_build_query($params);
+
+        $body = [
+            'type' => $type,
+            'timestamp' => date('c'),
+        ];
+        if ($trackId) {
+            $body['trackId'] = (string)$trackId;
+        }
+        if ($type === 'trackFinished' && $totalSeconds > 0) {
+            $body['totalPlayedSeconds'] = $totalSeconds;
+        }
+
+        $this->log("Feedback: $type track=$trackId batch=$batchId");
+        return $this->request($url, $body, false, true);
     }
 
     /**
