@@ -16,6 +16,11 @@ if (!is_dir(TRACKS_DIR)) @mkdir(TRACKS_DIR, 0777, true);
 $pollInterval = 2;
 
 function logMsg($msg) {
+    // Rotate log if > 500KB
+    if (file_exists(LOG_FILE) && filesize(LOG_FILE) > 512000) {
+        $lines = file(LOG_FILE);
+        file_put_contents(LOG_FILE, implode('', array_slice($lines, -200)));
+    }
     $str = "[" . date('H:i:s') . "] $msg\n";
     @file_put_contents(LOG_FILE, $str, FILE_APPEND);
 }
@@ -303,7 +308,11 @@ while (true) {
                 saveState($state);
             }
 
-            if (!empty($buffer)) {
+            // Add up to $batchSize tracks per iteration to keep ahead of playback
+            $batchSize = ($tracksAhead <= 1) ? 3 : 1;
+            $added = 0;
+
+            while (!empty($buffer) && $added < $batchSize) {
                 $nextTrack = array_shift($buffer);
 
                 try {
@@ -311,7 +320,7 @@ while (true) {
                     $checkState = getState();
                     if (empty($checkState['active'])) {
                         logMsg("Daemon stopped abruptly. Aborting add.");
-                        continue;
+                        break;
                     }
 
                     $linkInfo = $api->getDirectLinkInfo($nextTrack['id']);
@@ -324,7 +333,7 @@ while (true) {
                         $checkState = getState();
                         if (empty($checkState['active'])) {
                             logMsg("Daemon stopped before download. Aborting.");
-                            continue;
+                            break;
                         }
 
                         // Download track to RAM, fall back to remote URL on failure
@@ -339,6 +348,7 @@ while (true) {
                             logMsg("Added (stream): " . $nextTrack['title']);
                         }
 
+                        $added++;
                         if (!isset($state['played_history'])) $state['played_history'] = [];
                         $state['played_history'][] = (string)$nextTrack['id'];
                         if (count($state['played_history']) > 150) {
@@ -350,8 +360,10 @@ while (true) {
                 } catch (Exception $e) {
                     logMsg("Link Error: " . $e->getMessage());
                 }
+            }
 
-                // Persist updated buffer and history
+            // Persist updated buffer and history
+            if ($added > 0) {
                 $currentState = getState();
                 if (!empty($currentState['active'])) {
                     $currentState['queue_buffer'] = $buffer;

@@ -4,8 +4,9 @@ class YandexMusic {
     private $userId = null;
     private $userAgent = 'Yandex-Music-Client';
     private $salt = "XGRlBW9FXlekgbPrRHuSiA";
-    private $debug = true;
+    private $debug = false;
     private $logFile = '/dev/shm/wave_yandex_debug.log';
+    private $maxLogSize = 512000; // 500KB
 
     public function __construct($token) {
         $this->token = $token;
@@ -13,6 +14,11 @@ class YandexMusic {
 
     private function log($msg) {
         if (!$this->debug) return;
+        // Rotate log if too large
+        if (file_exists($this->logFile) && filesize($this->logFile) > $this->maxLogSize) {
+            $lines = file($this->logFile);
+            file_put_contents($this->logFile, implode('', array_slice($lines, -200)));
+        }
         $ts = date('H:i:s');
         @file_put_contents($this->logFile, "[$ts] $msg\n", FILE_APPEND);
     }

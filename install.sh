@@ -166,6 +166,9 @@ server {
     ssl_certificate $SSL_CERT;
     ssl_certificate_key $SSL_KEY;
 
+    # Redirect plain HTTP requests sent to HTTPS port
+    error_page 497 =301 https://\$host:$SSL_PORT\$request_uri;
+
     root $FINAL_WEB_DIR;
     index index.html;
 
@@ -192,10 +195,14 @@ server {
 
     location /imagesw/ {
         proxy_pass http://127.0.0.1/imagesw/;
+        proxy_set_header Host \$host;
+        proxy_redirect off;
     }
 
     location /coverart.php {
         proxy_pass http://127.0.0.1/coverart.php;
+        proxy_set_header Host \$host;
+        proxy_redirect off;
     }
 }
 EOF

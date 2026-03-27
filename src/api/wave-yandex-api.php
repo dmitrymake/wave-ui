@@ -418,11 +418,12 @@ try {
                 }
             }
             
-            // Fallback: ignore history if all tracks were duplicates
-            if ($count === 0 && !empty($queueData)) {
+            // Fallback: ignore history if too few tracks passed the filter
+            if ($count < 3 && !empty($queueData)) {
                  foreach ($queueData as $track) {
                     $clean = formatTrack($track);
                     if (!$clean) continue;
+                    if (in_array((string)$clean['id'], $newHistory)) continue;
                     $url = $api->getDirectLink($clean['id']);
                     if ($url) {
                         cacheTrackMeta($url, $clean);
