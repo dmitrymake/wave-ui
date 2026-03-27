@@ -245,8 +245,13 @@ while (true) {
         $playlistLen = intval($mpdStatus['playlistlength'] ?? 0);
         $currentPos = intval($mpdStatus['song'] ?? -1);
 
-        if ($currentPos === -1 && $playlistLen === 0) $tracksAhead = 0;
-        else $tracksAhead = $playlistLen - ($currentPos + 1);
+        // When MPD is stopped/idle, 'song' may be absent (-1).
+        // In that case tracksAhead = the entire playlist (all unplayed).
+        if ($currentPos === -1) {
+            $tracksAhead = ($stateStr === 'stop' || $stateStr === 'pause') ? 0 : $playlistLen;
+        } else {
+            $tracksAhead = $playlistLen - ($currentPos + 1);
+        }
 
         // Remove old tracks, keep 5 behind current position
         $KEEP_BEHIND = 5;
@@ -287,6 +292,11 @@ while (true) {
                                 $newBuffer[] = $nt;
                             }
                         }
+                        // Fallback: if all tracks filtered by history, use them anyway
+                        if (empty($newBuffer)) {
+                            logMsg("All station tracks in history, ignoring filter");
+                            $newBuffer = $newTracks;
+                        }
                         // Re-read state to avoid overwriting concurrent changes
                         $state = getState();
                         if (empty($state['active'])) {
@@ -295,6 +305,9 @@ while (true) {
                         $state['queue_buffer'] = $newBuffer;
                         saveState($state);
                         $buffer = $newBuffer;
+                        logMsg("Buffer refilled with " . count($newBuffer) . " tracks");
+                    } else {
+                        logMsg("Station returned empty tracks");
                     }
                 } catch (Exception $e) {
                     logMsg("Fetch Error: " . $e->getMessage());
@@ -311,6 +324,8 @@ while (true) {
             // Add up to $batchSize tracks per iteration to keep ahead of playback
             $batchSize = ($tracksAhead <= 1) ? 3 : 1;
             $added = 0;
+            $skipped = 0;
+            $wasStopped = ($stateStr === 'stop');
 
             while (!empty($buffer) && $added < $batchSize) {
                 $nextTrack = array_shift($buffer);
@@ -355,21 +370,29 @@ while (true) {
                             $state['played_history'] = array_slice($state['played_history'], -100);
                         }
                     } else {
-                        logMsg("Failed URL for: " . $nextTrack['id']);
+                        logMsg("Failed URL for: " . ($nextTrack['title'] ?? $nextTrack['id']) . " — skipping");
+                        $skipped++;
                     }
                 } catch (Exception $e) {
-                    logMsg("Link Error: " . $e->getMessage());
+                    logMsg("Link Error: " . $e->getMessage() . " — skipping track");
+                    $skipped++;
                 }
             }
 
-            // Persist updated buffer and history
-            if ($added > 0) {
+            // Always persist buffer when tracks were consumed (added or skipped)
+            if ($added > 0 || $skipped > 0) {
                 $currentState = getState();
                 if (!empty($currentState['active'])) {
                     $currentState['queue_buffer'] = $buffer;
-                    $currentState['played_history'] = $state['played_history'];
+                    $currentState['played_history'] = $state['played_history'] ?? ($currentState['played_history'] ?? []);
                     saveState($currentState);
                 }
+            }
+
+            // Resume playback if MPD was stopped (end of queue) and we just added tracks
+            if ($added > 0 && $wasStopped) {
+                mpdSend("play");
+                logMsg("Resumed playback after queue refill");
             }
         }
     } else {
