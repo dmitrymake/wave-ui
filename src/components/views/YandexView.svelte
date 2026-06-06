@@ -1,10 +1,10 @@
 <!-- SPDX-License-Identifier: MIT -->
 <!-- Copyright (c) 2025 dmitrymake -->
 <script lang="ts">
-  import { onMount, tick, untrack } from "svelte";
+  import { onMount, onDestroy, tick, untrack } from "svelte";
   import { fade } from "svelte/transition";
   import { writable, get } from "svelte/store";
-  import { YandexApi } from "../../lib/yandex";
+  import { YandexApi, isYandexAuthError } from "../../lib/yandex";
   import {
     yandexAuthStatus,
     showToast,
@@ -47,6 +47,15 @@
   let searchType = $state("all");
   let searchResults = $state<YandexSearchResultsType>({ tracks: [], albums: [], artists: [] });
   let searchDebounceTimer: ReturnType<typeof setTimeout> | undefined;
+  // Monotonic token: a slow search response is ignored if a newer search has
+  // started, so out-of-order responses can't clobber fresher results.
+  let searchSeq = 0;
+
+  /** Surface a load/search failure as a toast, distinguishing expired tokens. */
+  function reportError(label: string, e: unknown, fallbackMsg: string) {
+    console.error(`[YandexView] ${label}:`, e);
+    showToast(isYandexAuthError(e) ? MSG.YANDEX_TOKEN_EXPIRED : fallbackMsg, "error");
+  }
 
   let currentView = $derived($navigationStack[$navigationStack.length - 1]);
   let viewMode = $derived(getModeFromStack(currentView));
@@ -156,7 +165,7 @@
       searchQuery = "";
       if (vibeCards.length === 0) await loadDashboard();
     } else if (mode === "search") {
-      const term = data?.query || "";
+      const term = (data?.query as string) || "";
       searchQuery = term;
       if (term) {
         if (!restoreFromCache(cacheKey)) {
@@ -184,6 +193,11 @@
       syncLikes();
     }
     setupObserver();
+  });
+
+  onDestroy(() => {
+    clearTimeout(searchDebounceTimer);
+    observer?.disconnect();
   });
 
   function setupObserver() {
@@ -215,8 +229,8 @@
 
   async function syncLikes() {
     try {
-      const res = await YandexApi.getFavoritesIds();
-      if (res && res.ids) {
+      const res = (await YandexApi.getFavoritesIds()) as { ids?: (string | number)[] } | null;
+      if (res?.ids) {
         yandexFavorites.set(new Set(res.ids.map(String)));
       }
     } catch (e) {
@@ -227,24 +241,29 @@
   async function loadDashboard() {
     isLoading = true;
     try {
-      const [userPls, landing, moodData] = await Promise.all([
+      // allSettled: a single failing endpoint must not blank the whole board.
+      const [userPlsR, landingR, moodR] = await Promise.allSettled([
         YandexApi.getUserPlaylists(),
         YandexApi.getLanding(),
         YandexApi.getStationsDashboard(),
       ]);
 
-      const myVibe = {
-        title: "My Vibe",
+      const userPls = userPlsR.status === "fulfilled" ? (userPlsR.value as YandexPlaylist[] | null) : null;
+      const landing = landingR.status === "fulfilled" ? (landingR.value as { personal?: YandexPlaylist[] } | null) : null;
+      const moodData = moodR.status === "fulfilled" ? (moodR.value as { stations?: YandexPlaylist[] } | null) : null;
+
+      const myVibe: YandexPlaylist = {
+        uid: "my_vibe",
         kind: "my_vibe",
-        cover: null,
+        title: "My Vibe",
         isStation: true,
         bgColor: "linear-gradient(135deg, #FFCC00, #FF3333)",
       };
 
-      const moodStations = moodData.stations || [];
+      const moodStations = moodData?.stations ?? [];
       vibeCards = [myVibe, ...moodStations];
 
-      const mappedPlaylists = (userPls || []).map((pl) => {
+      const mappedPlaylists = (userPls ?? []).map((pl) => {
         if (pl.kind === "favorites") {
           const count =
             $yandexFavorites.size > 0
@@ -255,10 +274,14 @@
         return pl;
       });
 
-      collectionCards = [...(landing.personal || []), ...mappedPlaylists];
+      collectionCards = [...(landing?.personal ?? []), ...mappedPlaylists];
+
+      // Only alarm the user if nothing at all could be loaded.
+      if (userPlsR.status === "rejected" && landingR.status === "rejected" && moodR.status === "rejected") {
+        reportError("Dashboard", moodR.reason, MSG.YANDEX_FAILED_DASHBOARD);
+      }
     } catch (e) {
-      console.error("[YandexView] Dashboard Error:", e);
-      showToast(MSG.YANDEX_FAILED_DASHBOARD, "error");
+      reportError("Dashboard", e, MSG.YANDEX_FAILED_DASHBOARD);
     } finally {
       isLoading = false;
     }
@@ -298,14 +321,9 @@
   async function loadPlaylistData(data: Record<string, unknown>) {
     isLoading = true;
     canLoadMore = true;
-    let uid = data.uid;
-    let kind = data.kind;
-    if (
-      !uid &&
-      data.id &&
-      typeof data.id === "string" &&
-      data.id.includes(":")
-    ) {
+    let uid = (data.uid as string | null) ?? null;
+    let kind = (data.kind as string | null) ?? null;
+    if (!uid && typeof data.id === "string" && data.id.includes(":")) {
       const parts = data.id.split(":");
       uid = parts[0];
       kind = parts[1];
@@ -315,6 +333,8 @@
     currentPlaylistContext = { uid, kind, offset: 0, type: "playlist" };
     try {
       await loadPlaylistTracks(uid, kind, 0);
+    } catch (e) {
+      reportError("Playlist", e, MSG.YANDEX_FAILED_PLAYLIST);
     } finally {
       isLoading = false;
     }
@@ -324,32 +344,39 @@
     isLoading = true;
     canLoadMore = false;
     try {
-      const res = await YandexApi.getArtistDetails(data.id);
+      const res = (await YandexApi.getArtistDetails(String(data.id))) as {
+        artist?: { name?: string; description?: string };
+        cover?: string;
+        tracks?: YandexTrack[];
+        albums?: YandexAlbum[];
+      } | null;
 
       const headerData = {
-        name: res.artist.name,
-        title: res.artist.name,
-        description: res.artist.description,
-        cover: res.cover,
+        name: res?.artist?.name ?? "",
+        title: res?.artist?.name ?? "",
+        description: res?.artist?.description ?? "",
+        cover: res?.cover ?? null,
       };
 
       const stack = get(navigationStack);
       const active = stack[stack.length - 1];
-      if (active.view === "yandex_artist_details") {
+      if (active?.view === "yandex_artist_details") {
         active.data = { ...active.data, ...headerData };
         navigationStack.set(stack);
       }
 
-      tracksStore.set(res.tracks || []);
-      albumsStore.set(res.albums || []);
+      tracksStore.set(res?.tracks ?? []);
+      albumsStore.set(res?.albums ?? []);
 
       // Cache immediately after load
       const key = getCacheKey("artist_details", data);
       saveToCache(key, {
-        tracks: res.tracks || [],
-        albums: res.albums || [],
+        tracks: res?.tracks ?? [],
+        albums: res?.albums ?? [],
         headerData,
       });
+    } catch (e) {
+      reportError("Artist", e, MSG.YANDEX_FAILED_ARTIST);
     } finally {
       isLoading = false;
     }
@@ -359,30 +386,37 @@
     isLoading = true;
     canLoadMore = false;
     try {
-      const res = await YandexApi.getAlbumDetails(data.id);
+      const res = (await YandexApi.getAlbumDetails(String(data.id))) as {
+        title?: string;
+        artist?: string;
+        cover?: string;
+        tracks?: YandexTrack[];
+      } | null;
 
       const headerData = {
-        name: res.title,
-        title: res.title,
-        artist: res.artist,
-        cover: res.cover,
+        name: res?.title ?? "",
+        title: res?.title ?? "",
+        artist: res?.artist ?? "",
+        cover: res?.cover ?? null,
       };
 
       const stack = get(navigationStack);
       const active = stack[stack.length - 1];
-      if (active.view === "yandex_album_details") {
+      if (active?.view === "yandex_album_details") {
         active.data = { ...active.data, ...headerData };
         navigationStack.set(stack);
       }
-      tracksStore.set(res.tracks || []);
+      tracksStore.set(res?.tracks ?? []);
 
       // Cache immediately after load
       const key = getCacheKey("album_details", data);
       saveToCache(key, {
-        tracks: res.tracks || [],
+        tracks: res?.tracks ?? [],
         albums: [],
         headerData,
       });
+    } catch (e) {
+      reportError("Album", e, MSG.YANDEX_FAILED_ALBUM);
     } finally {
       isLoading = false;
     }
@@ -395,13 +429,18 @@
     navigateTo("yandex_album_details", album);
   }
 
-  async function loadPlaylistTracks(uid: string, kind: string, offset: number) {
-    const res = await YandexApi.getPlaylistTracks(uid, kind, offset);
-    if (res && res.tracks) {
-      if (offset === 0) tracksStore.set(res.tracks);
-      else tracksStore.update((curr) => [...curr, ...res.tracks]);
-      if (res.tracks.length === 0) canLoadMore = false;
-      return res.tracks.length;
+  async function loadPlaylistTracks(uid: string | null, kind: string | null, offset: number): Promise<number> {
+    if (!uid || !kind) {
+      canLoadMore = false;
+      return 0;
+    }
+    const res = (await YandexApi.getPlaylistTracks(uid, kind, offset)) as { tracks?: YandexTrack[] } | null;
+    const tracks = res?.tracks;
+    if (tracks) {
+      if (offset === 0) tracksStore.set(tracks);
+      else tracksStore.update((curr) => [...curr, ...tracks]);
+      if (tracks.length === 0) canLoadMore = false;
+      return tracks.length;
     }
     canLoadMore = false;
     return 0;
@@ -410,6 +449,7 @@
   async function loadMore() {
     if (isLoadingMore || !canLoadMore) return;
     isLoadingMore = true;
+    const prevOffset = currentPlaylistContext.offset;
     try {
       currentPlaylistContext.offset += 50;
       if (currentPlaylistContext.type === "playlist") {
@@ -420,13 +460,17 @@
         );
         if (count === 0) canLoadMore = false;
       }
+    } catch (e) {
+      // Roll back the optimistic offset bump so a retry doesn't skip a page.
+      currentPlaylistContext.offset = prevOffset;
+      reportError("Load more", e, MSG.YANDEX_FAILED_PLAYLIST);
     } finally {
       isLoadingMore = false;
     }
   }
 
   function handleSearchInput(e: Event) {
-    const val = e.target.value;
+    const val = (e.target as HTMLInputElement).value;
     searchQuery = val;
     clearTimeout(searchDebounceTimer);
     if (val.length >= 2) {
@@ -442,18 +486,26 @@
 
   async function performSearch() {
     if (!searchQuery) return;
+    const seq = ++searchSeq;
+    const q = searchQuery;
     isLoading = true;
     searchResults = { tracks: [], albums: [], artists: [] };
     try {
-      const res = await YandexApi.search(searchQuery);
-      if (res) {
-        searchResults = res;
-        if (searchType === "track" || searchType === "all") {
-          tracksStore.set(res.tracks || []);
-        }
+      const res = (await YandexApi.search(q)) as Partial<YandexSearchResultsType> | null;
+      if (seq !== searchSeq) return; // superseded by a newer search — drop stale result
+      const normalized: YandexSearchResultsType = {
+        tracks: res?.tracks ?? [],
+        albums: res?.albums ?? [],
+        artists: res?.artists ?? [],
+      };
+      searchResults = normalized;
+      if (searchType === "track" || searchType === "all") {
+        tracksStore.set(normalized.tracks);
       }
+    } catch (e) {
+      if (seq === searchSeq) reportError("Search", e, MSG.YANDEX_FAILED_SEARCH);
     } finally {
-      isLoading = false;
+      if (seq === searchSeq) isLoading = false;
     }
   }
 
@@ -473,7 +525,7 @@
     let contextName = "Yandex Playlist";
     if (currentView?.data) {
       contextName =
-        currentView.data.title || currentView.data.name || contextName;
+        (currentView.data.title as string) || (currentView.data.name as string) || contextName;
       if (viewMode === "artist_details") contextName = `Artist: ${contextName}`;
       if (viewMode === "album_details") contextName = `Album: ${contextName}`;
     }
@@ -481,7 +533,7 @@
     showToast(MSG.startingContext(contextName), "info");
 
     try {
-      const res = await YandexApi.playPlaylist(raw, contextName);
+      const res = (await YandexApi.playPlaylist(raw, contextName)) as { status?: string };
       if (res.status === "ok") {
         showToast(MSG.PLAY_PLAYING, "success");
       } else {
@@ -498,7 +550,7 @@
     if (!raw || raw.length === 0) return;
     showToast(MSG.addingTracks(raw.length), "info");
     try {
-      const res = await YandexApi.addTracksToQueue(raw);
+      const res = (await YandexApi.addTracksToQueue(raw)) as { status?: string };
       if (res.status === "ok") {
         showToast(MSG.PLAY_ADDED_TO_QUEUE, "success");
       }
@@ -514,7 +566,7 @@
 
     showToast(MSG.startingTypeVibe(type), "info");
     try {
-      await YandexApi.playRadio(data.id, type);
+      await YandexApi.playRadio(String(data.id), type);
     } catch (e) {
       showToast(MSG.RADIO_FAILED_START_VIBE, "error");
     }

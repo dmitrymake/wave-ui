@@ -1,6 +1,5 @@
 <?php
 define('INC', '/var/www/inc');
-require_once INC . '/yandex-music.php';
 
 define('STORAGE_DIR', '/dev/shm/yandex_music/');
 define('TRACKS_DIR', STORAGE_DIR . 'tracks/');
@@ -9,6 +8,9 @@ define('META_CACHE_FILE', STORAGE_DIR . 'meta_cache.json');
 define('TOKEN_FILE', '/var/local/www/yandex_token.dat');
 define('LOG_FILE', '/dev/shm/wave_daemon.log');
 define('MAX_CACHED_FILES', 12);
+
+require_once INC . '/yandex-music.php';
+require_once INC . '/yandex-cache.php';
 
 if (!is_dir(STORAGE_DIR)) @mkdir(STORAGE_DIR, 0777, true);
 if (!is_dir(TRACKS_DIR)) @mkdir(TRACKS_DIR, 0777, true);
@@ -75,15 +77,8 @@ function saveState($state) {
     fclose($fp);
 }
 
-function updateMetaCache($url, $track) {
-    $cache = file_exists(META_CACHE_FILE) ? json_decode(file_get_contents(META_CACHE_FILE), true) : [];
-    if (count($cache) > 300) $cache = array_slice($cache, -100, 100, true);
-
-    $key = md5($url);
-    $cache[$key] = $track;
-    if (isset($track['id'])) $cache[(string)$track['id']] = $track;
-
-    file_put_contents(META_CACHE_FILE, json_encode($cache));
+function updateMetaCache($url, $track, $localPath = null) {
+    storeTrackMeta($track, $url, $localPath);
 }
 
 /**
@@ -205,6 +200,8 @@ function isYandexFile($file) {
 
 logMsg("Daemon Started");
 
+@unlink('/dev/shm/wave_yandex_state.json');
+
 $api = null;
 $lastToken = "";
 $lastPlayingTrackId = null;
@@ -253,14 +250,11 @@ while (true) {
 
             // Resolve current track ID from meta cache
             $currentTrackId = null;
-            if (!empty($currentFile) && file_exists(META_CACHE_FILE)) {
-                $metaCache = json_decode(file_get_contents(META_CACHE_FILE), true) ?: [];
-                $filePath = str_replace('file://', '', $currentFile);
-                $key = md5($filePath);
-                if (isset($metaCache[$key]['id'])) {
-                    $currentTrackId = $metaCache[$key]['id'];
-                } elseif (isset($metaCache[$filePath]['id'])) {
-                    $currentTrackId = $metaCache[$filePath]['id'];
+            if (!empty($currentFile)) {
+                $metaCache = readMetaCache();
+                $meta = lookupMeta($metaCache, $currentFile);
+                if ($meta && !empty($meta['id'])) {
+                    $currentTrackId = $meta['id'];
                 }
             }
 
@@ -323,26 +317,55 @@ while (true) {
             if (empty($buffer) && ($state['mode'] ?? '') === 'station') {
                 $stationId = $state['station_id'] ?? 'user:onyourwave';
                 $history = $state['played_history'] ?? [];
-                $params = $state['station_params'] ?? [];
+                $settings = $state['station_settings'] ?? null;
 
-                logMsg("Refilling radio: $stationId Params: " . json_encode($params));
+                logMsg("Refilling radio: $stationId settings=" . json_encode($settings) . " historyCount=" . count($history));
 
                 try {
-                    $result = $api->getStationTracks($stationId, $history, $params);
+                    // Re-apply settings on every refill (rotor remembers per-session)
+                    if ($settings !== null) {
+                        try {
+                            $api->setStationSettings($stationId, $settings);
+                        } catch (Exception $e) {
+                            logMsg("setStationSettings failed: " . $e->getMessage());
+                        }
+                    }
+
+                    $result = $api->getStationTracks($stationId, $history);
                     $newTracks = $result['tracks'];
                     $batchId = $result['batchId'];
 
                     if (!empty($newTracks)) {
                         $newBuffer = [];
+                        $seen = [];
                         foreach ($newTracks as $nt) {
-                            if (!in_array((string)$nt['id'], $history)) {
+                            $tid = (string)$nt['id'];
+                            if (isset($seen[$tid])) continue;          // de-dup within this batch
+                            if (!in_array($tid, $history)) {
+                                $seen[$tid] = true;
                                 $newBuffer[] = $nt;
                             }
                         }
-                        // Fallback: if all tracks filtered by history, use them anyway
+                        // Soft fallback: if the full history filtered everything out,
+                        // allow tracks that are NOT among the most recent plays — so we
+                        // keep going without repeating what was just heard. Accept the
+                        // batch as-is only as a last resort.
                         if (empty($newBuffer)) {
-                            logMsg("All station tracks in history, ignoring filter");
-                            $newBuffer = $newTracks;
+                            $recent = array_slice($history, -30);
+                            foreach ($newTracks as $nt) {
+                                $tid = (string)$nt['id'];
+                                if (isset($seen[$tid])) continue;
+                                if (!in_array($tid, $recent)) {
+                                    $seen[$tid] = true;
+                                    $newBuffer[] = $nt;
+                                }
+                            }
+                            if (empty($newBuffer)) {
+                                logMsg("All station tracks recently played; accepting batch as-is");
+                                $newBuffer = $newTracks;
+                            } else {
+                                logMsg("History soft-fallback: " . count($newBuffer) . " not-recent tracks");
+                            }
                         }
                         // Re-read state to avoid overwriting concurrent changes
                         $state = getState();
@@ -404,8 +427,8 @@ while (true) {
                         // Download track to RAM, fall back to remote URL on failure
                         $localPath = downloadTrack($url, $nextTrack['id'], $codec);
                         if ($localPath) {
-                            // Also cache meta under local path for client lookup
-                            updateMetaCache($localPath, $nextTrack);
+                            // Cache meta under both CDN url and local path in one write
+                            updateMetaCache($url, $nextTrack, $localPath);
                             mpdSend('add "file://' . $localPath . '"');
                             logMsg("Added (cached): " . $nextTrack['title']);
                         } else {

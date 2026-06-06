@@ -16,7 +16,7 @@ import {
 import { db } from "../db";
 import { ApiActions } from "../api";
 import { YandexApi } from "../yandex";
-import { isRemoteUrl, findStationByStream } from "../utils";
+import { isRemoteUrl, findStationByStream, getYandexIdFromUrl } from "../utils";
 import { MSG } from "../messages";
 import { logger } from "../logger";
 import type { Track, MpdStatus, CurrentSong, Station, YandexContext, YandexTrack } from "../types";
@@ -105,20 +105,6 @@ async function refreshStatus(): Promise<void> {
   }
 }
 
-function getYandexIdFromUrl(url: string | null | undefined): string | null {
-  if (!url) return null;
-  // Local cached file: /dev/shm/yandex_music/tracks/{id}.{ext}
-  let match: RegExpMatchArray | null = url.match(/\/tracks\/(\d+)\.\w+/);
-  if (match) return match[1];
-  match = url.match(/[?&]track-id=([^&]+)/);
-  if (match) return match[1];
-  match = url.match(/[?&]id=([^&]+)/);
-  if (match) return match[1];
-  match = url.match(/\/track\/(\d+)/);
-  if (match) return match[1];
-  return null;
-}
-
 async function syncQueue(newVersion: number): Promise<void> {
   if (get(isQueueLocked)) return;
 
@@ -141,6 +127,8 @@ async function syncQueue(newVersion: number): Promise<void> {
         logger.warn("Failed to hydrate queue from DB", dbErr);
       }
     }
+
+    const yandexUrlsToFetch: string[] = [];
 
     const tracks: Track[] = rawTracks.map((t) => {
       const fileUrl: string = t.file || "";
@@ -179,7 +167,7 @@ async function syncQueue(newVersion: number): Promise<void> {
       }
 
       if (isYandex) {
-        fetchYandexMetaForTrack(fileUrl);
+        yandexUrlsToFetch.push(fileUrl);
       }
 
       const lookupKey: string = fileUrl.normalize("NFC");
@@ -207,8 +195,84 @@ async function syncQueue(newVersion: number): Promise<void> {
 
     queue.set(tracks);
     queueVersion.set(newVersion);
+
+    if (yandexUrlsToFetch.length === 1) {
+      fetchYandexMetaForTrack(yandexUrlsToFetch[0]);
+    } else if (yandexUrlsToFetch.length > 1) {
+      fetchYandexMetaBatch(yandexUrlsToFetch);
+    }
   } catch (e) {
     logger.error("Queue sync error", e);
+  }
+}
+
+async function fetchYandexMetaBatch(urls: string[]): Promise<void> {
+  const yCtx: YandexContext = get(yandexContext);
+  const missing = urls.filter((u) => {
+    if (yCtx.streamCache && yCtx.streamCache[u]) return false;
+    const tId = getYandexIdFromUrl(u);
+    if (tId && yCtx.streamCache && yCtx.streamCache[tId]) return false;
+    return true;
+  });
+  if (!missing.length) return;
+
+  const results = await ApiActions.batchGetYandexMeta(missing);
+  for (const url of Object.keys(results)) {
+    const meta = results[url];
+    if (!meta) continue;
+    const cacheEntry = {
+      id: String(meta.id ?? ""),
+      title: String(meta.title ?? ""),
+      artist: String(meta.artist ?? ""),
+      album: meta.album as string | undefined,
+      image: meta.image as string | undefined,
+      time: meta.time as number | undefined,
+      isYandex: true as const,
+      file: url,
+    };
+    yandexContext.update((ctx) => {
+      const newCache = { ...ctx.streamCache };
+      newCache[url] = cacheEntry;
+      if (meta.id) newCache[String(meta.id)] = cacheEntry;
+      return { ...ctx, streamCache: trimStreamCache(newCache) };
+    });
+    queue.update((q) =>
+      q.map((t) => {
+        if (t.file !== url) return t;
+        return {
+          ...t,
+          title: cacheEntry.title || t.title,
+          artist: cacheEntry.artist || t.artist,
+          album: cacheEntry.album || t.album,
+          image: cacheEntry.image,
+          isYandex: true,
+          time: cacheEntry.time || t.time,
+          id: cacheEntry.id || t.id,
+        };
+      }),
+    );
+  }
+
+  const song: CurrentSong = get(currentSong);
+  if (song.file && results[song.file]) {
+    const m = results[song.file];
+    if (m) {
+      currentSong.update((s) => ({
+        ...s,
+        title: String(m.title ?? s.title),
+        artist: String(m.artist ?? s.artist),
+        album: (m.album as string | undefined) ?? s.album,
+        image: m.image as string | undefined,
+        isYandex: true,
+      }));
+      status.update((s) => {
+        const t = m.time as number | undefined;
+        if (t && (s.duration === 0 || isNaN(s.duration))) {
+          return { ...s, duration: t };
+        }
+        return s;
+      });
+    }
   }
 }
 
@@ -494,6 +558,11 @@ export const PlayerActions = {
     const s: MpdStatus = get(status);
     const q: Track[] = get(queue);
     const nextPos = s.song + 1;
+
+    const current: Track | undefined = q[s.song];
+    if (current?.isYandex && current.id) {
+      YandexApi.feedbackSkip(current.id, s.elapsed).catch(() => {});
+    }
 
     if (nextPos < q.length && q[nextPos].title) {
       applyOptimisticTrack(q[nextPos]);

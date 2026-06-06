@@ -12,6 +12,7 @@
   import {
     activeMenuTab,
     stations,
+    currentSong,
     getTrackThumbUrl,
     getTrackCoverUrl,
     openContextMenu,
@@ -19,7 +20,7 @@
     navigateTo,
   } from "../lib/store.js";
   import { longpress } from "../lib/actions";
-  import { isRemoteUrl } from "../lib/utils";
+  import { isRemoteUrl, getYandexIdFromUrl } from "../lib/utils";
 
   let {
     track,
@@ -56,7 +57,16 @@
     currentView?.view === "queue" ||
     (currentView?.view === "root" && $activeMenuTab === "queue"));
   let isExactActive = $derived(isQueueContext ? Number(index) === playingIndex : false);
-  let isPlayingFile = $derived(track.file === playingFile);
+  // Yandex tracks carry the same numeric id on both sides, but expressed
+  // differently: source lists use `yandex:<id>` while the playing MPD file is a
+  // RAM cache path / CDN url. Compare by extracted id so the now-playing
+  // highlight works in album/playlist/search views too, not just the queue.
+  let playingYandexId = $derived(isYandexTrack ? getYandexIdFromUrl($currentSong.file) : null);
+  let isPlayingFile = $derived(
+    isYandexTrack
+      ? playingYandexId !== null && getYandexIdFromUrl(track.file) === playingYandexId
+      : track.file === playingFile,
+  );
   let showStripes = $derived(isPlayingFile && !isExactActive);
   let isRadio = $derived(
     track.file &&

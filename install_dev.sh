@@ -46,6 +46,7 @@ sudo mkdir -p "/dev/shm/yandex_music"
 sudo cp "$TEMP_DIR/src/api/wave-api.php" "$WEB_ROOT/"
 sudo cp "$TEMP_DIR/src/api/wave-yandex-api.php" "$WEB_ROOT/"
 sudo cp "$TEMP_DIR/src/api/yandex-music.php" "$INC_DIR/"
+sudo cp "$TEMP_DIR/src/api/yandex-cache.php" "$INC_DIR/"
 sudo cp "$TEMP_DIR/src/api/yandex-daemon.php" "$BIN_DIR/"
 
 # Обновляем права (на случай если они слетели)

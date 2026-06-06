@@ -26,6 +26,34 @@
   let inputToken = $state("");
   let isChecking = $state(false);
 
+  let diagOpen = $state(false);
+  let diagLoading = $state(false);
+  let diagText = $state("");
+
+  async function loadDiagnostics() {
+    diagLoading = true;
+    try {
+      const dump = await ApiActions.getYandexDebugDump();
+      diagText = JSON.stringify(dump, null, 2);
+    } catch (e) {
+      diagText = "Failed to load diagnostics: " + (e as Error).message;
+    }
+    diagLoading = false;
+  }
+
+  function copyDiagnostics() {
+    if (!diagText) return;
+    navigator.clipboard
+      .writeText(diagText)
+      .then(() => showToast("Diagnostics copied", "success"))
+      .catch(() => showToast("Copy failed", "error"));
+  }
+
+  function toggleDiag() {
+    diagOpen = !diagOpen;
+    if (diagOpen && !diagText) loadDiagnostics();
+  }
+
   function saveConnection() {
     CONFIG.setMoodeIp(ipAddress);
     showToast(MSG.SETTINGS_IP_SAVED, "success");
@@ -162,6 +190,34 @@
           </div>
 
           <p class="hint" in:fade>Token is stored securely on the device.</p>
+
+          {#if $yandexAuthStatus}
+            <div class="separator" in:fade></div>
+            <div class="row space-between" in:fade>
+              <span class="label-text">Diagnostics</span>
+              <button class="btn-primary small" onclick={toggleDiag}>
+                {diagOpen ? "Hide" : "Show"}
+              </button>
+            </div>
+
+            {#if diagOpen}
+              <div class="diag-box" in:fade>
+                {#if diagLoading}
+                  <span class="hint">Loading…</span>
+                {:else}
+                  <pre class="diag-pre">{diagText}</pre>
+                  <div class="row-gap">
+                    <button class="btn-primary small" onclick={loadDiagnostics}
+                      >Refresh</button
+                    >
+                    <button class="btn-primary small" onclick={copyDiagnostics}
+                      >Copy</button
+                    >
+                  </div>
+                {/if}
+              </div>
+            {/if}
+          {/if}
         {/if}
       </div>
     </div>
@@ -504,6 +560,27 @@
   .select-arrow :global(svg) {
     width: 100%;
     height: 100%;
+  }
+
+  .diag-box {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin-top: 4px;
+  }
+  .diag-pre {
+    background: var(--c-surface-input);
+    border: 1px solid var(--c-border);
+    color: var(--c-text-primary);
+    padding: 10px;
+    border-radius: 8px;
+    font-family: monospace;
+    font-size: 11px;
+    max-height: 320px;
+    overflow: auto;
+    white-space: pre-wrap;
+    word-break: break-all;
+    margin: 0;
   }
 
   .status-badge {

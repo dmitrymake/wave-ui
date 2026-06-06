@@ -163,3 +163,39 @@ describe("ApiActions.getYandexMeta", () => {
     expect(result).toBeNull();
   });
 });
+
+describe("ApiActions.batchGetYandexMeta", () => {
+  it("returns empty object for empty input without calling fetch", async () => {
+    const mockFetch = globalThis.fetch as ReturnType<typeof vi.fn>;
+    mockFetch.mockClear();
+    const result = await ApiActions.batchGetYandexMeta([]);
+    expect(result).toEqual({});
+    expect(mockFetch).not.toHaveBeenCalled();
+  });
+
+  it("POSTs urls array and returns keyed results", async () => {
+    const payload = {
+      "yandex:123": { title: "A", artist: "X" },
+      "http://cdn/track/456": { title: "B", artist: "Y" },
+    };
+    const mockFetch = globalThis.fetch as ReturnType<typeof vi.fn>;
+    mockFetch.mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve(payload),
+    });
+    const urls = ["yandex:123", "http://cdn/track/456"];
+    const result = await ApiActions.batchGetYandexMeta(urls);
+    expect(result).toEqual(payload);
+
+    const call = mockFetch.mock.calls[mockFetch.mock.calls.length - 1];
+    expect(String(call[0])).toContain("action=batch_get_meta");
+    expect(call[1].method).toBe("POST");
+    expect(JSON.parse(call[1].body)).toEqual({ urls });
+  });
+
+  it("returns empty object on fetch failure", async () => {
+    (globalThis.fetch as ReturnType<typeof vi.fn>).mockRejectedValue(new Error("net"));
+    const result = await ApiActions.batchGetYandexMeta(["u1"]);
+    expect(result).toEqual({});
+  });
+});

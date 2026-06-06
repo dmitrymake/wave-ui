@@ -85,6 +85,58 @@ describe("longpress action", () => {
     expect(handler).not.toHaveBeenCalled();
   });
 
+  it("does not start when gesture begins on a slider descendant", () => {
+    const handler = vi.fn();
+    node.addEventListener("longpress", handler);
+    const slider = document.createElement("div");
+    slider.setAttribute("role", "slider");
+    node.appendChild(slider);
+
+    action = longpress(node, 500);
+
+    slider.dispatchEvent(new MouseEvent("mousedown", { button: 0, bubbles: true }));
+    vi.advanceTimersByTime(600);
+    expect(handler).not.toHaveBeenCalled();
+  });
+
+  it("does not start when gesture begins on a button descendant", () => {
+    const handler = vi.fn();
+    node.addEventListener("longpress", handler);
+    const btn = document.createElement("button");
+    node.appendChild(btn);
+
+    action = longpress(node, 500);
+
+    btn.dispatchEvent(new MouseEvent("mousedown", { button: 0, bubbles: true }));
+    vi.advanceTimersByTime(600);
+    expect(handler).not.toHaveBeenCalled();
+  });
+
+  it("still fires for a non-interactive descendant", () => {
+    const handler = vi.fn();
+    node.addEventListener("longpress", handler);
+    const child = document.createElement("div");
+    node.appendChild(child);
+
+    action = longpress(node, 500);
+
+    child.dispatchEvent(new MouseEvent("mousedown", { button: 0, bubbles: true }));
+    vi.advanceTimersByTime(500);
+    expect(handler).toHaveBeenCalledTimes(1);
+  });
+
+  it("still fires when the node itself has role=button", () => {
+    node.setAttribute("role", "button");
+    const handler = vi.fn();
+    node.addEventListener("longpress", handler);
+
+    action = longpress(node, 500);
+
+    node.dispatchEvent(new MouseEvent("mousedown", { button: 0 }));
+    vi.advanceTimersByTime(500);
+    expect(handler).toHaveBeenCalledTimes(1);
+  });
+
   it("uses default duration of 2000ms", () => {
     const handler = vi.fn();
     node.addEventListener("longpress", handler);

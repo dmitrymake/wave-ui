@@ -8,7 +8,7 @@ vi.mock("../constants", () => ({
   },
 }));
 
-import { YandexApi } from "../yandex.js";
+import { YandexApi, YandexApiError, isYandexAuthError } from "../yandex.js";
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -45,9 +45,18 @@ describe("YandexApi.request", () => {
     expect(JSON.parse(options.body)).toEqual({ tracks: [1, 2] });
   });
 
-  it("throws on API error", async () => {
-    (globalThis.fetch as ReturnType<typeof vi.fn>).mockResolvedValue({ ok: false });
-    await expect(YandexApi.request("status")).rejects.toThrow("API Error");
+  it("throws YandexApiError on non-ok response", async () => {
+    (globalThis.fetch as ReturnType<typeof vi.fn>).mockResolvedValue({ ok: false, status: 500 });
+    await expect(YandexApi.request("status")).rejects.toBeInstanceOf(YandexApiError);
+  });
+
+  it("flags 401/403 as auth errors", async () => {
+    (globalThis.fetch as ReturnType<typeof vi.fn>).mockResolvedValue({ ok: false, status: 401 });
+    const err = await YandexApi.request("status").catch((e) => e);
+    expect(err).toBeInstanceOf(YandexApiError);
+    expect(err.status).toBe(401);
+    expect(isYandexAuthError(err)).toBe(true);
+    expect(isYandexAuthError(new Error("network"))).toBe(false);
   });
 });
 
@@ -111,5 +120,19 @@ describe("YandexApi convenience methods", () => {
   it("toggleLike sends dislike action for liked track", async () => {
     await YandexApi.toggleLike("999", true);
     expect((globalThis.fetch as ReturnType<typeof vi.fn>).mock.calls[0][0]).toContain("action=dislike");
+  });
+
+  it("feedbackSkip POSTs track_id and played_seconds", async () => {
+    await YandexApi.feedbackSkip("1234", 45.8);
+    const [url, opts] = (globalThis.fetch as ReturnType<typeof vi.fn>).mock.calls[0];
+    expect(String(url)).toContain("action=feedback_skip");
+    expect(opts.method).toBe("POST");
+    expect(JSON.parse(opts.body)).toEqual({ track_id: "1234", played_seconds: 45 });
+  });
+
+  it("feedbackSkip floors negative seconds to 0", async () => {
+    await YandexApi.feedbackSkip("1", -5);
+    const opts = (globalThis.fetch as ReturnType<typeof vi.fn>).mock.calls[0][1];
+    expect(JSON.parse(opts.body).played_seconds).toBe(0);
   });
 });

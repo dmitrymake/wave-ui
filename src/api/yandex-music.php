@@ -1,20 +1,37 @@
 <?php
 class YandexMusic {
+    const UA_OVERRIDE_FILE = '/var/local/www/yandex_client_ua.dat';
+    const UA_DEFAULT = 'YandexMusicAndroid/24023621';
+
     private $token;
     private $userId = null;
     private $userAgent = 'Yandex-Music-Client';
     private $salt = "XGRlBW9FXlekgbPrRHuSiA";
-    private $debug = false;
+    private $debug = true;
     private $logFile = '/dev/shm/wave_yandex_debug.log';
     private $maxLogSize = 512000; // 500KB
+    private $clientHeader;
 
     public function __construct($token) {
         $this->token = $token;
+        $this->clientHeader = $this->resolveClientHeader();
+        $this->log("Init: X-Yandex-Music-Client=" . $this->clientHeader);
+    }
+
+    private function resolveClientHeader() {
+        if (file_exists(self::UA_OVERRIDE_FILE)) {
+            $override = trim(@file_get_contents(self::UA_OVERRIDE_FILE));
+            if ($override !== '') return $override;
+        }
+        return self::UA_DEFAULT;
+    }
+
+    public function getClientHeader() {
+        return $this->clientHeader;
     }
 
     private function log($msg) {
         if (!$this->debug) return;
-        // Rotate log if too large
         if (file_exists($this->logFile) && filesize($this->logFile) > $this->maxLogSize) {
             $lines = file($this->logFile);
             file_put_contents($this->logFile, implode('', array_slice($lines, -200)));
@@ -23,17 +40,18 @@ class YandexMusic {
         @file_put_contents($this->logFile, "[$ts] $msg\n", FILE_APPEND);
     }
 
-    private function request($path, $postData = null, $isXml = false, $asJson = false) {
+    private function request($path, $postData = null, $isXml = false, $asJson = false, $method = null) {
         $url = strpos($path, 'http') === 0 ? $path : "https://api.music.yandex.net" . $path;
-        
-        $logMsg = "REQ: $url";
-        if ($postData) $logMsg .= " | DATA: " . json_encode($postData);
+
+        $verb = $method ?: ($postData ? 'POST' : 'GET');
+        $logMsg = "$verb $url";
+        if ($postData) $logMsg .= " | DATA: " . substr(json_encode($postData), 0, 300);
         $this->log($logMsg);
 
         $headers = [
             "Authorization: OAuth " . $this->token,
             "Accept-Language: ru",
-            "X-Yandex-Music-Client: YandexMusic/24023251"
+            "X-Yandex-Music-Client: " . $this->clientHeader
         ];
 
         $ch = curl_init($url);
@@ -42,7 +60,13 @@ class YandexMusic {
         curl_setopt($ch, CURLOPT_USERAGENT, $this->userAgent);
         curl_setopt($ch, CURLOPT_TIMEOUT, 15);
 
-        if ($postData) {
+        if ($method === 'PUT') {
+            curl_setopt($ch, CURLOPT_CUSTOMREQUEST, 'PUT');
+            if ($postData !== null) {
+                curl_setopt($ch, CURLOPT_POSTFIELDS, $asJson ? json_encode($postData) : http_build_query($postData));
+                if ($asJson) $headers[] = 'Content-Type: application/json';
+            }
+        } elseif ($postData) {
             curl_setopt($ch, CURLOPT_POST, true);
             if ($asJson) {
                 curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($postData));
@@ -59,6 +83,8 @@ class YandexMusic {
 
         if ($httpCode >= 400 && $httpCode != 401) {
             $this->log("ERR [$httpCode]: " . substr($response, 0, 150));
+        } else {
+            $this->log("RES [$httpCode]: " . substr($response, 0, 200));
         }
 
         if ($isXml) return $response;
@@ -73,7 +99,8 @@ class YandexMusic {
     }
 
     public function getStationTracks($stationId, $queueHistory = [], $extraParams = []) {
-        $this->log("Getting tracks for Station: $stationId with params: " . json_encode($extraParams));
+        $historyCount = count($queueHistory);
+        $this->log("Station tracks req: station=$stationId params=" . json_encode($extraParams) . " historyCount=$historyCount");
 
         $url = "/rotor/station/{$stationId}/tracks";
 
@@ -92,37 +119,48 @@ class YandexMusic {
             }
         }
 
+        $fullUrl = $url . '?' . http_build_query($params);
+
         if (!empty($queueHistory)) {
-            $historySlice = array_slice($queueHistory, -20);
-            $params['queue'] = implode(',', $historySlice);
+            // Send a wider recent-history window to the rotor so it avoids
+            // re-recommending tracks beyond just the last handful (was 20).
+            $historySlice = array_slice($queueHistory, -50);
+            foreach ($historySlice as $hid) {
+                $fullUrl .= '&queue=' . urlencode($hid);
+            }
         }
 
-        $fullUrl = $url . '?' . http_build_query($params);
         $data = $this->request($fullUrl);
 
         $batchId = $data['result']['batchId'] ?? null;
-        if ($batchId) {
-            $this->log("Rotor returned batchId: $batchId");
-        }
+        $sequence = $data['result']['sequence'] ?? [];
+        $this->log("Station tracks resp: batchId=$batchId sequenceCount=" . count($sequence));
 
         $tracks = [];
-        $sequence = $data['result']['sequence'] ?? [];
-
+        $previewIds = [];
         foreach ($sequence as $item) {
             $t = $item['track'] ?? $item;
             if (isset($t['id'])) {
                 $formatted = $this->formatTrack($t);
-                if ($formatted) $tracks[] = $formatted;
+                if ($formatted) {
+                    $tracks[] = $formatted;
+                    if (count($previewIds) < 3) $previewIds[] = (string)$t['id'];
+                }
             }
         }
+        $this->log("First tracks: " . implode(',', $previewIds));
         return ['tracks' => $tracks, 'batchId' => $batchId];
+    }
+
+    public function setStationSettings($stationId, $settings) {
+        $url = "/rotor/station/{$stationId}/settings3";
+        $this->log("Station settings3 POST: station=$stationId body=" . json_encode($settings));
+        return $this->request($url, $settings, false, true);
     }
 
     public function sendFeedback($stationId, $type, $trackId = null, $batchId = null, $totalSeconds = 0) {
         $url = "/rotor/station/{$stationId}/feedback";
-        $params = [];
-        if ($batchId) $params['batch-id'] = $batchId;
-        if (!empty($params)) $url .= '?' . http_build_query($params);
+        if ($batchId) $url .= '?batch-id=' . urlencode($batchId);
 
         $body = [
             'type' => $type,
@@ -131,11 +169,11 @@ class YandexMusic {
         if ($trackId) {
             $body['trackId'] = (string)$trackId;
         }
-        if ($type === 'trackFinished' && $totalSeconds > 0) {
+        if (($type === 'trackFinished' || $type === 'trackSkipped') && $totalSeconds > 0) {
             $body['totalPlayedSeconds'] = $totalSeconds;
         }
 
-        $this->log("Feedback: $type track=$trackId batch=$batchId");
+        $this->log("Feedback: type=$type track=$trackId batch=$batchId played=$totalSeconds");
         return $this->request($url, $body, false, true);
     }
 

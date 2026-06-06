@@ -14,14 +14,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
 }
 
 define('INC', '/var/www/inc');
-require_once INC . '/yandex-music.php';
 
 define('STORAGE_DIR', '/dev/shm/yandex_music/');
 define('STATE_FILE', STORAGE_DIR . 'state.json');
 define('META_CACHE_FILE', STORAGE_DIR . 'meta_cache.json');
+define('DAEMON_LOG_FILE', '/dev/shm/wave_daemon.log');
 define('TOKEN_FILE', '/var/local/www/yandex_token.dat');
 define('LOG_FILE', '/dev/shm/wave_api.log');
-define('RAM_STORE_FILE', '/dev/shm/wave_yandex_state.json');
+
+require_once INC . '/yandex-music.php';
+require_once INC . '/yandex-cache.php';
 
 if (!is_dir(STORAGE_DIR)) @mkdir(STORAGE_DIR, 0777, true);
 
@@ -69,9 +71,17 @@ function resetDaemon() {
         'context_name' => 'Stopped'
     ];
     file_put_contents(STATE_FILE, json_encode($blankState));
-    usleep(200000); 
+    usleep(200000);
     mpdSend("stop");
     mpdSend("clear");
+    // Normalize MPD playback mode for Yandex sessions. The daemon assumes strictly
+    // sequential playback (it maintains a sliding window and appends tracks ahead).
+    // If repeat/single is left on the short window loops the first few tracks;
+    // random/consume break the index-based position tracking. Force them off.
+    mpdSend("repeat 0");
+    mpdSend("single 0");
+    mpdSend("random 0");
+    mpdSend("consume 0");
     debug("Daemon Reset Complete.");
 }
 
@@ -113,36 +123,12 @@ function formatTrack($t) {
 }
 
 function cacheTrackMeta($url, $track) {
-    if (!is_dir(STORAGE_DIR)) @mkdir(STORAGE_DIR, 0777, true);
-    $cache = [];
-    if (file_exists(META_CACHE_FILE)) {
-        $content = @file_get_contents(META_CACHE_FILE);
-        if ($content) $cache = json_decode($content, true) ?: [];
-    }
-    if (count($cache) > 300) $cache = array_slice($cache, -100, 100, true);
-    
     $formatted = formatTrack($track);
     if (!$formatted) return;
-
-    $key = md5($url);
-    $cache[$key] = $formatted;
-    if (!empty($formatted['id'])) {
-        $cache[$formatted['id']] = $formatted;
-    }
-    file_put_contents(META_CACHE_FILE, json_encode($cache));
+    storeTrackMeta($formatted, $url, null);
 }
 
 try {
-    if (isset($_REQUEST['action']) && $_REQUEST['action'] === 'get_yandex_meta') {
-        $fileUrl = $_GET['url'] ?? '';
-        if (!$fileUrl || !file_exists(RAM_STORE_FILE)) {
-            echo json_encode(null); exit;
-        }
-        $data = json_decode(file_get_contents(RAM_STORE_FILE), true) ?: [];
-        echo json_encode($data[md5($fileUrl)] ?? null);
-        exit;
-    }
-
     $action = $_REQUEST['action'] ?? '';
 
     if ($action === 'status') {
@@ -348,7 +334,7 @@ try {
 
         case 'play_station':
             $stationId = $_REQUEST['station'] ?? 'user:onyourwave';
-            $extraParams = []; 
+            $stationSettings = null;
             $contextName = "My Vibe";
 
             if (strpos($stationId, 'vibe:') === 0) {
@@ -360,23 +346,33 @@ try {
                     $stationId = 'user:onyourwave';
                     $contextName = "Vibe: " . ucfirst($val);
 
-                    // Map moodEnergy group to separate mood/energy API params
+                    $stationSettings = [
+                        'language' => 'any',
+                        'moodEnergy' => 'all',
+                        'diversity' => 'default',
+                    ];
                     if ($group === 'moodEnergy') {
-                        if (in_array($val, ['active', 'calm'])) {
-                            $extraParams['energy'] = $val;
-                        } else {
-                            $extraParams['mood'] = $val;
-                        }
+                        $stationSettings['moodEnergy'] = $val;
                     } elseif ($group === 'diversity') {
-                        $extraParams['diversity'] = $val;
+                        $stationSettings['diversity'] = $val;
                     } elseif ($group === 'language') {
-                        $extraParams['language'] = $val;
+                        $stationSettings['language'] = $val;
                     } else {
-                        $extraParams[$group] = $val;
+                        $stationSettings[$group] = $val;
                     }
                 }
             } elseif (strpos($stationId, 'track:') === 0) {
                 $contextName = "Track Radio";
+            }
+
+            // For My Vibe without explicit mood, reset server-side settings to defaults
+            // (rotor remembers per-user settings across sessions — cleanup otherwise)
+            if ($stationId === 'user:onyourwave' && $stationSettings === null) {
+                $stationSettings = [
+                    'language' => 'any',
+                    'moodEnergy' => 'all',
+                    'diversity' => 'default',
+                ];
             }
 
             // Preserve play history across station switches
@@ -387,41 +383,55 @@ try {
             }
 
             resetDaemon();
-            $queueData = $api->getStationTracks($stationId, $globalHistory, $extraParams); 
-            
+
+            // Apply station settings before fetching tracks (mood/energy/language filters)
+            if ($stationSettings !== null) {
+                try {
+                    $api->setStationSettings($stationId, $stationSettings);
+                } catch (Exception $e) {
+                    debug("setStationSettings failed: " . $e->getMessage());
+                }
+            }
+
+            $queueData = $api->getStationTracks($stationId, $globalHistory);
+            $tracks = $queueData['tracks'] ?? [];
+            $batchId = $queueData['batchId'] ?? null;
+
+            // Send radioStarted feedback so rotor knows the session began
+            if ($batchId) {
+                try {
+                    $api->sendFeedback($stationId, 'radioStarted', null, $batchId);
+                } catch (Exception $e) {
+                    debug("radioStarted feedback failed: " . $e->getMessage());
+                }
+            }
+
             $initialBuffer = [];
             $count = 0;
             $newHistory = $globalHistory;
 
-            if ($queueData) {
-                foreach ($queueData as $track) { 
-                    $clean = formatTrack($track);
-                    if (!$clean) continue;
+            foreach ($tracks as $clean) {
+                if (!$clean) continue;
+                if (in_array((string)$clean['id'], $globalHistory)) continue;
 
-                    if (in_array((string)$clean['id'], $globalHistory)) {
-                         continue;
+                if ($count < 5) {
+                    $url = $api->getDirectLink($clean['id']);
+                    if ($url) {
+                        cacheTrackMeta($url, $clean);
+                        mpdSend("add \"$url\"");
+                        $count++;
+                        $newHistory[] = (string)$clean['id'];
                     }
-
-                    if ($count < 5) {
-                        $url = $api->getDirectLink($clean['id']);
-                        if ($url) {
-                            cacheTrackMeta($url, $clean);
-                            mpdSend("add \"$url\"");
-                            $count++;
-                            $newHistory[] = (string)$clean['id'];
-                        }
-                    } else {
-                        $initialBuffer[] = $clean;
-                        cacheTrackMeta("yandex:" . $clean['id'], $clean);
-                    }
-                    if (count($initialBuffer) >= 20) break; 
+                } else {
+                    $initialBuffer[] = $clean;
+                    cacheTrackMeta("yandex:" . $clean['id'], $clean);
                 }
+                if (count($initialBuffer) >= 20) break;
             }
-            
+
             // Fallback: ignore history if too few tracks passed the filter
-            if ($count < 3 && !empty($queueData)) {
-                 foreach ($queueData as $track) {
-                    $clean = formatTrack($track);
+            if ($count < 3 && !empty($tracks)) {
+                foreach ($tracks as $clean) {
                     if (!$clean) continue;
                     if (in_array((string)$clean['id'], $newHistory)) continue;
                     $url = $api->getDirectLink($clean['id']);
@@ -432,21 +442,22 @@ try {
                         $newHistory[] = (string)$clean['id'];
                         if ($count >= 5) break;
                     }
-                 }
+                }
             }
 
             mpdSend("play");
-            
+
             saveState([
                 'active' => true,
                 'mode' => 'station',
                 'station_id' => $stationId,
-                'station_params' => $extraParams,
+                'station_settings' => $stationSettings,
                 'context_name' => $contextName,
                 'queue_buffer' => $initialBuffer,
-                'played_history' => $newHistory
+                'played_history' => $newHistory,
+                'batch_id' => $batchId,
             ]);
-            echo json_encode(['status' => 'started', 'context' => $contextName]);
+            echo json_encode(['status' => 'started', 'context' => $contextName, 'tracks' => count($tracks)]);
             break;
 
 
@@ -539,6 +550,23 @@ try {
             echo json_encode(['status' => 'stopped']);
             break;
 
+        case 'feedback_skip':
+            $input = json_decode(file_get_contents('php://input'), true) ?: [];
+            $trackId = (string)($input['track_id'] ?? $_REQUEST['track_id'] ?? '');
+            $playedSeconds = intval($input['played_seconds'] ?? $_REQUEST['played_seconds'] ?? 0);
+            $state = getState();
+            $stationId = $state['station_id'] ?? '';
+            $batchId = $state['batch_id'] ?? null;
+            if ($trackId && $stationId && ($state['mode'] ?? '') === 'station') {
+                try {
+                    $api->sendFeedback($stationId, 'trackSkipped', $trackId, $batchId, $playedSeconds);
+                } catch (Exception $e) {
+                    debug("feedback_skip failed: " . $e->getMessage());
+                }
+            }
+            echo json_encode(['status' => 'ok']);
+            break;
+
         case 'like':
             $api->toggleLike($_REQUEST['track_id'] ?? '', true);
             echo json_encode(['status' => 'liked']);
@@ -551,9 +579,24 @@ try {
             
         case 'get_meta':
             $url = $_GET['url'] ?? '';
-            $cache = file_exists(META_CACHE_FILE) ? json_decode(file_get_contents(META_CACHE_FILE), true) : [];
-            $res = $cache[md5($url)] ?? null;
-            echo json_encode($res);
+            $cache = readMetaCache();
+            $res = lookupMeta($cache, $url);
+            if ($res) bumpMetaAccessTime($url);
+            echo json_encode($res, JSON_UNESCAPED_UNICODE);
+            break;
+
+        case 'batch_get_meta':
+            $input = json_decode(file_get_contents('php://input'), true) ?: [];
+            $urls = $input['urls'] ?? [];
+            $cache = readMetaCache();
+            $out = [];
+            foreach ($urls as $u) {
+                $u = (string)$u;
+                $res = lookupMeta($cache, $u);
+                if ($res) bumpMetaAccessTime($u);
+                $out[$u] = $res;
+            }
+            echo json_encode($out, JSON_UNESCAPED_UNICODE);
             break;
 
         case 'get_state':
@@ -562,6 +605,47 @@ try {
                 'active' => $state['active'] ?? false,
                 'context_name' => $state['context_name'] ?? 'Yandex Music'
             ]);
+            break;
+
+        case 'debug_dump':
+            $state = getState();
+            $dumpCache = file_exists(META_CACHE_FILE) ? json_decode(file_get_contents(META_CACHE_FILE), true) : [];
+            $md5Keys = $idKeys = 0;
+            $uniqueIds = [];
+            foreach ($dumpCache as $k => $v) {
+                if (strlen($k) === 32 && ctype_xdigit($k)) $md5Keys++;
+                else $idKeys++;
+                if (isset($v['id'])) $uniqueIds[(string)$v['id']] = true;
+            }
+            $trackFiles = glob('/dev/shm/yandex_music/tracks/*.*') ?: [];
+
+            $readTail = function($path, $n = 40) {
+                if (!file_exists($path)) return [];
+                $lines = @file($path, FILE_IGNORE_NEW_LINES);
+                return $lines ? array_slice($lines, -$n) : [];
+            };
+
+            $uaFile = '/var/local/www/yandex_client_ua.dat';
+            $clientHeader = (file_exists($uaFile) && trim(file_get_contents($uaFile)))
+                ? trim(file_get_contents($uaFile))
+                : 'YandexMusicAndroid/24023621';
+
+            echo json_encode([
+                'state' => $state,
+                'meta_cache' => [
+                    'bytes' => file_exists(META_CACHE_FILE) ? filesize(META_CACHE_FILE) : 0,
+                    'entries' => count($dumpCache),
+                    'md5_keys' => $md5Keys,
+                    'id_keys' => $idKeys,
+                    'unique_tracks' => count($uniqueIds),
+                ],
+                'tracks_cached' => count($trackFiles),
+                'client_header' => $clientHeader,
+                'token_set' => !!getToken(),
+                'daemon_log_tail' => $readTail(DAEMON_LOG_FILE),
+                'api_log_tail' => $readTail(LOG_FILE, 20),
+                'yandex_debug_log_tail' => $readTail('/dev/shm/wave_yandex_debug.log', 60),
+            ], JSON_UNESCAPED_UNICODE);
             break;
 
         default:

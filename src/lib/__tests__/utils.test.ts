@@ -9,7 +9,7 @@ vi.mock("../constants", () => ({
   },
 }));
 
-import { getStationImageUrl, getCoverUrl, generateUid } from "../utils.js";
+import { getStationImageUrl, getCoverUrl, generateUid, getYandexIdFromUrl } from "../utils.js";
 
 describe("getStationImageUrl", () => {
   it("returns null for null/undefined station", () => {
@@ -57,6 +57,39 @@ describe("getCoverUrl", () => {
   it("returns null for http streams", () => {
     const song = { file: "http://stream.example.com/live" };
     expect(getCoverUrl(song)).toBeNull();
+  });
+});
+
+describe("getYandexIdFromUrl", () => {
+  it("returns null for empty input", () => {
+    expect(getYandexIdFromUrl(null)).toBeNull();
+    expect(getYandexIdFromUrl(undefined)).toBeNull();
+    expect(getYandexIdFromUrl("")).toBeNull();
+  });
+
+  it("extracts id from yandex:<id> metadata uri", () => {
+    expect(getYandexIdFromUrl("yandex:12345")).toBe("12345");
+  });
+
+  it("extracts id from cached RAM path", () => {
+    expect(getYandexIdFromUrl("/dev/shm/yandex_music/tracks/12345.mp3")).toBe("12345");
+    expect(getYandexIdFromUrl("file:///dev/shm/yandex_music/tracks/678.flac")).toBe("678");
+  });
+
+  it("extracts id from CDN stream url query/path forms", () => {
+    expect(getYandexIdFromUrl("https://cdn.yandex.net/get-mp3/x?track-id=999&foo=1")).toBe("999");
+    expect(getYandexIdFromUrl("https://storage.yandex.net/track/4242/download")).toBe("4242");
+  });
+
+  it("returns null for a non-Yandex local file", () => {
+    expect(getYandexIdFromUrl("Music/Artist/Album/track.flac")).toBeNull();
+  });
+
+  it("matches the same id across the source uri and the playing file", () => {
+    const sourceId = getYandexIdFromUrl("yandex:55"); // list item
+    const playingId = getYandexIdFromUrl("/dev/shm/yandex_music/tracks/55.mp3"); // currentSong.file
+    expect(sourceId).toBe(playingId);
+    expect(sourceId).toBe("55");
   });
 });
 

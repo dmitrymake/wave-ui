@@ -59,6 +59,11 @@ export const MSG = {
   YANDEX_CONNECTED: "Yandex connected successfully",
   YANDEX_INVALID_TOKEN: "Invalid token or server error",
   YANDEX_FAILED_DASHBOARD: "Failed to load dashboard",
+  YANDEX_FAILED_SEARCH: "Search failed",
+  YANDEX_FAILED_ARTIST: "Failed to load artist",
+  YANDEX_FAILED_ALBUM: "Failed to load album",
+  YANDEX_FAILED_PLAYLIST: "Failed to load tracks",
+  YANDEX_TOKEN_EXPIRED: "Yandex session expired — reconnect in Settings",
 
   // Queue
   QUEUE_DAEMON_STOPPED: "Daemon stopped (Auto-fill disabled)",

@@ -73,11 +73,17 @@ vi.mock("../../db", () => ({
 }));
 
 vi.mock("../../api", () => ({
-  ApiActions: { getYandexMeta: vi.fn().mockResolvedValue(null) },
+  ApiActions: {
+    getYandexMeta: vi.fn().mockResolvedValue(null),
+    batchGetYandexMeta: vi.fn().mockResolvedValue({}),
+  },
 }));
 
 vi.mock("../../yandex", () => ({
-  YandexApi: { request: vi.fn().mockResolvedValue({}) },
+  YandexApi: {
+    request: vi.fn().mockResolvedValue({}),
+    feedbackSkip: vi.fn().mockResolvedValue({}),
+  },
 }));
 
 import { PlayerActions } from "../../mpd/player.js";
@@ -123,6 +129,38 @@ describe("PlayerActions.next / previous", () => {
     status.set({ state: "play", elapsed: 50, duration: 100 } as MpdStatus);
     await PlayerActions.next();
     expect(get(status).elapsed).toBe(0);
+  });
+});
+
+describe("PlayerActions.next Yandex feedback", () => {
+  it("fires feedbackSkip when current track is Yandex", async () => {
+    const { queue: queueStore } = await import("../../store");
+    const { YandexApi } = await import("../../yandex");
+
+    (queueStore as unknown as { set: (v: unknown) => void }).set([
+      { file: "yandex:12345", id: "12345", isYandex: true, title: "t" },
+      { file: "yandex:67890", id: "67890", isYandex: true, title: "next" },
+    ]);
+    status.set({ state: "play", elapsed: 42, duration: 180, song: 0 } as MpdStatus);
+
+    await PlayerActions.next();
+
+    expect(YandexApi.feedbackSkip).toHaveBeenCalledTimes(1);
+    expect(YandexApi.feedbackSkip).toHaveBeenCalledWith("12345", 42);
+  });
+
+  it("does not fire feedbackSkip when current track is not Yandex", async () => {
+    const { queue: queueStore } = await import("../../store");
+    const { YandexApi } = await import("../../yandex");
+
+    (queueStore as unknown as { set: (v: unknown) => void }).set([
+      { file: "Music/a.flac", id: "0", isYandex: false, title: "local" },
+    ]);
+    status.set({ state: "play", elapsed: 10, duration: 180, song: 0 } as MpdStatus);
+
+    await PlayerActions.next();
+
+    expect(YandexApi.feedbackSkip).not.toHaveBeenCalled();
   });
 });
 

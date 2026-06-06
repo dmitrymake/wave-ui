@@ -3,6 +3,21 @@
 import { API_ENDPOINTS } from "./constants";
 import type { YandexTrack } from "./types";
 
+/** Error thrown by YandexApi.request carrying the HTTP status for the caller. */
+export class YandexApiError extends Error {
+  status: number;
+  constructor(status: number, message?: string) {
+    super(message || `Yandex API error (${status})`);
+    this.name = "YandexApiError";
+    this.status = status;
+  }
+}
+
+/** True when the failure looks like an expired/invalid token (needs reconnect). */
+export function isYandexAuthError(e: unknown): boolean {
+  return e instanceof YandexApiError && (e.status === 401 || e.status === 403);
+}
+
 interface YandexApiType {
   request(action: string, params?: Record<string, unknown>, method?: string): Promise<unknown>;
   search(query: string): Promise<unknown>;
@@ -19,6 +34,7 @@ interface YandexApiType {
   playPlaylist(tracks: YandexTrack[], contextName: string): Promise<unknown>;
   addTracksToQueue(tracks: YandexTrack[]): Promise<unknown>;
   toggleLike(trackId: string | number | undefined, isLiked: boolean): Promise<unknown>;
+  feedbackSkip(trackId: string | number, playedSeconds: number): Promise<unknown>;
 }
 
 export const YandexApi: YandexApiType = {
@@ -42,7 +58,7 @@ export const YandexApi: YandexApiType = {
     }
 
     const res = await fetch(url.toString(), options);
-    if (!res.ok) throw new Error("API Error");
+    if (!res.ok) throw new YandexApiError(res.status);
     return await res.json();
   },
 
@@ -114,5 +130,13 @@ export const YandexApi: YandexApiType = {
   async toggleLike(trackId: string | number | undefined, isLiked: boolean): Promise<unknown> {
     const action = isLiked ? "dislike" : "like";
     return await this.request(action, { track_id: trackId });
+  },
+
+  async feedbackSkip(trackId: string | number, playedSeconds: number): Promise<unknown> {
+    return await this.request(
+      "feedback_skip",
+      { track_id: trackId, played_seconds: Math.max(0, Math.floor(playedSeconds)) },
+      "POST",
+    );
   },
 };
