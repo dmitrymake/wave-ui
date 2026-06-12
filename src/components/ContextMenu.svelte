@@ -242,7 +242,7 @@
   }
 
   .menu-card {
-    background: #1e1e1e;
+    background: var(--c-bg-card);
     width: 220px;
     max-height: 400px;
     border-radius: 12px;

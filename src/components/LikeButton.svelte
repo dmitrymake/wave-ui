@@ -16,9 +16,10 @@
   interface Props {
     track: Track;
     compact?: boolean;
+    class?: string;
   }
 
-  let { track, compact = false }: Props = $props();
+  let { track, compact = false, class: className = "" }: Props = $props();
 
   let liked = $derived(isTrackLiked(track, $favorites, $yandexFavorites));
 
@@ -41,6 +42,13 @@
         );
         await YandexApi.toggleLike(track.id, wasLiked);
       } catch (err) {
+        // Roll back the optimistic toggle so the heart reflects real server state.
+        yandexFavorites.update((s) => {
+          const id = String(track.id);
+          if (wasLiked) s.add(id);
+          else s.delete(id);
+          return s;
+        });
         showToast(MSG.FAV_ERROR_UPDATING, "error");
       }
     } else {
@@ -50,7 +58,7 @@
 </script>
 
 <button
-  class="btn-icon like-btn"
+  class="btn-icon like-btn {className}"
   class:liked
   class:compact
   onclick={handleClick}

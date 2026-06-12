@@ -19,6 +19,7 @@
   let isSearching = false;
   let debounceTimer: ReturnType<typeof setTimeout> | undefined;
   let hasSearched = false;
+  let searchSeq = 0;
 
   onMount(() => {
     if ($searchQuery.length >= 2) {
@@ -26,8 +27,8 @@
     }
   });
 
-  function handleInput(e: Event) {
-    searchQuery.set(e.target.value);
+  function handleInput(e: Event & { currentTarget: HTMLInputElement }) {
+    searchQuery.set(e.currentTarget.value);
 
     clearTimeout(debounceTimer);
     debounceTimer = setTimeout(() => {
@@ -52,11 +53,14 @@
       return;
     }
 
+    const seq = ++searchSeq;
     isSearching = true;
     hasSearched = true;
 
     try {
       const results = await db.search(term);
+      // Bail if a newer search has started while this one was in flight.
+      if (seq !== searchSeq) return;
       const tracksWithIds = results.map((t, i) => ({
         ...t,
         _uid: t.file ? `${t.file}-${i}` : `search-${i}`,
@@ -90,7 +94,7 @@
       });
       foundAlbums = Array.from(albumMap.values());
     } finally {
-      isSearching = false;
+      if (seq === searchSeq) isSearching = false;
     }
   }
 

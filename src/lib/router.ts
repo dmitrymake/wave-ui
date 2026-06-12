@@ -10,6 +10,16 @@ import {
 import { logger } from "./logger";
 import type { NavigationEntry } from "./types.js";
 
+// decodeURIComponent throws a URIError on malformed percent-escapes (a stray "%",
+// a truncated "%E0"). A corrupted/pasted hash must not abort routing.
+function safeDecode(s: string): string {
+  try {
+    return decodeURIComponent(s);
+  } catch {
+    return s;
+  }
+}
+
 export const Router = {
   init(): void {
     this.handleHashChange();
@@ -30,7 +40,7 @@ export const Router = {
       return;
     }
 
-    const parts = raw.split("/").map(decodeURIComponent);
+    const parts = raw.split("/").map(safeDecode);
     const route = parts[0];
 
     let data = consumeRouteData();
@@ -195,21 +205,22 @@ export const Router = {
     } else if (view === "queue") {
       newPath = "queue";
     } else if (view === "yandex_playlist") {
-      newPath = `yandex_playlist/${data!.uid}/${data!.kind}`;
+      if (data?.uid && data?.kind) {
+        newPath = `yandex_playlist/${data.uid}/${data.kind}`;
+      }
     } else if (view === "yandex_album_details") {
-      newPath = `yandex_album/${data!.id}`;
+      if (data?.id) newPath = `yandex_album/${data.id}`;
     } else if (view === "yandex_artist_details") {
-      newPath = `yandex_artist/${data!.id}`;
+      if (data?.id) newPath = `yandex_artist/${data.id}`;
     } else if (view === "yandex_search") {
-      newPath = `yandex_search/${encodeURIComponent(data!.query as string)}`;
+      if (data?.query) {
+        newPath = `yandex_search/${encodeURIComponent(data.query as string)}`;
+      }
     }
 
     if (newPath) {
       const nextHash = `#/${newPath}`;
-      if (
-        decodeURIComponent(window.location.hash) !==
-        decodeURIComponent(nextHash)
-      ) {
+      if (safeDecode(window.location.hash) !== safeDecode(nextHash)) {
         if (view === "yandex_search" || view === "search") {
           window.history.replaceState(null, "", nextHash);
         } else {

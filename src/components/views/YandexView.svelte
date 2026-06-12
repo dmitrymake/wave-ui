@@ -4,7 +4,7 @@
   import { onMount, onDestroy, tick, untrack } from "svelte";
   import { fade } from "svelte/transition";
   import { writable, get } from "svelte/store";
-  import { YandexApi, isYandexAuthError } from "../../lib/yandex";
+  import { YandexApi, isYandexAuthError, type PlaylistSource } from "../../lib/yandex";
   import {
     yandexAuthStatus,
     showToast,
@@ -44,7 +44,6 @@
   let observer: IntersectionObserver | undefined;
 
   let searchQuery = $state("");
-  let searchType = $state("all");
   let searchResults = $state<YandexSearchResultsType>({ tracks: [], albums: [], artists: [] });
   let searchDebounceTimer: ReturnType<typeof setTimeout> | undefined;
   // Monotonic token: a slow search response is ignored if a newer search has
@@ -54,7 +53,14 @@
   /** Surface a load/search failure as a toast, distinguishing expired tokens. */
   function reportError(label: string, e: unknown, fallbackMsg: string) {
     console.error(`[YandexView] ${label}:`, e);
-    showToast(isYandexAuthError(e) ? MSG.YANDEX_TOKEN_EXPIRED : fallbackMsg, "error");
+    if (isYandexAuthError(e)) {
+      // Flip auth state so the view falls back to the "Not Connected" screen
+      // instead of looping failing requests with no recovery path.
+      yandexAuthStatus.set(false);
+      showToast(MSG.YANDEX_TOKEN_EXPIRED, "error");
+    } else {
+      showToast(fallbackMsg, "error");
+    }
   }
 
   let currentView = $derived($navigationStack[$navigationStack.length - 1]);
@@ -239,6 +245,8 @@
   }
 
   async function loadDashboard() {
+    // Dedupe the onMount call and the view-change effect both firing on cold load.
+    if (isLoading) return;
     isLoading = true;
     try {
       // allSettled: a single failing endpoint must not blank the whole board.
@@ -310,6 +318,7 @@
     }
 
     if (pl.kind === "station") {
+      if (!pl.id) return;
       showToast(MSG.startingVibe(pl.title), "info");
       YandexApi.playStation(pl.id);
       return;
@@ -499,20 +508,12 @@
         artists: res?.artists ?? [],
       };
       searchResults = normalized;
-      if (searchType === "track" || searchType === "all") {
-        tracksStore.set(normalized.tracks);
-      }
+      tracksStore.set(normalized.tracks);
     } catch (e) {
       if (seq === searchSeq) reportError("Search", e, MSG.YANDEX_FAILED_SEARCH);
     } finally {
       if (seq === searchSeq) isLoading = false;
     }
-  }
-
-  function setSearchType(type: string) {
-    searchType = type;
-    if (searchResults.tracks && type === "track")
-      tracksStore.set(searchResults.tracks);
   }
 
   async function playAll() {
@@ -530,10 +531,22 @@
       if (viewMode === "album_details") contextName = `Album: ${contextName}`;
     }
 
+    // For paged contexts (favorites / user playlists) hand the daemon a source
+    // descriptor so it can keep fetching beyond the loaded page (e.g. 851 favs
+    // while the UI only loaded 50). offset = how many we already sent.
+    let source: PlaylistSource | null = null;
+    if (viewMode === "playlist" && currentPlaylistContext.uid && currentPlaylistContext.kind) {
+      source = {
+        kind: currentPlaylistContext.kind,
+        uid: String(currentPlaylistContext.uid),
+        offset: raw.length,
+      };
+    }
+
     showToast(MSG.startingContext(contextName), "info");
 
     try {
-      const res = (await YandexApi.playPlaylist(raw, contextName)) as { status?: string };
+      const res = (await YandexApi.playPlaylist(raw, contextName, source)) as { status?: string };
       if (res.status === "ok") {
         showToast(MSG.PLAY_PLAYING, "success");
       } else {

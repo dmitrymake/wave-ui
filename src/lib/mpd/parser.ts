@@ -5,6 +5,7 @@
  * Handles parsing iteratively to avoid memory spikes on large libraries.
  */
 import type { MpdStatus, Track, Playlist } from "../types.js";
+import { isRemoteUrl } from "../utils.js";
 
 export const MpdParser = {
   parseKeyValue(text: string): Record<string, string> {
@@ -26,9 +27,15 @@ export const MpdParser = {
     const data = this.parseKeyValue(text);
     let format = "";
     if (data.audio) {
-      const parts = data.audio.split(":");
-      if (parts[1]) {
-        format = `${parts[1]}-bit`;
+      // audio is sampleRate:bits:channels. MPD reports bits as "f" for float and
+      // "dsd<rate>" for DSD streams, neither of which is a PCM bit-depth.
+      const bits = data.audio.split(":")[1];
+      if (bits === "f") {
+        format = "float";
+      } else if (bits && bits.startsWith("dsd")) {
+        format = bits.toUpperCase();
+      } else if (bits) {
+        format = `${bits}-bit`;
       }
     }
     return {
@@ -129,7 +136,9 @@ export const MpdParser = {
       track: raw.Track || raw.track || "",
       id: raw.Id || raw.id,
       pos: raw.Pos || raw.pos || null,
-      stationName: raw.name || raw.Name || null,
+      // Name is a standard MPD tag local files can carry; only treat it as a
+      // station name for remote (internet-radio) streams.
+      stationName: isRemoteUrl(file) ? raw.name || raw.Name || null : null,
     };
   },
 };

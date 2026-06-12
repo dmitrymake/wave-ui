@@ -2,6 +2,8 @@
 // Copyright (c) 2025 dmitrymake
 import { mount } from 'svelte'
 import './app.css'
+// Register all track sources (Yandex, ...) before any playback starts.
+import './lib/sources'
 import App from './App.svelte'
 
 const app = mount(App, {

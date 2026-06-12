@@ -18,9 +18,16 @@ export function formatTime(seconds: number | null): string {
 
 export function getPct(e: MouseEvent | TouchEvent, element: HTMLElement): number {
   const rect = element.getBoundingClientRect();
-  const clientX = (e as TouchEvent).touches
-    ? (e as TouchEvent).touches[0].clientX
-    : (e as MouseEvent).clientX;
+  // A TouchList is truthy even when empty (e.g. on touchend), so guard on length
+  // and fall back to changedTouches before the mouse coordinate.
+  const te = e as TouchEvent;
+  const point =
+    te.touches && te.touches.length
+      ? te.touches[0]
+      : te.changedTouches && te.changedTouches.length
+        ? te.changedTouches[0]
+        : null;
+  const clientX = point ? point.clientX : (e as MouseEvent).clientX;
   return Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
 }
 
@@ -39,17 +46,15 @@ interface MpdCommands {
   toggleRepeat(): void;
 }
 
-export async function cyclePlayMode(currentMode: number, MPD: MpdCommands): Promise<void> {
-  const nextMode = (currentMode + 1) % 3;
-  if (nextMode === 0) {
-    if (currentMode === 1) MPD.toggleRandom();
-    if (currentMode === 2) MPD.toggleRepeat();
-  } else if (nextMode === 1) {
-    MPD.toggleRandom();
-  } else if (nextMode === 2) {
-    MPD.toggleRandom();
-    MPD.toggleRepeat();
-  }
+export function cyclePlayMode(status: MpdStatus, MPD: MpdCommands): void {
+  const nextMode = (getPlayMode(status) + 1) % 3;
+  // Reconcile the real random/repeat flags to the target mode. Deriving from the
+  // actual flags (rather than the collapsed 0/1/2 value) clears a both-on state
+  // set elsewhere (e.g. via the moOde web UI) in a single step.
+  const wantRandom = nextMode === 1;
+  const wantRepeat = nextMode === 2;
+  if (status.random !== wantRandom) MPD.toggleRandom();
+  if (status.repeat !== wantRepeat) MPD.toggleRepeat();
 }
 
 export async function toggleLike(track: Track): Promise<void> {
@@ -70,6 +75,13 @@ export async function toggleLike(track: Track): Promise<void> {
       );
       await YandexApi.toggleLike(track.id!, liked);
     } catch (err) {
+      // Roll back the optimistic favorites change on failure.
+      yandexFavorites.update((s) => {
+        const id = String(track.id);
+        if (liked) s.add(id);
+        else s.delete(id);
+        return s;
+      });
       showToast(MSG.FAV_ERROR_UPDATING, "error");
     }
   } else {

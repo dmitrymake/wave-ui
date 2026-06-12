@@ -162,7 +162,7 @@ export const ApiActions = {
       const res = await fetch(`${API_ENDPOINTS.SYNC}?action=get_time`);
       if (res.ok) {
         const data = await res.json();
-        return data.time;
+        return data.time ?? null;
       }
     } catch (e) {
       logger.error("Failed to get server time", e);

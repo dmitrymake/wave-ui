@@ -22,10 +22,11 @@
       return `background: linear-gradient(135deg, hsl(348, 95%, 58%), hsl(348, 90%, 40%));`;
     }
 
+    const c = playlist.colorVar || playlist.color || "var(--c-bg-card)";
     if (currentTheme === "gruvbox") {
-      return `background: linear-gradient(135deg, ${playlist.colorVar}, transparent); background-color: ${playlist.colorVar};`;
+      return `background: linear-gradient(135deg, ${c}, transparent); background-color: ${c};`;
     }
-    return `background: ${playlist.color}`;
+    return `background: ${c}`;
   }
 
   function handleContext(e: Event, playlist: Playlist) {

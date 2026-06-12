@@ -3,6 +3,17 @@
 import { API_ENDPOINTS } from "./constants";
 import type { YandexTrack } from "./types";
 
+/**
+ * Pageable source descriptor for "Play All". Lets the daemon keep fetching
+ * subsequent pages (favorites/playlists can have hundreds of tracks while the
+ * UI only loads ~50 at a time). `offset` is where the daemon should continue.
+ */
+export interface PlaylistSource {
+  kind: string;
+  uid: string;
+  offset: number;
+}
+
 /** Error thrown by YandexApi.request carrying the HTTP status for the caller. */
 export class YandexApiError extends Error {
   status: number;
@@ -31,7 +42,7 @@ interface YandexApiType {
   playRadio(id?: string | number, type?: string): Promise<unknown>;
   playStation(stationId: string): Promise<unknown>;
   playTrack(trackId: string | number): Promise<unknown>;
-  playPlaylist(tracks: YandexTrack[], contextName: string): Promise<unknown>;
+  playPlaylist(tracks: YandexTrack[], contextName: string, source?: PlaylistSource | null): Promise<unknown>;
   addTracksToQueue(tracks: YandexTrack[]): Promise<unknown>;
   toggleLike(trackId: string | number | undefined, isLiked: boolean): Promise<unknown>;
   feedbackSkip(trackId: string | number, playedSeconds: number): Promise<unknown>;
@@ -115,10 +126,10 @@ export const YandexApi: YandexApiType = {
     return await this.request("play_track", { id: trackId });
   },
 
-  async playPlaylist(tracks: YandexTrack[], contextName: string): Promise<unknown> {
+  async playPlaylist(tracks: YandexTrack[], contextName: string, source: PlaylistSource | null = null): Promise<unknown> {
     return await this.request(
       "play_playlist",
-      { tracks, context: contextName },
+      { tracks, context: contextName, source },
       "POST",
     );
   },

@@ -6,6 +6,7 @@ import { PlayerActions, startStatusPoller } from "./player";
 import { LibraryActions } from "./library";
 import { currentSong, stations, selectedStationName } from "../store";
 import { isRemoteUrl } from "../utils";
+import { resolveSource } from "../sources/trackSource";
 import type { Track, Station } from "../types.js";
 
 export function connect(): void {
@@ -51,11 +52,14 @@ export function nav(cmd: "next" | "previous"): void {
   const stationList = get(stations);
   const selStation = get(selectedStationName);
   const isRadioMode = isRemoteUrl(song.file);
+  // Streaming sources (e.g. Yandex) advance the MPD queue; only true internet-radio
+  // streams cycle through the station list.
+  const queueNavigable = resolveSource(song.file)?.isQueueNavigable?.(song) ?? false;
 
   if (
     isRadioMode &&
+    !queueNavigable &&
     stationList.length > 0 &&
-    !song.isYandex &&
     (cmd === "next" || cmd === "previous")
   ) {
     let currentIndex = stationList.findIndex((s: Station) => s.name === selStation);

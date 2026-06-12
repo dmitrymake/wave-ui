@@ -34,11 +34,7 @@
     return `background: ${playlist.color}`;
   }
 
-  function handleHorizontalScroll(e: WheelEvent) {
-    if (e.deltaY !== 0) {
-      e.currentTarget.scrollLeft += e.deltaY;
-    }
-  }
+  import { horizontalWheelScroll as handleHorizontalScroll } from "../../lib/horizontalScroll";
 </script>
 
 {#if matchedPlaylists.length > 0}

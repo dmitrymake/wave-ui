@@ -8,18 +8,17 @@ import {
   currentSong,
   stations,
   showToast,
+  showModal,
   queueVersion,
   queue,
   isQueueLocked,
-  yandexContext,
 } from "../store";
 import { db } from "../db";
-import { ApiActions } from "../api";
-import { YandexApi } from "../yandex";
-import { isRemoteUrl, findStationByStream, getYandexIdFromUrl } from "../utils";
+import { resolveSource } from "../sources/trackSource";
+import { isRemoteUrl, findStationByStream } from "../utils";
 import { MSG } from "../messages";
 import { logger } from "../logger";
-import type { Track, MpdStatus, CurrentSong, Station, YandexContext, YandexTrack } from "../types";
+import type { Track, MpdStatus, CurrentSong, Station } from "../types";
 
 const POLLER_INTERVAL: number = 1000;
 const TICKER_INTERVAL: number = 250;
@@ -33,20 +32,6 @@ let isInitialSync: boolean = true;
 let forceHardSync: boolean = false;
 let ignoreUpdatesUntil: number = 0;
 let queueUnlockTimer: ReturnType<typeof setTimeout> | null = null;
-
-const STREAM_CACHE_MAX = 300;
-const STREAM_CACHE_TRIM_TO = 200;
-
-function trimStreamCache(cache: Record<string, YandexTrack & { file: string }>): Record<string, YandexTrack & { file: string }> {
-  const keys = Object.keys(cache);
-  if (keys.length <= STREAM_CACHE_MAX) return cache;
-  const trimmed: Record<string, YandexTrack & { file: string }> = {};
-  const keep = keys.slice(-STREAM_CACHE_TRIM_TO);
-  for (const k of keep) {
-    trimmed[k] = cache[k];
-  }
-  return trimmed;
-}
 
 function escapePath(str: string | null | undefined): string {
   if (!str) return "";
@@ -65,7 +50,9 @@ export function startStatusPoller(): void {
 
   refreshStatus();
   statusPoller = setInterval(() => {
-    if (mpdClient.isConnected && !mpdClient.isProcessing) {
+    // send() already serializes through a FIFO queue, so polls never collide with
+    // an in-flight command; gating on isProcessing only froze status under load.
+    if (mpdClient.isConnected) {
       refreshStatus();
     }
   }, POLLER_INTERVAL);
@@ -113,7 +100,6 @@ async function syncQueue(newVersion: number): Promise<void> {
     if (get(isQueueLocked)) return;
 
     const rawTracks: Track[] = MpdParser.parseTracks(text);
-    const yCtx: YandexContext = get(yandexContext);
 
     const filesToLookup: string[] = rawTracks
       .map((t) => t.file)
@@ -128,46 +114,17 @@ async function syncQueue(newVersion: number): Promise<void> {
       }
     }
 
-    const yandexUrlsToFetch: string[] = [];
+    const toFetch: string[] = [];
 
     const tracks: Track[] = rawTracks.map((t) => {
       const fileUrl: string = t.file || "";
-      const isYandex: boolean =
-        fileUrl.includes("yandex.net") ||
-        fileUrl.includes("get-mp3") ||
-        fileUrl.startsWith("yandex:") ||
-        fileUrl.includes("storage.yandex.net") ||
-        fileUrl.includes("/dev/shm/yandex_music/tracks/");
+      const source = resolveSource(fileUrl);
+      const isYandex: boolean = source?.id === "yandex";
 
-      if (isYandex && yCtx.streamCache) {
-        let yMeta = yCtx.streamCache[fileUrl];
-        if (!yMeta) {
-          const tId: string | null = getYandexIdFromUrl(fileUrl);
-          if (tId) yMeta = yCtx.streamCache[String(tId)];
-        }
-
-        if (yMeta) {
-          const metaTime: number = parseFloat(String(yMeta.time || 0));
-          const currentT: number = parseFloat(String(t.time || 0));
-
-          return {
-            ...t,
-            title: yMeta.title || t.title,
-            artist: yMeta.artist || t.artist,
-            album: yMeta.album || t.album,
-            image: yMeta.image,
-            isYandex: true as const,
-            id: String(yMeta.id),
-            time: currentT > 0 ? currentT : metaTime,
-            mpdId: t.id,
-            mpdPos: t.pos as string,
-            _uid: String(t.id ?? t.pos) + "y",
-          };
-        }
-      }
-
-      if (isYandex) {
-        yandexUrlsToFetch.push(fileUrl);
+      // The owning source gets first chance to enrich from its own cache.
+      if (source?.enrichQueueTrack) {
+        const enriched = source.enrichQueueTrack(t, toFetch);
+        if (enriched) return enriched;
       }
 
       const lookupKey: string = fileUrl.normalize("NFC");
@@ -196,183 +153,11 @@ async function syncQueue(newVersion: number): Promise<void> {
     queue.set(tracks);
     queueVersion.set(newVersion);
 
-    if (yandexUrlsToFetch.length === 1) {
-      fetchYandexMetaForTrack(yandexUrlsToFetch[0]);
-    } else if (yandexUrlsToFetch.length > 1) {
-      fetchYandexMetaBatch(yandexUrlsToFetch);
+    if (toFetch.length) {
+      resolveSource(toFetch[0])?.fetchQueueMeta?.(toFetch);
     }
   } catch (e) {
     logger.error("Queue sync error", e);
-  }
-}
-
-async function fetchYandexMetaBatch(urls: string[]): Promise<void> {
-  const yCtx: YandexContext = get(yandexContext);
-  const missing = urls.filter((u) => {
-    if (yCtx.streamCache && yCtx.streamCache[u]) return false;
-    const tId = getYandexIdFromUrl(u);
-    if (tId && yCtx.streamCache && yCtx.streamCache[tId]) return false;
-    return true;
-  });
-  if (!missing.length) return;
-
-  const results = await ApiActions.batchGetYandexMeta(missing);
-  for (const url of Object.keys(results)) {
-    const meta = results[url];
-    if (!meta) continue;
-    const cacheEntry = {
-      id: String(meta.id ?? ""),
-      title: String(meta.title ?? ""),
-      artist: String(meta.artist ?? ""),
-      album: meta.album as string | undefined,
-      image: meta.image as string | undefined,
-      time: meta.time as number | undefined,
-      isYandex: true as const,
-      file: url,
-    };
-    yandexContext.update((ctx) => {
-      const newCache = { ...ctx.streamCache };
-      newCache[url] = cacheEntry;
-      if (meta.id) newCache[String(meta.id)] = cacheEntry;
-      return { ...ctx, streamCache: trimStreamCache(newCache) };
-    });
-    queue.update((q) =>
-      q.map((t) => {
-        if (t.file !== url) return t;
-        return {
-          ...t,
-          title: cacheEntry.title || t.title,
-          artist: cacheEntry.artist || t.artist,
-          album: cacheEntry.album || t.album,
-          image: cacheEntry.image,
-          isYandex: true,
-          time: cacheEntry.time || t.time,
-          id: cacheEntry.id || t.id,
-        };
-      }),
-    );
-  }
-
-  const song: CurrentSong = get(currentSong);
-  if (song.file && results[song.file]) {
-    const m = results[song.file];
-    if (m) {
-      currentSong.update((s) => ({
-        ...s,
-        title: String(m.title ?? s.title),
-        artist: String(m.artist ?? s.artist),
-        album: (m.album as string | undefined) ?? s.album,
-        image: m.image as string | undefined,
-        isYandex: true,
-      }));
-      status.update((s) => {
-        const t = m.time as number | undefined;
-        if (t && (s.duration === 0 || isNaN(s.duration))) {
-          return { ...s, duration: t };
-        }
-        return s;
-      });
-    }
-  }
-}
-
-async function fetchYandexMetaForTrack(url: string): Promise<void> {
-  const yCtx: YandexContext = get(yandexContext);
-  if (yCtx.streamCache && yCtx.streamCache[url]) return;
-
-  const tId: string | null = getYandexIdFromUrl(url);
-  if (tId && yCtx.streamCache && yCtx.streamCache[tId]) return;
-
-  const meta = await ApiActions.getYandexMeta(url);
-  if (meta) {
-    const cacheEntry = {
-      id: String(meta.id ?? ""),
-      title: String(meta.title ?? ""),
-      artist: String(meta.artist ?? ""),
-      album: meta.album as string | undefined,
-      image: meta.image as string | undefined,
-      time: meta.time as number | undefined,
-      isYandex: true as const,
-      file: url,
-    };
-    yandexContext.update((ctx) => {
-      const newCache = { ...ctx.streamCache };
-      newCache[url] = cacheEntry;
-      if (meta.id) {
-        newCache[String(meta.id)] = cacheEntry;
-      }
-      return { ...ctx, streamCache: trimStreamCache(newCache) };
-    });
-
-    const song: CurrentSong = get(currentSong);
-    if (song.file === url) {
-      currentSong.update((s) => ({
-        ...s,
-        title: cacheEntry.title,
-        artist: cacheEntry.artist,
-        album: cacheEntry.album || s.album,
-        image: cacheEntry.image,
-        isYandex: true,
-      }));
-
-      status.update((s) => {
-        if (cacheEntry.time && (s.duration === 0 || isNaN(s.duration))) {
-          return { ...s, duration: cacheEntry.time };
-        }
-        return s;
-      });
-    }
-
-    queue.update((q) =>
-      q.map((t) => {
-        if (t.file === url)
-          return {
-            ...t,
-            title: cacheEntry.title || t.title,
-            artist: cacheEntry.artist || t.artist,
-            album: cacheEntry.album || t.album,
-            image: cacheEntry.image,
-            isYandex: true,
-            time: cacheEntry.time || t.time,
-          };
-        return t;
-      }),
-    );
-  }
-}
-
-function enrichWithYandexMeta(
-  serverSong: CurrentSong,
-  serverStatus: MpdStatus,
-  yCtx: YandexContext,
-): void {
-  if (!serverSong.file) return;
-
-  let yMeta: (YandexTrack & { file: string }) | undefined;
-  if (yCtx.streamCache) {
-    yMeta = yCtx.streamCache[serverSong.file];
-    if (!yMeta) {
-      const tId = getYandexIdFromUrl(serverSong.file);
-      if (tId) yMeta = yCtx.streamCache[String(tId)];
-    }
-  }
-
-  if (yMeta) {
-    serverSong.title = yMeta.title;
-    serverSong.artist = yMeta.artist;
-    serverSong.album = yMeta.album || serverSong.album;
-    serverSong.image = yMeta.image;
-    serverSong.isYandex = true;
-    serverSong.id = String(yMeta.id);
-    if (serverStatus.duration === 0 || isNaN(serverStatus.duration)) {
-      if (yMeta.time) serverStatus.duration = parseFloat(String(yMeta.time));
-    }
-  } else if (
-    serverSong.file.includes("yandex.net") ||
-    serverSong.file.includes("get-mp3") ||
-    serverSong.file.includes("/dev/shm/yandex_music/tracks/")
-  ) {
-    fetchYandexMetaForTrack(serverSong.file);
   }
 }
 
@@ -446,9 +231,8 @@ function reconcileStatus(
 
 function updateStores(serverStatus: MpdStatus, serverSong: CurrentSong): void {
   const oldSong = get(currentSong);
-  const yCtx = get(yandexContext);
 
-  enrichWithYandexMeta(serverSong, serverStatus, yCtx);
+  resolveSource(serverSong.file)?.enrichCurrentSong?.(serverSong, serverStatus);
   resolveStationName(serverSong, oldSong, get(stations));
   currentSong.set(serverSong);
 
@@ -560,8 +344,8 @@ export const PlayerActions = {
     const nextPos = s.song + 1;
 
     const current: Track | undefined = q[s.song];
-    if (current?.isYandex && current.id) {
-      YandexApi.feedbackSkip(current.id, s.elapsed).catch(() => {});
+    if (current) {
+      resolveSource(current.file)?.onSkip?.(current, s.elapsed);
     }
 
     if (nextPos < q.length && q[nextPos].title) {
@@ -597,15 +381,19 @@ export const PlayerActions = {
   },
 
   async setVolume(val: number): Promise<void> {
-    status.update((s) => ({ ...s, volume: val }));
-    await mpdClient.send(`setvol ${val}`);
+    // MPD setvol expects an integer 0-100 and ACKs out-of-range/fractional values.
+    const v: number = Math.max(0, Math.min(100, Math.round(val)));
+    status.update((s) => ({ ...s, volume: v }));
+    await mpdClient.send(`setvol ${v}`);
   },
 
   async seek(seconds: number): Promise<void> {
     forceHardSync = true;
     ignoreUpdatesUntil = performance.now() + 500;
-    status.update((s) => ({ ...s, elapsed: seconds }));
-    await mpdClient.send(`seekcur ${seconds}`);
+    const duration: number = get(status).duration;
+    const t: number = Math.max(0, Math.min(seconds, duration || seconds));
+    status.update((s) => ({ ...s, elapsed: t }));
+    await mpdClient.send(`seekcur ${t}`);
     setTimeout(refreshStatus, 600);
   },
 
@@ -644,19 +432,9 @@ export const PlayerActions = {
       const songData: string = await mpdClient.send("currentsong");
       const currentPos: number = parseInt(MpdParser.parseKeyValue(songData).pos);
 
-      if (uri.startsWith("yandex:")) {
-        const id: string = uri.split(":")[1];
-        await YandexApi.request("play_track", { id, append: 1 });
-
-        const statusRes: string = await mpdClient.send("status");
-        const len: number = parseInt(MpdParser.parseKeyValue(statusRes).playlistlength);
-        const targetPos: number = isNaN(currentPos) ? 0 : currentPos + 1;
-
-        if (len > 0) {
-          await mpdClient.send(`move ${len - 1} ${targetPos}`);
-          await mpdClient.send(`play ${targetPos}`);
-        }
-      } else {
+      const source = resolveSource(uri);
+      const handled = source?.playUri ? await source.playUri(uri, currentPos) : false;
+      if (!handled) {
         const res: string = await mpdClient.send(`addid "${safeUri}"`);
         const newId: number = parseInt(MpdParser.parseKeyValue(res).id);
 
@@ -679,12 +457,8 @@ export const PlayerActions = {
   },
 
   async addToQueue(uri: string): Promise<void> {
-    if (uri.startsWith("yandex:")) {
-      const id: string = uri.split(":")[1];
-      await YandexApi.request("add_tracks", { tracks: [{ id }] }, "POST");
-      showToast(MSG.PLAY_ADDED_TO_QUEUE, "success");
-      return;
-    }
+    const source = resolveSource(uri);
+    if (source?.addToQueue && (await source.addToQueue(uri))) return;
 
     try {
       await mpdClient.send(`add "${escapePath(uri)}"`);
@@ -706,20 +480,11 @@ export const PlayerActions = {
         isQueueLocked.set(false);
         await this.playUri(uri);
       } else {
-        if (uri.startsWith("yandex:")) {
-          const id: string = uri.split(":")[1];
-          await YandexApi.request("play_track", { id, append: 1 });
-
-          const statusRes: string = await mpdClient.send("status");
-          const len: number = parseInt(
-            MpdParser.parseKeyValue(statusRes).playlistlength,
-          );
-
-          if (len > 0) {
-            await mpdClient.send(`move ${len - 1} ${currentPos + 1}`);
-            showToast(MSG.PLAY_WILL_PLAY_NEXT, "success");
-          }
-        } else {
+        const source = resolveSource(uri);
+        const handled = source?.playNext
+          ? await source.playNext(uri, currentPos)
+          : false;
+        if (!handled) {
           const res: string = await mpdClient.send(`addid "${safeUri}"`);
           const newId: number = parseInt(MpdParser.parseKeyValue(res).id);
 
@@ -800,23 +565,47 @@ export const PlayerActions = {
   async saveQueue(name: string): Promise<void> {
     if (!name) return;
     const safeName: string = name.replace(/"/g, '\\"');
-    try {
-      await mpdClient.send(`save "${safeName}"`);
-      showToast(MSG.playlistSaved(name), "success");
-    } catch (e) {
-      if ((e as Error).message.includes("exist")) {
-        if (confirm(`Playlist "${name}" exists. Overwrite?`)) {
-          try {
-            await mpdClient.send(`rm "${safeName}"`);
-            await mpdClient.send(`save "${safeName}"`);
-            showToast(MSG.playlistOverwritten(name), "success");
-          } catch (err) {
-            showToast(MSG.PLAY_FAILED_OVERWRITE, "error");
-          }
-        }
-      } else {
-        logger.error(e);
+
+    const write = async (overwrite: boolean): Promise<void> => {
+      try {
+        if (overwrite) await mpdClient.send(`rm "${safeName}"`);
+        await mpdClient.send(`save "${safeName}"`);
+        showToast(
+          overwrite ? MSG.playlistOverwritten(name) : MSG.playlistSaved(name),
+          "success",
+        );
+      } catch (err) {
+        logger.error(err);
+        showToast(
+          overwrite ? MSG.PLAY_FAILED_OVERWRITE : MSG.PLAY_FAILED_TO_SAVE,
+          "error",
+        );
       }
+    };
+
+    // Detect an existing playlist proactively via listplaylists rather than by
+    // substring-matching the ACK text, and confirm overwrite with the async modal
+    // instead of a blocking confirm() that stalls the command queue.
+    let exists = false;
+    try {
+      const list: string = await mpdClient.send("listplaylists");
+      exists = MpdParser.parsePlaylists(list).some((p) => p.name === name);
+    } catch (e) {
+      logger.error(e);
+    }
+
+    if (exists) {
+      showModal({
+        title: "Overwrite Playlist",
+        message: `Playlist "${name}" already exists. Overwrite it?`,
+        type: "confirm",
+        confirmLabel: "Overwrite",
+        onConfirm: () => {
+          write(true);
+        },
+      });
+    } else {
+      await write(false);
     }
   },
 };

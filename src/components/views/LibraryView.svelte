@@ -68,8 +68,7 @@
   $effect(() => {
     if (activeCategory) {
       searchTerm = "";
-      if (activeCategory === "albums") sortOption = "name";
-      else sortOption = "name";
+      sortOption = "name";
     }
   });
 
@@ -458,7 +457,7 @@
                 onclick={() => handleItemClick(item)}
                 role="button"
                 tabindex="0"
-                onkeypress={(e) => e.key === "Enter" && handleItemClick(item)}
+                onkeydown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); handleItemClick(item); } }}
               >
                 <div class="card-img-container">
                   <ImageLoader

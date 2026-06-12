@@ -13,11 +13,7 @@
     onOpenPlaylist?: (pl: YandexPlaylist) => void;
   } = $props();
 
-  function handleHorizontalScroll(e: WheelEvent) {
-    if (e.deltaY !== 0) {
-      e.currentTarget.scrollLeft += e.deltaY;
-    }
-  }
+  import { horizontalWheelScroll as handleHorizontalScroll } from "../../lib/horizontalScroll";
 
   function openPlaylist(pl: YandexPlaylist) {
     onOpenPlaylist?.(pl);
@@ -68,7 +64,7 @@
         <div
           class="card-img-container"
           class:is-vibe={item.kind === "my_vibe"}
-          style={item.bgColor && !item.is_vibe
+          style={item.bgColor && item.kind !== "my_vibe"
             ? `background: ${item.bgColor}`
             : ""}
         >

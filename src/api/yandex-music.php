@@ -44,7 +44,9 @@ class YandexMusic {
         $url = strpos($path, 'http') === 0 ? $path : "https://api.music.yandex.net" . $path;
 
         $verb = $method ?: ($postData ? 'POST' : 'GET');
-        $logMsg = "$verb $url";
+        // Strip the query string: download-info / stream URLs carry signed tokens
+        // that must not be persisted to the debug log.
+        $logMsg = "$verb " . strtok($url, '?');
         if ($postData) $logMsg .= " | DATA: " . substr(json_encode($postData), 0, 300);
         $this->log($logMsg);
 
@@ -56,7 +58,7 @@ class YandexMusic {
 
         $ch = curl_init($url);
         curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-        curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
+        curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, true);
         curl_setopt($ch, CURLOPT_USERAGENT, $this->userAgent);
         curl_setopt($ch, CURLOPT_TIMEOUT, 15);
 

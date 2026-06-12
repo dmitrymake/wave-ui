@@ -62,6 +62,15 @@ function mpdSend($cmd) {
     return $resp;
 }
 
+// MPD treats a literal newline as a command separator and " as a quote terminator.
+// Stream URLs are built from Yandex XML regex captures, so a crafted \n or " could
+// inject additional MPD commands. Strip control chars and escape per MPD quoting.
+function mpdAdd($url) {
+    $safe = str_replace(["\r", "\n"], '', (string)$url);
+    $safe = str_replace(['\\', '"'], ['\\\\', '\\"'], $safe);
+    return mpdSend('add "' . $safe . '"');
+}
+
 function resetDaemon() {
     debug("Resetting Daemon...");
     $blankState = [
@@ -141,7 +150,11 @@ try {
         $input = json_decode(file_get_contents('php://input'), true);
         if (empty($input['token'])) throw new Exception("Empty token");
         $api = new YandexMusic($input['token']);
-        $api->getUserId(); 
+        // Validate before persisting: getUserId() returns null on a 401 (bad token),
+        // so without this check a garbage token would be written and every
+        // subsequent action would 401 until manually re-authed.
+        $uid = $api->getUserId();
+        if (!$uid) throw new Exception("Token validation failed");
         if (!is_dir(dirname(TOKEN_FILE))) mkdir(dirname(TOKEN_FILE), 0755, true);
         file_put_contents(TOKEN_FILE, $input['token']);
         chmod(TOKEN_FILE, 0600);
@@ -418,7 +431,7 @@ try {
                     $url = $api->getDirectLink($clean['id']);
                     if ($url) {
                         cacheTrackMeta($url, $clean);
-                        mpdSend("add \"$url\"");
+                        mpdAdd($url);
                         $count++;
                         $newHistory[] = (string)$clean['id'];
                     }
@@ -437,7 +450,7 @@ try {
                     $url = $api->getDirectLink($clean['id']);
                     if ($url) {
                         cacheTrackMeta($url, $clean);
-                        mpdSend("add \"$url\"");
+                        mpdAdd($url);
                         $count++;
                         $newHistory[] = (string)$clean['id'];
                         if ($count >= 5) break;
@@ -465,6 +478,10 @@ try {
             $input = json_decode(file_get_contents('php://input'), true);
             $tracks = $input['tracks'] ?? [];
             $contextName = $input['context'] ?? 'Yandex Playlist';
+            // Optional paged source {kind, uid, offset}: lets the daemon keep
+            // fetching beyond the tracks sent here (favorites/playlists can have
+            // hundreds of tracks while the UI only loads a page at a time).
+            $source = $input['source'] ?? null;
             if (empty($tracks)) throw new Exception("No tracks provided");
             resetDaemon();
             $count = 0;
@@ -476,7 +493,7 @@ try {
                     $url = $api->getDirectLink($cleanTrack['id']);
                     if ($url) {
                         cacheTrackMeta($url, $cleanTrack);
-                        mpdSend("add \"$url\"");
+                        mpdAdd($url);
                         $count++;
                     }
                 } else {
@@ -486,10 +503,11 @@ try {
             mpdSend("play");
             saveState([
                 'active' => true,
-                'mode' => 'static', 
+                'mode' => 'static',
                 'context_name' => $contextName,
                 'queue_buffer' => $initialBuffer,
-                'played_history' => []
+                'played_history' => [],
+                'static_source' => $source
             ]);
             echo json_encode(['status' => 'ok', 'buffered' => count($initialBuffer)]);
             break;
@@ -508,7 +526,7 @@ try {
                          $url = $api->getDirectLink($cleanFirst['id']);
                          if ($url) {
                              cacheTrackMeta($url, $cleanFirst);
-                             mpdSend("add \"$url\"");
+                             mpdAdd($url);
                              $added++;
                          }
                      }
@@ -536,7 +554,7 @@ try {
             if ($url) {
                 if (!$append) resetDaemon();
                 cacheTrackMeta($url, $cleanTrack);
-                mpdSend("add \"$url\"");
+                mpdAdd($url);
                 if (!$append) {
                     mpdSend("play");
                     saveState(['active' => false, 'mode' => 'idle', 'context_name' => 'Single Track']);
@@ -619,12 +637,6 @@ try {
             }
             $trackFiles = glob('/dev/shm/yandex_music/tracks/*.*') ?: [];
 
-            $readTail = function($path, $n = 40) {
-                if (!file_exists($path)) return [];
-                $lines = @file($path, FILE_IGNORE_NEW_LINES);
-                return $lines ? array_slice($lines, -$n) : [];
-            };
-
             $uaFile = '/var/local/www/yandex_client_ua.dat';
             $clientHeader = (file_exists($uaFile) && trim(file_get_contents($uaFile)))
                 ? trim(file_get_contents($uaFile))
@@ -642,9 +654,6 @@ try {
                 'tracks_cached' => count($trackFiles),
                 'client_header' => $clientHeader,
                 'token_set' => !!getToken(),
-                'daemon_log_tail' => $readTail(DAEMON_LOG_FILE),
-                'api_log_tail' => $readTail(LOG_FILE, 20),
-                'yandex_debug_log_tail' => $readTail('/dev/shm/wave_yandex_debug.log', 60),
             ], JSON_UNESCAPED_UNICODE);
             break;
 
@@ -652,9 +661,12 @@ try {
             echo json_encode(['error' => 'Unknown action']);
     }
 
-} catch (Exception $e) {
+} catch (Throwable $e) {
     debug("Error: " . $e->getMessage());
     http_response_code(500);
-    echo json_encode(['error' => $e->getMessage()]);
+    // Return author-controlled Exception messages (used by the UI for auth state),
+    // but never leak internals from unexpected errors (TypeError, paths, etc.).
+    $msg = ($e instanceof Exception) ? $e->getMessage() : 'Internal server error';
+    echo json_encode(['error' => $msg]);
 }
 ?>

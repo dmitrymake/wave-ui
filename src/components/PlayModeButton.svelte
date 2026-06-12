@@ -8,20 +8,21 @@
 
   interface Props {
     compact?: boolean;
+    class?: string;
   }
 
-  let { compact = false }: Props = $props();
+  let { compact = false, class: className = "" }: Props = $props();
 
   let currentMode = $derived(getPlayMode($status));
 
   function toggle(e?: MouseEvent) {
     if (e) e.stopPropagation();
-    cyclePlayMode(currentMode, MPD);
+    cyclePlayMode($status, MPD);
   }
 </script>
 
 <button
-  class="btn-icon mode-btn"
+  class="btn-icon mode-btn {className}"
   class:active={currentMode > 0}
   class:compact
   onclick={toggle}

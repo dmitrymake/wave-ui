@@ -12,11 +12,7 @@
     onOpenAlbum?: (album: YandexAlbum) => void;
   } = $props();
 
-  function handleHorizontalScroll(e: WheelEvent) {
-    if (e.deltaY !== 0) {
-      e.currentTarget.scrollLeft += e.deltaY;
-    }
-  }
+  import { horizontalWheelScroll as handleHorizontalScroll } from "../../lib/horizontalScroll";
 
   function openArtist(artist: YandexArtist) {
     onOpenArtist?.(artist);

@@ -62,7 +62,7 @@
       </div>
     {:else}
       <div class="music-grid">
-        {#each filteredStations as station}
+        {#each filteredStations as station (station.file || station.name)}
           {@const streamUrl = station.file}
           {@const isActive =
             $currentSong.stationName === station.name ||

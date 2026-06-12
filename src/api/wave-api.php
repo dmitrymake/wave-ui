@@ -37,8 +37,20 @@ try {
         $fileUrl = $input['url'] ?? '';
         $meta = $input['meta'] ?? null;
 
-        if (!$fileUrl || !$meta) {
+        if (!$fileUrl || !$meta || !is_array($meta)) {
             throw new Exception("URL and Meta are required");
+        }
+
+        // Whitelist known scalar fields and cap size so an unauthenticated caller
+        // cannot stash arbitrary unbounded blobs on the RAM disk.
+        $clean = [];
+        foreach (['title', 'artist', 'album', 'image', 'id', 'time'] as $field) {
+            if (isset($meta[$field]) && is_scalar($meta[$field])) {
+                $clean[$field] = $meta[$field];
+            }
+        }
+        if (!$clean || strlen(json_encode($clean)) > 2000) {
+            throw new Exception("Invalid meta payload");
         }
 
         $data = [];
@@ -50,10 +62,15 @@ try {
         }
 
         $key = md5($fileUrl);
-        $data[$key] = $meta;
+        $data[$key] = $clean;
 
         if (count($data) > 100) {
             $data = array_slice($data, -100, 100, true);
+        }
+
+        // Total byte budget for the RAM store, independent of the entry count.
+        while (count($data) > 1 && strlen(json_encode($data)) > 262144) {
+            array_shift($data);
         }
 
         file_put_contents(RAM_STORE_FILE, json_encode($data));
@@ -92,8 +109,30 @@ try {
             throw new Exception("No path provided for proxy");
         }
 
+        // SSRF guard: absolute URLs are only allowed to Yandex hosts, and the
+        // user's OAuth token is only ever forwarded to the Yandex music API —
+        // never to a storage/CDN host or any attacker-supplied URL.
         $is_storage = strpos($path, 'http') === 0;
         $url = $is_storage ? $path : "https://api.music.yandex.net" . $path;
+
+        $targetHost = strtolower(parse_url($url, PHP_URL_HOST) ?? '');
+        $hostAllowed = false;
+        foreach (['.yandex.net', '.yandex.ru', '.yandex.com'] as $suffix) {
+            if ($targetHost !== '' && substr($targetHost, -strlen($suffix)) === $suffix) {
+                $hostAllowed = true;
+                break;
+            }
+        }
+        if (!$hostAllowed && in_array($targetHost, ['yandex.net', 'yandex.ru', 'yandex.com'], true)) {
+            $hostAllowed = true;
+        }
+        if (!$hostAllowed) {
+            header('Content-Type: application/json');
+            http_response_code(403);
+            echo json_encode(["error" => "Proxy target not allowed"]);
+            exit;
+        }
+        $isApiHost = ($targetHost === 'api.music.yandex.net');
 
         $ch = curl_init($url);
         
@@ -115,7 +154,8 @@ try {
             }
         }
 
-        if ($auth_token) {
+        // Forward the OAuth token to the Yandex API host only, never to storage/CDN.
+        if ($auth_token && $isApiHost) {
             $requestHeaders[] = "Authorization: $auth_token";
         }
 
@@ -134,9 +174,12 @@ try {
 
         curl_setopt($ch, CURLOPT_HTTPHEADER, $requestHeaders);
         curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-        curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
+        curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, true);
+        curl_setopt($ch, CURLOPT_PROTOCOLS, CURLPROTO_HTTPS);
+        curl_setopt($ch, CURLOPT_REDIR_PROTOCOLS, CURLPROTO_HTTPS);
         curl_setopt($ch, CURLOPT_FOLLOWLOCATION, true);
-        curl_setopt($ch, CURLOPT_USERAGENT, 'Yandex-Music-Client'); 
+        curl_setopt($ch, CURLOPT_MAXREDIRS, 3);
+        curl_setopt($ch, CURLOPT_USERAGENT, 'Yandex-Music-Client');
 
         $response = curl_exec($ch);
         $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
@@ -146,9 +189,10 @@ try {
         curl_close($ch);
 
         if ($curlError) {
+            error_log("wave-api proxy curl error: " . $curlError);
             header('Content-Type: application/json');
-            http_response_code(500);
-            echo json_encode(["error" => "Proxy Curl Error: " . $curlError]);
+            http_response_code(502);
+            echo json_encode(["error" => "Upstream request failed"]);
             exit;
         }
 
@@ -177,6 +221,17 @@ try {
         $enabled = ($_POST['enabled'] ?? '0') === '1';
         $timeStr = $_POST['time'] ?? '08:00';
         $playlist = $_POST['playlist'] ?? 'Favorites';
+
+        // cron treats a literal % in the command as a newline/stdin separator, so a
+        // playlist name containing % (which survives escapeshellarg's single quotes)
+        // would corrupt the crontab. Reject control chars and % outright.
+        if (preg_match('/[%\r\n]/', $playlist)) {
+            throw new Exception("Invalid playlist name");
+        }
+        // Strict HH:MM validation instead of silently coercing to 0 0 via intval.
+        if (!preg_match('/^([01]?\d|2[0-3]):([0-5]\d)$/', $timeStr)) {
+            throw new Exception("Invalid time");
+        }
 
         $safePlaylist = escapeshellarg($playlist);
         $cronId = "# WAVE_UI_ALARM";
@@ -224,7 +279,8 @@ try {
             if ($return_value === 0) {
                 echo json_encode(['status' => 'ok', 'enabled' => $enabled, 'time' => $timeStr]);
             } else {
-                throw new Exception("Crontab update failed: " . $stderr);
+                error_log("wave-api crontab update failed: " . $stderr);
+                throw new Exception("Crontab update failed");
             }
         } else {
             throw new Exception("Failed to open crontab process");
@@ -238,10 +294,11 @@ try {
     }
 
 } catch (Throwable $e) {
+    error_log("wave-api error: " . $e->getMessage());
     if (!headers_sent()) {
         header('Content-Type: application/json');
         http_response_code(500);
     }
-    echo json_encode(["error" => "PHP Error: " . $e->getMessage()]);
+    echo json_encode(["error" => "Internal server error"]);
 }
 ?>

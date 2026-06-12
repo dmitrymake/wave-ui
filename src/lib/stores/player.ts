@@ -3,6 +3,7 @@
 import { writable, derived, get } from "svelte/store";
 import { stations, selectedStationName } from "./library";
 import { getStationImageUrl, isRemoteUrl, findStationByName } from "../utils";
+import { resolveSource } from "../sources/trackSource";
 import { API_ENDPOINTS } from "../constants";
 import md5 from "md5";
 import type { Track, MpdStatus, Station } from "../types";
@@ -45,7 +46,8 @@ export const isQueueLocked = writable<boolean>(false);
 
 function isRadioTrack(file: string): boolean {
   if (!file) return false;
-  if (file.includes("yandex.net") || file.includes("get-mp3") || file.includes("/dev/shm/yandex_music/tracks/")) return false;
+  // A track owned by a streaming source (e.g. Yandex) is not internet radio.
+  if (resolveSource(file)) return false;
   return isRemoteUrl(file) || file.includes("RADIO");
 }
 
@@ -146,7 +148,8 @@ export const currentCover = derived(
   },
 );
 
-export const currentArtistImage = derived(currentSong, ($song): string | null => {
+// Per-file album cover for the current local track (null for remote streams).
+export const currentAlbumCover = derived(currentSong, ($song): string | null => {
   if (!$song || !$song.file) return null;
   if (isRemoteUrl($song.file)) return null;
   return API_ENDPOINTS.COVER_ART($song.file);

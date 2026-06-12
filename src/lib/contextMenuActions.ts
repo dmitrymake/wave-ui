@@ -3,7 +3,7 @@
 import { PlayerActions } from "./mpd/player";
 import { LibraryActions } from "./mpd/library";
 import { mpdClient } from "./mpd/client";
-import { YandexApi } from "./yandex";
+import { resolveSource } from "./sources/trackSource";
 import {
   closeContextMenu,
   navigateTo,
@@ -51,12 +51,21 @@ export function goToArtist(track: Track | null): void {
 export async function removeFromPlaylist(context: ContextMenuContext): Promise<void> {
   const { playlistName, index } = context;
   if (playlistName && index !== null && index !== undefined) {
+    let removed: Track | undefined;
     activePlaylistTracks.update((tracks: Track[]) => {
       const copy = [...tracks];
-      copy.splice(index, 1);
+      removed = copy.splice(index, 1)[0];
       return copy;
     });
-    await LibraryActions.removeFromPlaylist(playlistName, index);
+    const ok = await LibraryActions.removeFromPlaylist(playlistName, index);
+    if (!ok && removed) {
+      // Restore the optimistically-removed track so the view matches the server.
+      activePlaylistTracks.update((tracks: Track[]) => {
+        const copy = [...tracks];
+        copy.splice(index, 0, removed as Track);
+        return copy;
+      });
+    }
   }
   closeContextMenu();
 }
@@ -118,36 +127,15 @@ export function playlistDelete(context: ContextMenuContext): void {
 }
 
 export async function radioByTrack(track: Track | null): Promise<void> {
-  if (track && track.isYandex && track.id) {
-    showToast(MSG.startingRadio(track.title), "info");
-    try {
-      await YandexApi.playRadio(track.id, "track");
-    } catch (e) {
-      logger.error(e);
-      showToast(MSG.RADIO_ERROR_STARTING, "error");
-    }
+  if (track) {
+    await resolveSource(track.file)?.startRadioByTrack?.(track);
   }
   closeContextMenu();
 }
 
 export async function radioByArtist(track: Track | null): Promise<void> {
-  if (track && track.isYandex && track.artist) {
-    showToast(MSG.searchingArtist(track.artist), "info");
-    try {
-      const searchRes = await YandexApi.search(track.artist) as { artists?: { id: string; title: string }[] };
-      if (searchRes && searchRes.artists && searchRes.artists.length > 0) {
-        const artistId = searchRes.artists[0].id;
-        showToast(
-          MSG.startingVibeFor(searchRes.artists[0].title),
-          "info",
-        );
-        await YandexApi.playRadio(artistId, "artist");
-      } else {
-        showToast(MSG.RADIO_ARTIST_NOT_FOUND, "error");
-      }
-    } catch (e) {
-      showToast(MSG.RADIO_FAILED_ARTIST_VIBE, "error");
-    }
+  if (track) {
+    await resolveSource(track.file)?.startRadioByArtist?.(track);
   }
   closeContextMenu();
 }

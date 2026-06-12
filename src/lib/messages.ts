@@ -22,6 +22,7 @@ export const MSG = {
   PLAY_ERROR_STARTING: "Error starting playback",
   PLAY_NETWORK_ERROR: "Network error",
   PLAY_FAILED_OVERWRITE: "Failed to overwrite",
+  PLAY_FAILED_TO_SAVE: "Failed to save playlist",
 
   // Playlist
   PL_DELETED: "Playlist deleted",
@@ -52,6 +53,7 @@ export const MSG = {
 
   // Settings
   SETTINGS_IP_SAVED: "IP Saved. Reloading...",
+  SETTINGS_IP_INVALID: "Invalid IP / host address",
   SETTINGS_THEME_UPDATED: "Theme updated",
   SETTINGS_FAILED_ALARM_SYNC: "Failed to sync alarm settings",
 

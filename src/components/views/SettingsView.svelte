@@ -23,6 +23,7 @@
   let ipAddress = $state(CONFIG.MOODE_IP);
   let serverTime = $state("--:--");
   let timeInterval: ReturnType<typeof setInterval> | undefined;
+  let reloadTimer: ReturnType<typeof setTimeout> | undefined;
   let inputToken = $state("");
   let isChecking = $state(false);
 
@@ -55,9 +56,20 @@
   }
 
   function saveConnection() {
-    CONFIG.setMoodeIp(ipAddress);
+    const ip = ipAddress.trim();
+    // Validate before persisting: an empty/malformed value would point the app at
+    // an unreachable backend with no UI recovery after the reload.
+    if (!ip || !/^[a-zA-Z0-9.-]+(:\d+)?$/.test(ip)) {
+      showToast(MSG.SETTINGS_IP_INVALID, "error");
+      return;
+    }
+    if (ip === CONFIG.MOODE_IP) {
+      showToast(MSG.SETTINGS_IP_SAVED, "success");
+      return;
+    }
+    CONFIG.setMoodeIp(ip);
     showToast(MSG.SETTINGS_IP_SAVED, "success");
-    setTimeout(() => location.reload(), 1000);
+    reloadTimer = setTimeout(() => location.reload(), 1000);
   }
 
   const appVersion =
@@ -97,6 +109,7 @@
 
   onDestroy(() => {
     if (timeInterval) clearInterval(timeInterval);
+    if (reloadTimer) clearTimeout(reloadTimer);
   });
 
   async function handleSaveAlarm() {
@@ -286,7 +299,7 @@
       <div class="section-header">
         <span>Appearance</span>
       </div>
-      <div class="card clickable" onclick={openThemeSelector} role="button" tabindex="0" onkeydown={(e) => { if (e.key === "Enter") openThemeSelector(); }}>
+      <div class="card clickable" onclick={openThemeSelector} role="button" tabindex="0" onkeydown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); openThemeSelector(); } }}>
         <div class="row space-between">
           <span>Interface Theme</span>
           <div class="row-gap">

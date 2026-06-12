@@ -152,7 +152,7 @@
     position: fixed;
     inset: 0;
     z-index: var(--z-modal);
-    background: var(--c-black-60);
+    background: var(--c-overlay-dim);
     backdrop-filter: blur(4px);
     display: flex;
     align-items: center;
@@ -161,7 +161,6 @@
   }
 
   .modal-card {
-    background: #1e1e1e;
     background: var(--c-bg-card);
     width: 100%;
     max-width: 320px;

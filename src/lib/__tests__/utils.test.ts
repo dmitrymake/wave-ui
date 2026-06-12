@@ -9,7 +9,8 @@ vi.mock("../constants", () => ({
   },
 }));
 
-import { getStationImageUrl, getCoverUrl, generateUid, getYandexIdFromUrl } from "../utils.js";
+import { getStationImageUrl, generateUid } from "../utils.js";
+import { getYandexIdFromUrl } from "../sources/yandexUri.js";
 
 describe("getStationImageUrl", () => {
   it("returns null for null/undefined station", () => {
@@ -36,27 +37,6 @@ describe("getStationImageUrl", () => {
     const station = { name: "Radio", image: "custom_logo.png" };
     const url = getStationImageUrl(station);
     expect(url).toBe("/imagesw/radio-logos/thumbs/custom_logo.png");
-  });
-});
-
-describe("getCoverUrl", () => {
-  it("returns null for null/undefined song", () => {
-    expect(getCoverUrl(null as any)).toBeNull();
-    expect(getCoverUrl(undefined as any)).toBeNull();
-  });
-
-  it("returns null if song has no file", () => {
-    expect(getCoverUrl({ title: "Test" } as any)).toBeNull();
-  });
-
-  it("returns cover URL for local file", () => {
-    const song = { file: "Music/Artist/Album/track.flac" };
-    expect(getCoverUrl(song)).toBe("/coverart.php/Music/Artist/Album/track.flac");
-  });
-
-  it("returns null for http streams", () => {
-    const song = { file: "http://stream.example.com/live" };
-    expect(getCoverUrl(song)).toBeNull();
   });
 });
 

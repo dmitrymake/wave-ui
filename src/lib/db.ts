@@ -167,18 +167,17 @@ export const db = {
     return new Promise((resolve, reject) => {
       const tx: IDBTransaction = database.transaction(DATABASE.STORE_NAME, "readonly");
       const store: IDBObjectStore = tx.objectStore(DATABASE.STORE_NAME);
-      const p1 = new Promise<DbTrack[]>((res) => {
+      const p1 = new Promise<DbTrack[]>((res, rej) => {
         if (store.indexNames.contains("album_artist")) {
-          store
-            .index("album_artist")
-            .getAll(IDBKeyRange.only(safeArtist)).onsuccess = (e: Event) =>
-            res((e.target as IDBRequest<DbTrack[]>).result);
+          const req = store.index("album_artist").getAll(IDBKeyRange.only(safeArtist));
+          req.onsuccess = (e: Event) => res((e.target as IDBRequest<DbTrack[]>).result);
+          req.onerror = () => rej(req.error);
         } else res([]);
       });
-      const p2 = new Promise<DbTrack[]>((res) => {
-        store.index("artist").getAll(IDBKeyRange.only(safeArtist)).onsuccess = (
-          e: Event,
-        ) => res((e.target as IDBRequest<DbTrack[]>).result);
+      const p2 = new Promise<DbTrack[]>((res, rej) => {
+        const req = store.index("artist").getAll(IDBKeyRange.only(safeArtist));
+        req.onsuccess = (e: Event) => res((e.target as IDBRequest<DbTrack[]>).result);
+        req.onerror = () => rej(req.error);
       });
       Promise.all([p1, p2])
         .then(([r1, r2]) => {
@@ -235,9 +234,6 @@ export const db = {
             const tAlbumArtist: string = (t.album_artist || "").normalize("NFC").trim();
 
             const match: boolean = tArtist === safeArtist || tAlbumArtist === safeArtist;
-
-            if (!match) {
-            }
             return match;
           });
           logger.log(

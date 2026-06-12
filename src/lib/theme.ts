@@ -85,7 +85,6 @@ export const THEMES: Theme[] = [
       /* --- 8. LAYOUT --- */
       "--header-height": "64px",
       "--mini-player-height": "90px",
-      "--sidebar-width": "260px",
 
       "--radius-sm": "4px",
       "--radius-md": "8px",
@@ -193,7 +192,6 @@ export const THEMES: Theme[] = [
       /* --- 8. LAYOUT --- */
       "--header-height": "64px",
       "--mini-player-height": "90px",
-      "--sidebar-width": "260px",
 
       "--radius-sm": "4px",
       "--radius-md": "8px",

@@ -7,7 +7,7 @@ define('STATE_FILE', STORAGE_DIR . 'state.json');
 define('META_CACHE_FILE', STORAGE_DIR . 'meta_cache.json');
 define('TOKEN_FILE', '/var/local/www/yandex_token.dat');
 define('LOG_FILE', '/dev/shm/wave_daemon.log');
-define('MAX_CACHED_FILES', 12);
+define('MAX_CACHED_FILES', 8);
 
 require_once INC . '/yandex-music.php';
 require_once INC . '/yandex-cache.php';
@@ -39,6 +39,37 @@ function mpdSend($cmd) {
     }
     fclose($fp);
     return $resp;
+}
+
+// Escape a stream URL before sending it in an MPD `add "..."` command. CR/LF would
+// be treated as command separators and " as a quote terminator, so a crafted CDN
+// URL (built from Yandex XML regex captures) could otherwise inject MPD commands.
+function mpdAdd($url) {
+    $safe = str_replace(["\r", "\n"], '', (string)$url);
+    $safe = str_replace(['\\', '"'], ['\\\\', '\\"'], $safe);
+    return mpdSend('add "' . $safe . '"');
+}
+
+/**
+ * Add a local file to MPD via its Unix socket. MPD forbids adding local files
+ * over TCP ("Access to local files via TCP is not allowed") but allows it over a
+ * local socket. Returns true on OK, false on ACK / no socket — so the caller can
+ * fall back to streaming the CDN URL over TCP (e.g. if moOde regenerated
+ * mpd.conf without the socket line).
+ */
+function mpdAddLocalSocket($path) {
+    $fp = @fsockopen("unix:///run/mpd/socket", 0, $errno, $errstr, 3);
+    if (!$fp) return false;
+    fgets($fp); // greeting
+    fwrite($fp, 'add "file://' . $path . "\"\n");
+    $ok = false;
+    while (!feof($fp)) {
+        $line = fgets($fp);
+        if (strpos($line, 'OK') === 0) { $ok = true; break; }
+        if (strpos($line, 'ACK') === 0) { break; }
+    }
+    fclose($fp);
+    return $ok;
 }
 
 function getMpdStatus() {
@@ -94,8 +125,12 @@ function downloadTrack($url, $trackId, $codec = 'mp3') {
         return $localPath;
     }
 
+    // Download to a per-process temp file and atomically rename into place only after
+    // verifying the response, so the cached-file check never sees a truncated/partial
+    // file (concurrent daemons or re-entrant calls would otherwise race on $localPath).
+    $tmpPath = $localPath . '.tmp.' . getmypid();
     $ch = curl_init($url);
-    $fp = fopen($localPath, 'w');
+    $fp = fopen($tmpPath, 'w');
     if (!$fp) return null;
 
     curl_setopt_array($ch, [
@@ -112,8 +147,13 @@ function downloadTrack($url, $trackId, $codec = 'mp3') {
     curl_close($ch);
     fclose($fp);
 
-    if (!$ok || $httpCode !== 200 || filesize($localPath) === 0) {
-        @unlink($localPath);
+    if (!$ok || $httpCode !== 200 || !file_exists($tmpPath) || filesize($tmpPath) === 0) {
+        @unlink($tmpPath);
+        return null;
+    }
+
+    if (!@rename($tmpPath, $localPath)) {
+        @unlink($tmpPath);
         return null;
     }
 
@@ -196,6 +236,14 @@ function isYandexFile($file) {
     return strpos($file, 'yandex') !== false
         || strpos($file, 'get-mp3') !== false
         || strpos($file, TRACKS_DIR) === 0;
+}
+
+// Singleton guard: a second daemon instance would double-add tracks and race on
+// state.json / MPD mutations. Hold an exclusive lock for the process lifetime.
+$daemonLock = fopen('/dev/shm/wave_daemon.lock', 'c');
+if (!$daemonLock || !flock($daemonLock, LOCK_EX | LOCK_NB)) {
+    logMsg("Another daemon instance is already running; exiting.");
+    exit(0);
 }
 
 logMsg("Daemon Started");
@@ -292,8 +340,8 @@ while (true) {
             $tracksAhead = $playlistLen - ($currentPos + 1);
         }
 
-        // Remove old tracks, keep 5 behind current position
-        $KEEP_BEHIND = 5;
+        // Remove old tracks, keep 3 behind current position (for instant "previous")
+        $KEEP_BEHIND = 3;
         if ($currentPos > $KEEP_BEHIND) {
             $toDelete = $currentPos - $KEEP_BEHIND;
             for ($i = 0; $i < $toDelete; $i++) {
@@ -310,7 +358,7 @@ while (true) {
             $tracksAhead = $playlistLen - ($currentPos + 1);
         }
 
-        if ($tracksAhead < 5) {
+        if ($tracksAhead < 3) {
             $buffer = $state['queue_buffer'] ?? [];
 
             // Fetch new tracks from station if buffer is empty
@@ -387,6 +435,56 @@ while (true) {
                 }
             }
 
+            // Page the next chunk of a static source (favorites / playlist) when
+            // the buffer runs dry — mirrors the station refill so "Play All" can
+            // continue past the initially-sent page (e.g. 851 favorites).
+            if (empty($buffer) && ($state['mode'] ?? '') === 'static' && !empty($state['static_source'])) {
+                $src = $state['static_source'];
+                $skind = $src['kind'] ?? '';
+                $suid = $src['uid'] ?? '';
+                $soffset = intval($src['offset'] ?? 0);
+                logMsg("Paging static source: kind=$skind offset=$soffset");
+                try {
+                    $total = -1;
+                    if ($skind === 'favorites') {
+                        $ids = $api->getFavoritesIds();
+                        $total = count($ids);
+                        $slice = array_slice($ids, $soffset, 50);
+                        $window = count($slice);
+                        $page = $window ? $api->getTracksByIds($slice) : [];
+                    } else {
+                        $page = $api->getPlaylistTracks($suid, $skind, $soffset);
+                        $window = 50;
+                    }
+                    $page = array_values(array_filter($page));
+                    $state = getState();
+                    if (empty($state['active'])) continue;
+                    if (!empty($page)) {
+                        $state['queue_buffer'] = $page;
+                        $state['static_source']['offset'] = $soffset + $window;
+                        saveState($state);
+                        $buffer = $page;
+                        logMsg("Static source paged: +" . count($page) . " tracks (next offset=" . ($soffset + $window) . ")");
+                    } else {
+                        // Empty page: only treat as the real end when we know the
+                        // total and have passed it. An empty result before the end
+                        // (or a failed favorites fetch → total 0) is a transient
+                        // error — keep the source and retry on the next poll instead
+                        // of killing playback continuation.
+                        $atEnd = ($skind === 'favorites') ? ($total > 0 && $soffset >= $total) : true;
+                        if ($atEnd) {
+                            $state['static_source'] = null;
+                            saveState($state);
+                            logMsg("Static source exhausted at offset $soffset (total $total)");
+                        } else {
+                            logMsg("Static page empty at offset $soffset — transient, will retry");
+                        }
+                    }
+                } catch (Exception $e) {
+                    logMsg("Static paging error: " . $e->getMessage());
+                }
+            }
+
             // Cap buffer to avoid unbounded memory growth on Pi
             if (count($buffer) > 300) {
                 $buffer = array_slice($buffer, 0, 300);
@@ -394,14 +492,27 @@ while (true) {
                 saveState($state);
             }
 
-            // Add up to $batchSize tracks per iteration to keep ahead of playback
-            $batchSize = ($tracksAhead <= 1) ? 3 : 1;
+            // Add up to $batchSize tracks per iteration to keep ~3 ahead (downloaded)
+            $batchSize = ($tracksAhead <= 1) ? 2 : 1;
             $added = 0;
             $skipped = 0;
+            $deduped = 0;
             $wasStopped = ($stateStr === 'stop');
+
+            // Track ids already in the MPD queue. A daemon restart re-reads
+            // queue_buffer, and pages can overlap — without this guard the same
+            // track gets appended twice and the queue fills with duplicates.
+            $queueIds = [];
+            $dedupCache = readMetaCache();
+            foreach (getMpdQueueFiles() as $qf) {
+                $qm = lookupMeta($dedupCache, $qf);
+                if ($qm && !empty($qm['id'])) $queueIds[(string)$qm['id']] = true;
+            }
 
             while (!empty($buffer) && $added < $batchSize) {
                 $nextTrack = array_shift($buffer);
+                $tid = (string)$nextTrack['id'];
+                if (isset($queueIds[$tid])) { $deduped++; continue; }
 
                 try {
                     // Verify daemon is still active before expensive operations
@@ -416,25 +527,21 @@ while (true) {
                     $codec = $linkInfo ? ($linkInfo['codec'] ?? 'mp3') : 'mp3';
 
                     if ($url) {
-                        updateMetaCache($url, $nextTrack);
-
-                        $checkState = getState();
-                        if (empty($checkState['active'])) {
-                            logMsg("Daemon stopped before download. Aborting.");
-                            break;
-                        }
-
-                        // Download track to RAM, fall back to remote URL on failure
+                        // Prefetch to RAM and add the local file via the MPD socket so
+                        // track switching is instant. MPD rejects local-file adds over
+                        // TCP, so this needs the Unix socket. Fall back to streaming the
+                        // CDN URL over TCP if the download fails or the socket is gone
+                        // (e.g. moOde regenerated mpd.conf without the socket line).
                         $localPath = downloadTrack($url, $nextTrack['id'], $codec);
-                        if ($localPath) {
-                            // Cache meta under both CDN url and local path in one write
+                        if ($localPath && mpdAddLocalSocket($localPath)) {
                             updateMetaCache($url, $nextTrack, $localPath);
-                            mpdSend('add "file://' . $localPath . '"');
-                            logMsg("Added (cached): " . $nextTrack['title']);
+                            logMsg("Added (RAM): " . $nextTrack['title']);
                         } else {
-                            mpdSend("add \"$url\"");
+                            updateMetaCache($url, $nextTrack);
+                            mpdAdd($url);
                             logMsg("Added (stream): " . $nextTrack['title']);
                         }
+                        $queueIds[$tid] = true;
 
                         $added++;
                         if (!isset($state['played_history'])) $state['played_history'] = [];
@@ -452,8 +559,8 @@ while (true) {
                 }
             }
 
-            // Always persist buffer when tracks were consumed (added or skipped)
-            if ($added > 0 || $skipped > 0) {
+            // Always persist buffer when tracks were consumed (added, skipped or deduped)
+            if ($added > 0 || $skipped > 0 || $deduped > 0) {
                 $currentState = getState();
                 if (!empty($currentState['active'])) {
                     $currentState['queue_buffer'] = $buffer;

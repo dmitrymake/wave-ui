@@ -1,6 +1,7 @@
 <!-- SPDX-License-Identifier: MIT -->
 <!-- Copyright (c) 2025 dmitrymake -->
 <script lang="ts">
+  import { onDestroy } from "svelte";
   import * as MPD from "../lib/mpd";
   import { ICONS } from "../lib/icons";
   import {
@@ -60,6 +61,37 @@
     window.removeEventListener("mouseup", onWinUp);
   }
 
+  function handleTouchStart(e: TouchEvent) {
+    if (isRadio) return;
+    isDragging = true;
+    dragProgress = getPct(e, progressBar);
+  }
+
+  function handleTouchMove(e: TouchEvent) {
+    if (isDragging) dragProgress = getPct(e, progressBar);
+  }
+
+  function handleTouchEnd() {
+    if (isDragging && !isRadio) MPD.seek(dragProgress * duration);
+    isDragging = false;
+  }
+
+  function handleBarKey(e: KeyboardEvent) {
+    e.stopPropagation();
+    if (isRadio) return;
+    if (e.key === "ArrowLeft" || e.key === "ArrowRight") {
+      e.preventDefault();
+      const delta = e.key === "ArrowRight" ? 5 : -5;
+      MPD.seek(Math.max(0, Math.min(duration, elapsed + delta)));
+    }
+  }
+
+  // Clean up window listeners if the dock unmounts mid-drag (e.g. full player opens).
+  onDestroy(() => {
+    window.removeEventListener("mousemove", onWinMove);
+    window.removeEventListener("mouseup", onWinUp);
+  });
+
   function handleContext(e: MouseEvent) {
     e.stopPropagation();
     openContextMenu(e, $currentSong, { type: "general", source: "miniplayer" });
@@ -92,8 +124,11 @@
       onmouseenter={() => (isHoveringBar = true)}
       onmouseleave={() => (isHoveringBar = false)}
       onmousedown={(e) => { e.stopPropagation(); handleMouseDown(e); }}
+      ontouchstart={(e) => { e.stopPropagation(); handleTouchStart(e); }}
+      ontouchmove={handleTouchMove}
+      ontouchend={handleTouchEnd}
       onclick={(e) => e.stopPropagation()}
-      onkeydown={(e) => e.stopPropagation()}
+      onkeydown={handleBarKey}
       role="slider"
       aria-label="Playback progress"
       aria-valuemin={0}

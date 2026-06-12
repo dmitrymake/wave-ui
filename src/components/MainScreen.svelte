@@ -247,7 +247,7 @@
     display: none;
     width: 280px;
     flex-shrink: 0;
-    background: var(--c-surface);
+    background: var(--c-bg-main);
     border-left: 1px solid var(--c-border);
     z-index: 5;
   }

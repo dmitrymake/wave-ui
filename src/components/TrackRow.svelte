@@ -20,7 +20,8 @@
     navigateTo,
   } from "../lib/store.js";
   import { longpress } from "../lib/actions";
-  import { isRemoteUrl, getYandexIdFromUrl } from "../lib/utils";
+  import { isRemoteUrl } from "../lib/utils";
+  import { getYandexIdFromUrl } from "../lib/sources/yandexUri";
 
   let {
     track,

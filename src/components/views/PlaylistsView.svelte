@@ -53,10 +53,10 @@
   let currentView = $derived($navigationStack[$navigationStack.length - 1]);
   let isDetailsView = $derived(currentView.view === "details");
 
-  let lastViewJson = "";
+  let lastViewKey = "";
   $effect(() => {
-    const currentJson = JSON.stringify(currentView);
-    if (currentJson !== lastViewJson) {
+    const currentKey = `${currentView.view}:${(currentView.data as { name?: string } | null)?.name ?? ""}`;
+    if (currentKey !== lastViewKey) {
       searchTerm = "";
       pressedPlayAll = false;
       pressedAddToQueue = false;
@@ -64,12 +64,12 @@
       matchedPlaylists = [];
       searchResultsGrouped = [];
       isDeepSearching = false;
-      lastViewJson = currentJson;
+      lastViewKey = currentKey;
     }
   });
 
-  function handleSearchInput(e: Event) {
-    searchTerm = e.target.value;
+  function handleSearchInput(e: Event & { currentTarget: HTMLInputElement }) {
+    searchTerm = e.currentTarget.value;
     clearTimeout(searchDebounceTimer);
 
     if (searchTerm.length >= 2) {
@@ -118,7 +118,7 @@
         if (matches.length > 0) {
           const processedMatches = matches.map((t) => ({
             ...t,
-            _uid: Math.random(),
+            _uid: `${pl.name}-${t.playlistPos}`,
           }));
 
           newGroups.push({
@@ -267,15 +267,23 @@
     isEditMode = !isEditMode;
   }
 
-  function handleRemoveTrack(index: number) {
+  async function handleRemoveTrack(index: number) {
     const playlistName = currentView.data.name;
-    const tracks = $activePlaylistTracks;
+    const original = $activePlaylistTracks;
+    const removed = original[index];
 
-    tracks.splice(index, 1);
-    activePlaylistTracks.set(tracks);
+    // Build the new list immutably instead of mutating the shared store array.
+    const next = original.filter((_, i) => i !== index);
+    activePlaylistTracks.set(next);
+    calculateMeta(next);
 
-    MPD.removeFromPlaylist(playlistName, index);
-    calculateMeta(tracks);
+    const ok = await MPD.removeFromPlaylist(playlistName, index);
+    if (!ok) {
+      // Restore the optimistically-removed track on backend failure.
+      const restored = [...next.slice(0, index), removed, ...next.slice(index)];
+      activePlaylistTracks.set(restored);
+      calculateMeta(restored);
+    }
   }
 
   function handleMoveTrack(fromIndex: number, toIndex: number) {

@@ -37,18 +37,16 @@
   let isPlaying = $derived($status.state === "play");
 
   $effect(() => {
-    if ($queue.length >= 0) {
-      const totalSec = $queue.reduce(
-        (acc, t) => acc + (parseFloat(t.time) || 0),
-        0,
-      );
-      if (totalSec > 0) {
-        const h = Math.floor(totalSec / 3600);
-        const m = Math.floor((totalSec % 3600) / 60);
-        headerTotalDuration = h > 0 ? `${h} hr ${m} min` : `${m} min`;
-      } else {
-        headerTotalDuration = "";
-      }
+    const totalSec = $queue.reduce(
+      (acc, t) => acc + (parseFloat(t.time) || 0),
+      0,
+    );
+    if (totalSec > 0) {
+      const h = Math.floor(totalSec / 3600);
+      const m = Math.floor((totalSec % 3600) / 60);
+      headerTotalDuration = h > 0 ? `${h} hr ${m} min` : `${m} min`;
+    } else {
+      headerTotalDuration = "";
     }
   });
 
@@ -91,6 +89,7 @@
   }
   function handleRemove(index: number) {
     if (index < optimisticPlayingIndex) optimisticPlayingIndex -= 1;
+    else if (index === optimisticPlayingIndex) optimisticPlayingIndex = -1;
     PlayerActions.removeFromQueue(index);
   }
 

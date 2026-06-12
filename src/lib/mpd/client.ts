@@ -13,7 +13,7 @@ interface QueueEntry {
 class MpdClient {
   socket: WebSocket | null;
   queue: QueueEntry[];
-  isProcessing: boolean;
+  current: QueueEntry | null;
   reconnectTimer: ReturnType<typeof setTimeout> | null;
   watchdogTimer: ReturnType<typeof setTimeout> | null;
   _buffer: string;
@@ -21,7 +21,7 @@ class MpdClient {
   constructor() {
     this.socket = null;
     this.queue = [];
-    this.isProcessing = false;
+    this.current = null;
     this.reconnectTimer = null;
     this.watchdogTimer = null;
     this._buffer = "";
@@ -29,6 +29,10 @@ class MpdClient {
 
   get isConnected(): boolean {
     return this.socket !== null && this.socket.readyState === WebSocket.OPEN;
+  }
+
+  get isProcessing(): boolean {
+    return this.current !== null;
   }
 
   connect(): void {
@@ -97,23 +101,31 @@ class MpdClient {
   }
 
   _cleanup(): void {
-    this.isProcessing = false;
     this._buffer = "";
-    if (this.watchdogTimer) clearTimeout(this.watchdogTimer);
+    if (this.watchdogTimer) {
+      clearTimeout(this.watchdogTimer);
+      this.watchdogTimer = null;
+    }
 
+    if (this.current) {
+      this.current.reject(new Error("Connection lost"));
+      this.current = null;
+    }
     while (this.queue.length > 0) {
       const entry = this.queue.shift()!;
       entry.reject(new Error("Connection lost"));
     }
   }
 
-  async _processQueue(): Promise<void> {
-    if (this.isProcessing || this.queue.length === 0 || !this.isConnected)
-      return;
+  _processQueue(): void {
+    if (this.current || this.queue.length === 0 || !this.isConnected) return;
 
-    this.isProcessing = true;
-    const { cmd } = this.queue[0];
+    this.current = this.queue.shift()!;
+    const { cmd } = this.current;
 
+    // Single overall deadline per command, established when the command is sent.
+    // Incoming frames do not re-arm it, so a slow byte-by-byte trickle can no longer
+    // postpone the timeout indefinitely.
     if (this.watchdogTimer) clearTimeout(this.watchdogTimer);
     this.watchdogTimer = setTimeout(() => {
       logger.error("[MPD] Watchdog timeout");
@@ -129,15 +141,13 @@ class MpdClient {
     }
   }
 
+  // Only text MPD responses are supported over this socket. Binary commands
+  // (albumart/readpicture) would interleave raw image bytes that this UTF-8 / "\nOK\n"
+  // framing cannot parse, so cover art is fetched over HTTP instead.
   async _handleMessage(event: MessageEvent): Promise<void> {
     let text: string = event.data;
     if (event.data instanceof Blob) {
       text = await event.data.text();
-    }
-
-    if (this.watchdogTimer) {
-      clearTimeout(this.watchdogTimer);
-      this.watchdogTimer = null;
     }
 
     this._buffer += text;
@@ -146,36 +156,38 @@ class MpdClient {
       this._buffer.endsWith("\nOK\n") || this._buffer === "OK\n";
     const isError = this._buffer.startsWith("ACK");
 
-    if (isSuccess || isError) {
-      const fullResponse = this._buffer;
-      this._buffer = "";
-
-      const currentRequest = this.queue.shift();
-      this.isProcessing = false;
-
-      if (currentRequest) {
-        if (isError) {
-          logger.error(
-            `[MPD] Error for "${currentRequest.cmd.trim()}": ${fullResponse.trim()}`,
-          );
-          currentRequest.reject(new Error(fullResponse.trim()));
-        } else {
-          const cleanResult = fullResponse
-            .replace(/\nOK\n$/, "")
-            .replace(/^OK\n$/, "");
-          currentRequest.resolve(cleanResult);
-        }
-      }
-
-      this._processQueue();
-    } else {
-      if (!this.queue.length) return;
-
-      this.watchdogTimer = setTimeout(() => {
-        logger.error("[MPD] Watchdog timeout receiving large data");
-        if (this.socket) this.socket.close();
-      }, 20000);
+    if (!isSuccess && !isError) {
+      // Incomplete response — keep buffering. The send-time watchdog still bounds
+      // the overall deadline, so it is intentionally not re-armed here.
+      return;
     }
+
+    if (this.watchdogTimer) {
+      clearTimeout(this.watchdogTimer);
+      this.watchdogTimer = null;
+    }
+
+    const fullResponse = this._buffer;
+    this._buffer = "";
+
+    const currentRequest = this.current;
+    this.current = null;
+
+    if (currentRequest) {
+      if (isError) {
+        logger.error(
+          `[MPD] Error for "${currentRequest.cmd.trim()}": ${fullResponse.trim()}`,
+        );
+        currentRequest.reject(new Error(fullResponse.trim()));
+      } else {
+        const cleanResult = fullResponse
+          .replace(/\nOK\n$/, "")
+          .replace(/^OK\n$/, "");
+        currentRequest.resolve(cleanResult);
+      }
+    }
+
+    this._processQueue();
   }
 }
 

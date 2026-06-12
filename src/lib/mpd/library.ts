@@ -200,13 +200,15 @@ export const LibraryActions = {
     }
   },
 
-  async removeFromPlaylist(playlistName: string, pos: number): Promise<void> {
+  async removeFromPlaylist(playlistName: string, pos: number): Promise<boolean> {
     const safeName: string = playlistName.replace(/"/g, '\\"');
     try {
       await mpdClient.send(`playlistdelete "${safeName}" ${pos}`);
       showToast(MSG.TRACK_REMOVED, "success");
+      return true;
     } catch (e) {
       showToast(MSG.PL_DELETE_FAILED, "error");
+      return false;
     }
   },
 
