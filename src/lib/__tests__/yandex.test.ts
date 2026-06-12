@@ -2,12 +2,6 @@
 // Copyright (c) 2025 dmitrymake
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
-vi.mock("../constants", () => ({
-  API_ENDPOINTS: {
-    get YANDEX() { return "/wave-yandex-api.php"; },
-  },
-}));
-
 import { YandexApi, YandexApiError, isYandexAuthError } from "../yandex.js";
 
 beforeEach(() => {

@@ -4,7 +4,7 @@
   import { ICONS } from "../../lib/icons";
   import ImageLoader from "../ImageLoader.svelte";
   import Skeleton from "../Skeleton.svelte";
-  import type { YandexPlaylist } from "../../lib/types";
+  import type { YandexPlaylist } from "../../lib/types/yandex";
 
   let { vibeCards = [], collectionCards = [], isLoading = false, onOpenPlaylist }: {
     vibeCards?: YandexPlaylist[];

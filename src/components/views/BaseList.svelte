@@ -1,12 +1,11 @@
 <!-- SPDX-License-Identifier: MIT -->
 <!-- Copyright (c) 2025 dmitrymake -->
-<script lang="ts">
+<script lang="ts" generics="T extends { _uid?: string }">
   import { onDestroy, onMount, tick } from "svelte";
   import type { Snippet } from "svelte";
   import Skeleton from "../Skeleton.svelte";
   import { createPlaylistDrag } from "../../lib/playlistDrag";
   import type { Writable } from "svelte/store";
-  import type { Track } from "../../lib/types";
 
   import {
     navigationStack,
@@ -15,6 +14,9 @@
     getScrollPosition,
   } from "../../lib/store";
 
+  // Generic over the row item type so it can back Track, YandexTrack or
+  // LibraryItem stores directly. The only field the list itself touches is
+  // `_uid` (its #each key); everything else flows through the row snippet.
   let {
     itemsStore,
     isEditMode = false,
@@ -25,12 +27,12 @@
     header,
     footer,
   }: {
-    itemsStore: Writable<Track[]>;
+    itemsStore: Writable<T[]>;
     isEditMode?: boolean;
     isLoading?: boolean;
     emptyText?: string;
     onMoveItem?: (from: number, to: number) => void;
-    row?: Snippet<[{ item: Track; index: number; isGhost: boolean; startDrag: (e: MouseEvent | TouchEvent) => void }]>;
+    row?: Snippet<[{ item: T; index: number; isGhost: boolean; startDrag: (e: MouseEvent | TouchEvent) => void }]>;
     header?: Snippet;
     footer?: Snippet;
   } = $props();
@@ -108,7 +110,7 @@
     refs,
   } = dragEngine;
 
-  function startDrag(event: MouseEvent | TouchEvent, index: number, item: Track) {
+  function startDrag(event: MouseEvent | TouchEvent, index: number, item: T) {
     if (!isEditMode) return;
     dragEngine.onDragInit(event, index, item);
   }

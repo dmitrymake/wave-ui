@@ -1,19 +1,14 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2025 dmitrymake
-import { get } from "svelte/store";
 import { ICONS } from "./icons";
 import { LibraryActions } from "./mpd/library";
-import { YandexApi } from "./yandex";
-import { yandexFavorites, showToast } from "./store";
-import { isRemoteUrl } from "./utils";
-import { MSG } from "./messages";
+import { resolveSourceForTrack } from "./sources/trackSource";
+import { isRemoteUrl, formatClock } from "./utils";
 import type { Track, MpdStatus } from "./types";
 
+// Thin alias kept for the player components; the clock format itself lives in utils.
 export function formatTime(seconds: number | null): string {
-  if (seconds === null || isNaN(seconds)) return "0:00";
-  const m = Math.floor(seconds / 60) || 0;
-  const s = Math.floor(seconds % 60) || 0;
-  return `${m}:${s.toString().padStart(2, "0")}`;
+  return formatClock(seconds);
 }
 
 export function getPct(e: MouseEvent | TouchEvent, element: HTMLElement): number {
@@ -60,45 +55,30 @@ export function cyclePlayMode(status: MpdStatus, MPD: MpdCommands): void {
 export async function toggleLike(track: Track): Promise<void> {
   if (!track.file && !track.id) return;
 
-  if (track.isYandex || track.service === "yandex") {
-    const liked = get(yandexFavorites).has(String(track.id));
-    try {
-      yandexFavorites.update((s) => {
-        const id = String(track.id);
-        if (liked) s.delete(id);
-        else s.add(id);
-        return s;
-      });
-      showToast(
-        liked ? MSG.FAV_REMOVED_YANDEX : MSG.FAV_ADDED_YANDEX,
-        liked ? "info" : "success",
-      );
-      await YandexApi.toggleLike(track.id!, liked);
-    } catch (err) {
-      // Roll back the optimistic favorites change on failure.
-      yandexFavorites.update((s) => {
-        const id = String(track.id);
-        if (liked) s.add(id);
-        else s.delete(id);
-        return s;
-      });
-      showToast(MSG.FAV_ERROR_UPDATING, "error");
-    }
+  // A streaming source owns its own like flow (optimistic flip + rollback); the
+  // local library falls back to the MPD favourites playlist.
+  const source = resolveSourceForTrack(track);
+  if (source?.toggleLike) {
+    await source.toggleLike(track);
   } else {
     LibraryActions.toggleFavorite(track);
   }
 }
 
-export function isTrackLiked(track: Track | null, favorites: Set<string>, yandexFavs: Set<string>): boolean {
+// `yandexFavs` is passed so callers' reactive derivations re-run when streaming
+// favourites change; the owning source reads the live set when computing isLiked.
+export function isTrackLiked(track: Track | null, favorites: Set<string>, _yandexFavs: Set<string>): boolean {
   if (!track) return false;
-  if (track.isYandex || track.service === "yandex") {
-    return yandexFavs.has(String(track.id));
-  }
+  const source = resolveSourceForTrack(track);
+  if (source?.isLiked) return source.isLiked(track);
   return !!track.file && favorites.has(track.file);
 }
 
 export function isRadioStream(song: Track | null): boolean {
-  return !!isRemoteUrl(song?.file) && !song?.isYandex;
+  // A streaming-source track (real duration) is not internet radio even though its
+  // file looks remote.
+  if (!isRemoteUrl(song?.file)) return false;
+  return !resolveSourceForTrack(song)?.streamsHaveElapsed;
 }
 
 export function getQualityLabel(status: MpdStatus): string {

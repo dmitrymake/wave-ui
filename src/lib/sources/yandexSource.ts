@@ -1,22 +1,45 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2025 dmitrymake
-import { get } from "svelte/store";
-import { mpdClient } from "../mpd/client";
-import { MpdParser } from "../mpd/parser";
+import { get, derived } from "svelte/store";
+import { PlayerActions } from "../mpd/player";
 import {
   status,
   currentSong,
   queue,
-  yandexContext,
   showToast,
+  activeMenuTab,
+  setNavigationStack,
 } from "../store";
-import { YandexApi } from "../yandex";
+import { yandexContext, yandexFavorites, yandexState } from "../stores/yandex";
+import { YandexApi, YANDEX_ENDPOINT } from "../yandex";
+import { YandexService } from "../yandexService";
 import { getYandexIdFromUrl } from "./yandexUri";
-import { API_ENDPOINTS } from "../constants";
+import { ICONS } from "../icons";
 import { MSG } from "../messages";
 import { logger } from "../logger";
-import { registerTrackSource, type TrackSource } from "./trackSource";
-import type { Track, MpdStatus, CurrentSong, YandexContext, YandexTrack } from "../types";
+import { registerTrackSource, type TrackSource, type SourceRoute } from "./trackSource";
+import type { Track, MpdStatus, CurrentSong } from "../types";
+import type { YandexContext, YandexTrack } from "../types/yandex";
+
+// Bridge a Yandex source-list row to a full Track for TrackRow. YandexTrack omits
+// the local-library fields (file/genre/track), so they get neutral defaults — the
+// owning source is identified by the `service` tag the caller passes, not the
+// file (file stays "" so the now-playing/highlight logic behaves as before, i.e.
+// no file-id match for list rows). Replaces the prior `as unknown as Track` cast.
+export function yandexTrackToTrack(item: YandexTrack, service: string): Track {
+  return {
+    file: "",
+    title: item.title,
+    artist: item.artist,
+    album: item.album ?? "",
+    genre: "",
+    time: item.time ?? 0,
+    track: "",
+    id: String(item.id),
+    image: item.image,
+    service,
+  };
+}
 
 const STREAM_CACHE_MAX = 300;
 const STREAM_CACHE_TRIM_TO = 200;
@@ -37,7 +60,7 @@ function trimStreamCache(
 async function getYandexMeta(url: string): Promise<Record<string, unknown> | null> {
   try {
     const res = await fetch(
-      API_ENDPOINTS.YANDEX + "?action=get_meta&url=" + encodeURIComponent(url),
+      YANDEX_ENDPOINT.URL + "?action=get_meta&url=" + encodeURIComponent(url),
     );
     if (res.ok) return await res.json();
   } catch (e) {
@@ -51,7 +74,7 @@ async function batchGetYandexMeta(
 ): Promise<Record<string, Record<string, unknown> | null>> {
   if (!urls.length) return {};
   try {
-    const res = await fetch(API_ENDPOINTS.YANDEX + "?action=batch_get_meta", {
+    const res = await fetch(YANDEX_ENDPOINT.URL + "?action=batch_get_meta", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ urls }),
@@ -102,7 +125,7 @@ async function fetchMetaBatch(urls: string[]): Promise<void> {
           artist: cacheEntry.artist || t.artist,
           album: cacheEntry.album || t.album,
           image: cacheEntry.image,
-          isYandex: true,
+          service: "yandex",
           time: cacheEntry.time || t.time,
           id: cacheEntry.id || t.id,
         };
@@ -121,7 +144,7 @@ async function fetchMetaBatch(urls: string[]): Promise<void> {
         artist: String(m.artist || s.artist),
         album: (m.album as string | undefined) ?? s.album,
         image: m.image as string | undefined,
-        isYandex: true,
+        service: "yandex",
       }));
       status.update((s) => {
         const t = m.time as number | undefined;
@@ -170,7 +193,7 @@ async function fetchMetaForTrack(url: string): Promise<void> {
         artist: cacheEntry.artist,
         album: cacheEntry.album || s.album,
         image: cacheEntry.image,
-        isYandex: true,
+        service: "yandex",
       }));
 
       status.update((s) => {
@@ -190,7 +213,7 @@ async function fetchMetaForTrack(url: string): Promise<void> {
             artist: cacheEntry.artist || t.artist,
             album: cacheEntry.album || t.album,
             image: cacheEntry.image,
-            isYandex: true,
+            service: "yandex",
             time: cacheEntry.time || t.time,
           };
         return t;
@@ -205,24 +228,99 @@ async function fetchMetaForTrack(url: string): Promise<void> {
 // position. Callers then move/play by id (moveid/playid), which is immune to the
 // index shifts that made the old `move playlistlength-1` target the wrong track.
 async function appendYandexTrack(id: string): Promise<number> {
-  const lenBefore: number = parseInt(
-    MpdParser.parseKeyValue(await mpdClient.send("status")).playlistlength,
-  );
+  const lenBefore: number = await PlayerActions.getQueueLength();
   await YandexApi.request("play_track", { id, append: 1 });
-  const lenAfter: number = parseInt(
-    MpdParser.parseKeyValue(await mpdClient.send("status")).playlistlength,
-  );
+  const lenAfter: number = await PlayerActions.getQueueLength();
 
   const before: number = isNaN(lenBefore) ? 0 : lenBefore;
   if (isNaN(lenAfter) || lenAfter <= before) return NaN;
 
-  return parseInt(
-    MpdParser.parseKeyValue(await mpdClient.send(`playlistinfo ${lenAfter - 1}`)).id,
-  );
+  return await PlayerActions.getQueueItemIdAt(lenAfter - 1);
 }
+
+// Hash routes Yandex owns, declaring how each path round-trips to a navigation
+// view+data. The exact parse fallbacks (required part counts) and serialize paths
+// mirror what the router previously hard-coded, so behaviour is byte-for-byte
+// preserved while the knowledge now lives with the source. `menuTab: "yandex"`
+// activates the Yandex tab on parse and marks "yandex" as this source's tab root.
+const YANDEX_MENU_TAB = "yandex";
+
+const yandexRoutes: SourceRoute[] = [
+  {
+    routePrefix: "yandex_search",
+    viewName: "yandex_search",
+    menuTab: YANDEX_MENU_TAB,
+    allowEmptyData: true,
+    parseParams(parts) {
+      // parts are AFTER the prefix, so the query is parts[0]
+      // (old guard: route === "yandex_search" && parts.length >= 2).
+      if (parts.length >= 1) return { query: parts[0] };
+      return null;
+    },
+    buildPath(data) {
+      if (data?.query) {
+        return `yandex_search/${encodeURIComponent(data.query as string)}`;
+      }
+      return null;
+    },
+  },
+  {
+    routePrefix: "yandex_artist",
+    viewName: "yandex_artist_details",
+    menuTab: YANDEX_MENU_TAB,
+    parseParams(parts) {
+      if (parts.length >= 1) return { id: parts[0], title: "Artist" };
+      return null;
+    },
+    buildPath(data) {
+      if (data?.id) return `yandex_artist/${data.id}`;
+      return null;
+    },
+  },
+  {
+    routePrefix: "yandex_album",
+    viewName: "yandex_album_details",
+    menuTab: YANDEX_MENU_TAB,
+    parseParams(parts) {
+      if (parts.length >= 1) return { id: parts[0], title: "Album" };
+      return null;
+    },
+    buildPath(data) {
+      if (data?.id) return `yandex_album/${data.id}`;
+      return null;
+    },
+  },
+  {
+    routePrefix: "yandex_playlist",
+    viewName: "yandex_playlist",
+    menuTab: YANDEX_MENU_TAB,
+    parseParams(parts) {
+      // old guard: route === "yandex_playlist" && parts.length >= 3 (uid + kind)
+      if (parts.length >= 2) {
+        return { uid: parts[0], kind: parts[1], title: "Playlist" };
+      }
+      return null;
+    },
+    buildPath(data) {
+      if (data?.uid && data?.kind) {
+        return `yandex_playlist/${data.uid}/${data.kind}`;
+      }
+      return null;
+    },
+  },
+];
 
 export const yandexSource: TrackSource = {
   id: "yandex",
+
+  routes: yandexRoutes,
+
+  // Yandex streams expose a real elapsed/duration even though their file is a
+  // remote/RAM-cache url, so the player keeps the elapsed timer ticking for them.
+  streamsHaveElapsed: true,
+
+  // Brand glyph rendered next to Yandex tracks in generic track rows.
+  brandIcon: ICONS.YANDEX,
 
   matches(file: string): boolean {
     return (
@@ -255,11 +353,9 @@ export const yandexSource: TrackSource = {
           artist: yMeta.artist || t.artist,
           album: yMeta.album || t.album,
           image: yMeta.image,
-          isYandex: true as const,
+          service: "yandex",
           id: String(yMeta.id),
           time: currentT > 0 ? currentT : metaTime,
-          mpdId: t.id,
-          mpdPos: t.pos as string,
           _uid: String(t.id ?? t.pos) + "y",
         };
       }
@@ -292,7 +388,7 @@ export const yandexSource: TrackSource = {
       serverSong.artist = yMeta.artist;
       serverSong.album = yMeta.album || serverSong.album;
       serverSong.image = yMeta.image;
-      serverSong.isYandex = true;
+      serverSong.service = "yandex";
       serverSong.id = String(yMeta.id);
       if (serverStatus.duration === 0 || isNaN(serverStatus.duration)) {
         if (yMeta.time) serverStatus.duration = parseFloat(String(yMeta.time));
@@ -316,8 +412,8 @@ export const yandexSource: TrackSource = {
     // Move/play BY ID (moveid/playid). The old code moved playlistlength-1 read from
     // a separate status, so a concurrent queue change made len-1 the wrong track.
     const targetPos: number = isNaN(currentPos) ? 0 : currentPos + 1;
-    await mpdClient.send(`moveid ${newId} ${targetPos}`);
-    await mpdClient.send(`playid ${newId}`);
+    await PlayerActions.moveById(newId, targetPos);
+    await PlayerActions.playById(newId);
     return true;
   },
 
@@ -336,15 +432,60 @@ export const yandexSource: TrackSource = {
     const newId: number = await appendYandexTrack(id);
     if (isNaN(newId)) return true;
 
-    await mpdClient.send(`moveid ${newId} ${currentPos + 1}`);
+    await PlayerActions.moveById(newId, currentPos + 1);
     showToast(MSG.PLAY_WILL_PLAY_NEXT, "success");
     return true;
   },
 
   onSkip(track: Track | CurrentSong, elapsed: number): void {
-    if (track.isYandex && track.id) {
+    if (track.id) {
       YandexApi.feedbackSkip(track.id, elapsed).catch(() => {});
     }
+  },
+
+  isLiked(track: Track): boolean {
+    return get(yandexFavorites).has(String(track.id));
+  },
+
+  async toggleLike(track: Track): Promise<void> {
+    const id = String(track.id);
+    const liked = get(yandexFavorites).has(id);
+    try {
+      // Optimistic favourites flip; rolled back on failure.
+      yandexFavorites.update((s) => {
+        if (liked) s.delete(id);
+        else s.add(id);
+        return s;
+      });
+      showToast(
+        liked ? MSG.FAV_REMOVED_YANDEX : MSG.FAV_ADDED_YANDEX,
+        liked ? "info" : "success",
+      );
+      await YandexApi.toggleLike(track.id, liked);
+    } catch (err) {
+      yandexFavorites.update((s) => {
+        if (liked) s.add(id);
+        else s.delete(id);
+        return s;
+      });
+      showToast(MSG.FAV_ERROR_UPDATING, "error");
+    }
+  },
+
+  matchesPlaying(track: Track, currentFile: string | null | undefined): boolean {
+    // Yandex tracks carry the same numeric id on both sides, but expressed
+    // differently: source lists use `yandex:<id>` while the playing MPD file is a
+    // RAM cache path / CDN url. Compare by extracted id so the now-playing
+    // highlight works in album/playlist/search views too, not just the queue.
+    const playingId: string | null = getYandexIdFromUrl(currentFile);
+    return playingId !== null && getYandexIdFromUrl(track.file) === playingId;
+  },
+
+  navigateToArtist(track: Track): void {
+    if (!track.artist) return;
+    activeMenuTab.set("yandex");
+    if (window.location.hash !== "#/yandex") history.pushState(null, "", "#/yandex");
+    setNavigationStack([{ view: "root" }, { view: "yandex_search", data: { query: track.artist } }]);
   },
 
   isQueueNavigable(): boolean {
@@ -368,9 +509,7 @@ export const yandexSource: TrackSource = {
     if (!track.artist) return;
     showToast(MSG.searchingArtist(track.artist), "info");
     try {
-      const searchRes = (await YandexApi.search(track.artist)) as {
-        artists?: { id: string; title: string }[];
-      };
+      const searchRes = await YandexApi.search(track.artist);
       if (searchRes && searchRes.artists && searchRes.artists.length > 0) {
         const artistId = searchRes.artists[0].id;
         showToast(MSG.startingVibeFor(searchRes.artists[0].title), "info");
@@ -381,6 +520,27 @@ export const yandexSource: TrackSource = {
     } catch (e) {
       showToast(MSG.RADIO_FAILED_ARTIST_VIBE, "error");
     }
+  },
+
+  // Background daemon banner: the PHP daemon keeps a vibe/queue alive server-side.
+  // The banner reflects yandexState and lets the UI poll for / stop the daemon.
+  daemon: {
+    state: derived(yandexState, ($s) => ({
+      active: $s.active,
+      label: $s.context_name || "Yandex Stream",
+    })),
+
+    startPolling(): () => void {
+      YandexService.refreshYandexDaemonState();
+      const interval = setInterval(() => {
+        YandexService.refreshYandexDaemonState();
+      }, 5000);
+      return () => clearInterval(interval);
+    },
+
+    async stop(): Promise<void> {
+      await YandexService.stopYandexDaemon();
+    },
   },
 };
 

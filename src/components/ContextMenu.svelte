@@ -9,10 +9,13 @@
     playlists,
     ignoreNextPopState,
   } from "../lib/store";
+  import { yandexFavorites } from "../lib/stores/yandex";
   import { ICONS } from "../lib/icons";
   import * as actions from "../lib/contextMenuActions";
   import { calculateMenuPosition } from "../lib/menuPositioner";
   import { isRemoteUrl } from "../lib/utils";
+  import { isTrackLiked } from "../lib/playerHelpers";
+  import { resolveSourceForTrack } from "../lib/sources/trackSource";
 
   let innerWidth = $state(0);
   let innerHeight = $state(0);
@@ -63,14 +66,14 @@
     view = "main";
   }
 
-  let isLiked = $derived($contextMenu.track && $favorites.has($contextMenu.track.file));
+  let isLiked = $derived(isTrackLiked($contextMenu.track, $favorites, $yandexFavorites));
   let isRadio = $derived(
     $contextMenu.track &&
     isRemoteUrl($contextMenu.track.file));
 
   let isYandexTrack = $derived(
     $contextMenu.track &&
-    ($contextMenu.track.isYandex || $contextMenu.track.service === "yandex"));
+    !!resolveSourceForTrack($contextMenu.track));
 
   let isPlaylistContext = $derived($contextMenu.context?.type === "playlist");
   let isQueueContext = $derived($contextMenu.context?.type === "queue");

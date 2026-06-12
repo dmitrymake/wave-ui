@@ -1,8 +1,25 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2025 dmitrymake
+import { writable } from "svelte/store";
 import { DATABASE } from "./constants";
 import { logger } from "./logger";
 import type { DbTrack } from "./types";
+
+// Reactive signal that fires whenever the library store's contents change.
+// It is a monotonically increasing counter rather than a boolean so every change
+// (even two in a row) is observable. Views key their data $effect on it so a
+// completed (re)sync repopulates an already-mounted view instead of leaving it
+// blank until the user re-navigates. The destructive v4 migration clears the
+// store, so without this signal a mounted LibraryView would stay empty after the
+// background resync finishes.
+export const libraryRevision = writable<number>(0);
+
+// Bump the revision so subscribed views refetch. Main-thread writers call this
+// directly; the background sync worker writes on a separate IndexedDB connection,
+// so the App startup path bumps explicitly once it confirms the resync landed.
+export function bumpLibraryRevision(): void {
+  libraryRevision.update((n) => n + 1);
+}
 
 interface ArtistEntry {
   name: string;
@@ -32,9 +49,10 @@ export const db = {
       request.onupgradeneeded = (e: IDBVersionChangeEvent) => {
         const database = (e.target as IDBOpenDBRequest).result;
         const transaction = (e.target as IDBOpenDBRequest).transaction!;
+        const preExisting: boolean = database.objectStoreNames.contains(DATABASE.STORE_NAME);
         let store: IDBObjectStore;
 
-        if (database.objectStoreNames.contains(DATABASE.STORE_NAME)) {
+        if (preExisting) {
           store = transaction.objectStore(DATABASE.STORE_NAME);
         } else {
           store = database.createObjectStore(DATABASE.STORE_NAME, {
@@ -53,6 +71,24 @@ export const db = {
         }
         if (!store.indexNames.contains("album_artist")) {
           store.createIndex("album_artist", "album_artist", { unique: false });
+        }
+        // Composite index that keeps same-named albums by different artists distinct.
+        // Keyed on [album, albumKey] where albumKey is the effective grouping artist
+        // (album_artist || artist), populated by mapRawTrack so neither component is
+        // ever undefined (IndexedDB would otherwise drop such records from the index).
+        if (!store.indexNames.contains("album_albumKey")) {
+          store.createIndex("album_albumKey", ["album", "albumKey"], { unique: false });
+        }
+
+        // Records cached by an older schema version have no albumKey, so they would be
+        // missing from album_albumKey and still collapse. Clear the pre-existing store
+        // here (force-resync): the App startup path re-syncs whenever getArtists() is
+        // empty, repopulating every record with albumKey, and bumps libraryRevision once
+        // the resync lands so a mounted view refetches (and surfaces a retry if it does
+        // not). A brand-new store is already empty, so we only clear when upgrading an
+        // existing one.
+        if (preExisting) {
+          store.clear();
         }
       };
 
@@ -91,7 +127,10 @@ export const db = {
     return new Promise((resolve, reject) => {
       const tx: IDBTransaction = database.transaction(DATABASE.STORE_NAME, "readwrite");
       tx.objectStore(DATABASE.STORE_NAME).clear();
-      tx.oncomplete = () => resolve();
+      tx.oncomplete = () => {
+        bumpLibraryRevision();
+        resolve();
+      };
       tx.onerror = () => reject(tx.error);
     });
   },
@@ -102,7 +141,10 @@ export const db = {
       const tx: IDBTransaction = database.transaction(DATABASE.STORE_NAME, "readwrite");
       const store: IDBObjectStore = tx.objectStore(DATABASE.STORE_NAME);
       tracks.forEach((track) => store.put(track));
-      tx.oncomplete = () => resolve();
+      tx.oncomplete = () => {
+        bumpLibraryRevision();
+        resolve();
+      };
       tx.onerror = () => reject(tx.error);
     });
   },
@@ -118,7 +160,10 @@ export const db = {
       const store: IDBObjectStore = tx.objectStore(DATABASE.STORE_NAME);
       store.clear();
       for (const track of tracks) store.put(track);
-      tx.oncomplete = () => resolve();
+      tx.oncomplete = () => {
+        bumpLibraryRevision();
+        resolve();
+      };
       tx.onerror = () => reject(tx.error);
       tx.onabort = () => reject(tx.error ?? new Error("replaceAll transaction aborted"));
     });
@@ -190,8 +235,11 @@ export const db = {
     const database: IDBDatabase = await this.open();
     return new Promise((resolve, reject) => {
       const tx: IDBTransaction = database.transaction(DATABASE.STORE_NAME, "readonly");
-      const index: IDBIndex = tx.objectStore(DATABASE.STORE_NAME).index("album");
+      const index: IDBIndex = tx.objectStore(DATABASE.STORE_NAME).index("album_albumKey");
       const albums: AlbumEntry[] = [];
+      // nextunique on the composite [album, albumKey] index yields one row per unique
+      // (album, effective-artist) pair, so self-titled / "Greatest Hits" / "Live"
+      // albums by different artists each get their own card instead of collapsing.
       const request: IDBRequest<IDBCursorWithValue | null> = index.openCursor(null, "nextunique");
       request.onsuccess = (event: Event) => {
         const cursor: IDBCursorWithValue | null = (event.target as IDBRequest<IDBCursorWithValue | null>).result;
@@ -199,7 +247,7 @@ export const db = {
           const t = cursor.value as DbTrack;
           albums.push({
             name: t.album,
-            artist: t.album_artist || t.artist,
+            artist: t.albumKey || t.album_artist || t.artist,
             file: t.file,
             thumbHash: t.thumbHash ?? null,
             qualityBadge: t.qualityBadge ?? null,
@@ -286,8 +334,16 @@ export const db = {
           tracks = tracks.filter((t) => {
             const tArtist: string = (t.artist || "").normalize("NFC").trim();
             const tAlbumArtist: string = (t.album_artist || "").normalize("NFC").trim();
+            const tAlbumKey: string = (t.albumKey || "").normalize("NFC").trim();
 
-            const match: boolean = tArtist === safeArtist || tAlbumArtist === safeArtist;
+            // albumKey is the canonical grouping artist (album_artist || artist) that
+            // album cards navigate with, so it splits same-named albums by different
+            // artists into their own pair. artist / album_artist stay matched too for
+            // callers that pass a raw artist (e.g. SearchView) or pre-albumKey caches.
+            const match: boolean =
+              tAlbumKey === safeArtist ||
+              tArtist === safeArtist ||
+              tAlbumArtist === safeArtist;
             return match;
           });
           logger.log(

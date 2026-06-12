@@ -3,7 +3,6 @@
 import { writable, get } from "svelte/store";
 import type { Writable } from "svelte/store";
 import { tick } from "svelte";
-import type { Track } from "./types";
 
 const SCROLL_ZONE_PX: number = 100;
 const SCROLL_SPEED_BASE: number = 5;
@@ -24,22 +23,25 @@ interface DragRefs {
   listBodyContainer: HTMLElement | null;
 }
 
-interface PlaylistDragOptions {
-  tracksStore: Writable<Track[]>;
+// The engine reorders the list opaquely (splice + store.set) and never reads an
+// item's fields, so it is generic over the row type T. This lets BaseList back
+// stores of Track, YandexTrack or LibraryItem without an `as unknown as` cast.
+interface PlaylistDragOptions<T> {
+  tracksStore: Writable<T[]>;
   onMoveTrack?: (fromPos: number, toPos: number) => void;
 }
 
-interface PlaylistDragResult {
+interface PlaylistDragResult<T> {
   isDragging: Writable<boolean>;
   isDropping: Writable<boolean>;
   isReordering: Writable<boolean>;
   draggingIndex: Writable<number | null>;
   hoverIndex: Writable<number | null>;
   justDroppedIndex: Writable<number | null>;
-  draggedItemData: Writable<Track | null>;
+  draggedItemData: Writable<T | null>;
   ghostCoords: Writable<GhostCoords>;
   refs: DragRefs;
-  onDragInit: (event: MouseEvent | TouchEvent, index: number, track: Track) => void;
+  onDragInit: (event: MouseEvent | TouchEvent, index: number, track: T) => void;
   onPointerMove: (e: MouseEvent | TouchEvent) => void;
   onPointerUp: (e: MouseEvent | TouchEvent) => void;
   getRowStyle: (
@@ -53,7 +55,7 @@ interface PlaylistDragResult {
   cancelDrag: () => void;
 }
 
-export function createPlaylistDrag({ tracksStore, onMoveTrack }: PlaylistDragOptions): PlaylistDragResult {
+export function createPlaylistDrag<T>({ tracksStore, onMoveTrack }: PlaylistDragOptions<T>): PlaylistDragResult<T> {
   const isDragging: Writable<boolean> = writable<boolean>(false);
   const isDropping: Writable<boolean> = writable<boolean>(false);
   const isReordering: Writable<boolean> = writable<boolean>(false);
@@ -70,7 +72,7 @@ export function createPlaylistDrag({ tracksStore, onMoveTrack }: PlaylistDragOpt
     grabOffsetX: 0,
     grabOffsetY: 0,
   });
-  const draggedItemData: Writable<Track | null> = writable<Track | null>(null);
+  const draggedItemData: Writable<T | null> = writable<T | null>(null);
 
   let isDown: boolean = false;
   let startX: number = 0;
@@ -85,7 +87,7 @@ export function createPlaylistDrag({ tracksStore, onMoveTrack }: PlaylistDragOpt
 
   let scrollInterval: number | null = null;
 
-  function onDragInit(event: MouseEvent | TouchEvent, index: number, track: Track): void {
+  function onDragInit(event: MouseEvent | TouchEvent, index: number, track: T): void {
     if ('button' in event && event.button === 2) return;
     if (window.getSelection) window.getSelection()?.removeAllRanges();
 
@@ -257,7 +259,7 @@ export function createPlaylistDrag({ tracksStore, onMoveTrack }: PlaylistDragOpt
     let insertAt: number = validIndex;
 
     if (currentDragIdx !== null && currentDragIdx !== validIndex) {
-      const tracks: Track[] = [...get(tracksStore)];
+      const tracks: T[] = [...get(tracksStore)];
       const [item] = tracks.splice(currentDragIdx, 1);
 
       insertAt = Math.max(0, Math.min(insertAt, tracks.length));

@@ -19,15 +19,12 @@ const getBaseUrl = (): string => {
 export const DATABASE = {
   NAME: "MoodePlayerDB",
   STORE_NAME: "music",
-  VERSION: 3,
+  VERSION: 4,
 } as const;
 
 export const API_ENDPOINTS = {
   get SYNC(): string {
     return `${getBaseUrl()}/wave-api.php`;
-  },
-  get YANDEX(): string {
-    return `${getBaseUrl()}/wave-yandex-api.php`;
   },
 
   STATIONS: (_isDev: boolean): string => {

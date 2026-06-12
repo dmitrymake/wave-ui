@@ -2,7 +2,7 @@
 <!-- Copyright (c) 2025 dmitrymake -->
 <script lang="ts">
   import { onDestroy } from "svelte";
-  import * as MPD from "../lib/mpd";
+  import { seek, nav, togglePlay } from "../lib/playerActions";
   import { ICONS } from "../lib/icons";
   import {
     currentSong,
@@ -14,15 +14,14 @@
     type EventWithDetail,
   } from "../lib/store.js";
   import { longpress } from "../lib/actions";
-  import { formatTime, getPct, isRadioStream, getQualityLabel } from "../lib/playerHelpers";
+  import { formatTime, isRadioStream, getQualityLabel } from "../lib/playerHelpers";
+  import { createSeekController } from "../lib/seekDrag.svelte";
   import ImageLoader from "./ImageLoader.svelte";
   import VolumeSlider from "./VolumeSlider.svelte";
   import PlayModeButton from "./PlayModeButton.svelte";
   import LikeButton from "./LikeButton.svelte";
 
   let isHoveringBar = $state(false);
-  let isDragging = $state(false);
-  let dragProgress = $state(0);
   let progressBar: HTMLElement;
 
   const stop = (fn: (e: Event) => void) => (e: Event) => {
@@ -37,45 +36,22 @@
   let displayTitle = $derived($currentSong.title || "Not Playing");
   let displayArtist = $derived($currentSong.stationName || $currentSong.artist || "Moode");
   let artSrc = $derived(getTrackCoverUrl($currentSong, $stations, $currentSong.stationName));
-  let pct = $derived(isRadio ? 0 : isDragging ? dragProgress * 100 : (elapsed / duration) * 100);
+
+  // The dock keeps mouse drags on `window` so they keep following the cursor
+  // outside the thin bar.
+  const seekCtl = createSeekController({
+    getElement: () => progressBar,
+    getDuration: () => duration,
+    getElapsed: () => elapsed,
+    getIsRadio: () => isRadio,
+    seekTo: seek,
+    windowMouse: true,
+  });
+
+  let isDragging = $derived(seekCtl.isDragging);
+  let pct = $derived(seekCtl.fraction * 100);
   let smooth = $derived(isPlaying && !isDragging && !isRadio);
   let qualityLabel = $derived(getQualityLabel($status));
-
-  function handleMouseDown(e: MouseEvent) {
-    if (isRadio) return;
-    isDragging = true;
-    dragProgress = getPct(e, progressBar);
-    window.addEventListener("mousemove", onWinMove);
-    window.addEventListener("mouseup", onWinUp);
-  }
-
-  function onWinMove(e: MouseEvent) {
-    if (isDragging) dragProgress = getPct(e, progressBar);
-  }
-
-  function onWinUp() {
-    if (isDragging && !isRadio) {
-      MPD.seek(dragProgress * duration);
-    }
-    isDragging = false;
-    window.removeEventListener("mousemove", onWinMove);
-    window.removeEventListener("mouseup", onWinUp);
-  }
-
-  function handleTouchStart(e: TouchEvent) {
-    if (isRadio) return;
-    isDragging = true;
-    dragProgress = getPct(e, progressBar);
-  }
-
-  function handleTouchMove(e: TouchEvent) {
-    if (isDragging) dragProgress = getPct(e, progressBar);
-  }
-
-  function handleTouchEnd() {
-    if (isDragging && !isRadio) MPD.seek(dragProgress * duration);
-    isDragging = false;
-  }
 
   function handleBarKey(e: KeyboardEvent) {
     e.stopPropagation();
@@ -83,14 +59,13 @@
     if (e.key === "ArrowLeft" || e.key === "ArrowRight") {
       e.preventDefault();
       const delta = e.key === "ArrowRight" ? 5 : -5;
-      MPD.seek(Math.max(0, Math.min(duration, elapsed + delta)));
+      seek(Math.max(0, Math.min(duration, elapsed + delta)));
     }
   }
 
   // Clean up window listeners if the dock unmounts mid-drag (e.g. full player opens).
   onDestroy(() => {
-    window.removeEventListener("mousemove", onWinMove);
-    window.removeEventListener("mouseup", onWinUp);
+    seekCtl.destroy();
   });
 
   function handleContext(e: MouseEvent) {
@@ -124,10 +99,10 @@
       bind:this={progressBar}
       onmouseenter={() => (isHoveringBar = true)}
       onmouseleave={() => (isHoveringBar = false)}
-      onmousedown={(e) => { e.stopPropagation(); handleMouseDown(e); }}
-      ontouchstart={(e) => { e.stopPropagation(); handleTouchStart(e); }}
-      ontouchmove={handleTouchMove}
-      ontouchend={handleTouchEnd}
+      onmousedown={(e) => { e.stopPropagation(); seekCtl.onMouseDown(e); }}
+      ontouchstart={(e) => { e.stopPropagation(); seekCtl.onTouchStart(e); }}
+      ontouchmove={seekCtl.onTouchMove}
+      ontouchend={seekCtl.onTouchEnd}
       onclick={(e) => e.stopPropagation()}
       onkeydown={handleBarKey}
       role="slider"
@@ -147,7 +122,7 @@
 
       {#if (isHoveringBar || isDragging) && !isRadio}
         <div class="tooltip current" style="left: {pct}%">
-          {isDragging ? formatTime(dragProgress * duration) : formatTime(elapsed)}
+          {formatTime(seekCtl.displaySeconds)}
         </div>
         <span></span>
       {/if}
@@ -188,15 +163,15 @@
       <div class="controls">
         <LikeButton track={$currentSong} compact class="desktop" />
 
-        <button class="btn-icon" onclick={stop(() => MPD.nav("previous"))}>
+        <button class="btn-icon" onclick={stop(() => nav("previous"))}>
           {@html ICONS.PREVIOUS}
         </button>
 
-        <button class="play-btn flex-center" onclick={stop(MPD.togglePlay)}>
+        <button class="play-btn flex-center" onclick={stop(togglePlay)}>
           {@html $status.state === "play" ? ICONS.PAUSE : ICONS.PLAY}
         </button>
 
-        <button class="btn-icon" onclick={stop(() => MPD.nav("next"))}>
+        <button class="btn-icon" onclick={stop(() => nav("next"))}>
           {@html ICONS.NEXT}
         </button>
 

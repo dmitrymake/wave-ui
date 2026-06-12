@@ -5,25 +5,29 @@
   import { fade } from "svelte/transition";
   import { writable, get } from "svelte/store";
   import { YandexApi, isYandexAuthError, type PlaylistSource } from "../../lib/yandex";
-  import { ViewCache } from "../../lib/yandexViewCache";
+  import { ViewCache, getModeFromStack } from "../../lib/yandexViewCache";
+  import { logger } from "../../lib/logger";
   import {
-    yandexAuthStatus,
     showToast,
-    yandexFavorites,
-    yandexSearchTrigger,
     navigationStack,
     navigateTo,
+    setNavigationStack,
   } from "../../lib/store";
+  import {
+    yandexAuthStatus,
+    yandexFavorites,
+    yandexSearchTrigger,
+  } from "../../lib/stores/yandex";
   import { MSG } from "../../lib/messages";
-  import { ICONS } from "../../lib/icons";
+  import { yandexSource, yandexTrackToTrack } from "../../lib/sources/yandexSource";
   import TrackRow from "../TrackRow.svelte";
   import BaseList from "./BaseList.svelte";
-  import ImageLoader from "../ImageLoader.svelte";
-  import Skeleton from "../Skeleton.svelte";
   import YandexDashboard from "./YandexDashboard.svelte";
   import YandexSearchResults from "./YandexSearchResults.svelte";
   import YandexContentHeader from "./YandexContentHeader.svelte";
-  import type { Track, YandexTrack, YandexAlbum, YandexArtist, YandexPlaylist, YandexSearchResults as YandexSearchResultsType, NavigationEntry, YandexHeaderData } from "../../lib/types";
+  import YandexNotConnected from "./yandex/YandexNotConnected.svelte";
+  import YandexSearchBar from "./yandex/YandexSearchBar.svelte";
+  import type { YandexTrack, YandexAlbum, YandexArtist, YandexPlaylist, YandexSearchResults as YandexSearchResultsType, YandexHeaderData } from "../../lib/types/yandex";
 
   const tracksStore = writable<YandexTrack[]>([]);
   const albumsStore = writable<YandexAlbum[]>([]);
@@ -53,7 +57,7 @@
 
   /** Surface a load/search failure as a toast, distinguishing expired tokens. */
   function reportError(label: string, e: unknown, fallbackMsg: string) {
-    console.error(`[YandexView] ${label}:`, e);
+    logger.error(`[YandexView] ${label}:`, e);
     if (isYandexAuthError(e)) {
       // Flip auth state so the view falls back to the "Not Connected" screen
       // instead of looping failing requests with no recovery path.
@@ -100,7 +104,7 @@
       const active = stack[stack.length - 1];
       if (active) {
         active.data = { ...active.data, ...cached.headerData };
-        navigationStack.set(stack);
+        setNavigationStack(stack);
       }
     }
     return true;
@@ -123,13 +127,6 @@
       navigateTo("yandex_search", { query: term });
     }
   });
-
-  function getModeFromStack(view: NavigationEntry | undefined) {
-    if (!view || view.view === "root") return "dashboard";
-    if (view.view.startsWith("yandex_"))
-      return view.view.replace("yandex_", "");
-    return "dashboard";
-  }
 
   async function handleViewChange(mode: string, data: Record<string, unknown> | null) {
     // Save current view to cache before switching
@@ -227,12 +224,12 @@
 
   async function syncLikes() {
     try {
-      const res = (await YandexApi.getFavoritesIds()) as { ids?: (string | number)[] } | null;
+      const res = await YandexApi.getFavoritesIds();
       if (res?.ids) {
         yandexFavorites.set(new Set(res.ids.map(String)));
       }
     } catch (e) {
-      console.error("Sync likes failed", e);
+      logger.error("Sync likes failed", e);
     }
   }
 
@@ -248,9 +245,9 @@
         YandexApi.getStationsDashboard(),
       ]);
 
-      const userPls = userPlsR.status === "fulfilled" ? (userPlsR.value as YandexPlaylist[] | null) : null;
-      const landing = landingR.status === "fulfilled" ? (landingR.value as { personal?: YandexPlaylist[] } | null) : null;
-      const moodData = moodR.status === "fulfilled" ? (moodR.value as { stations?: YandexPlaylist[] } | null) : null;
+      const userPls = userPlsR.status === "fulfilled" ? userPlsR.value : null;
+      const landing = landingR.status === "fulfilled" ? landingR.value : null;
+      const moodData = moodR.status === "fulfilled" ? moodR.value : null;
 
       const myVibe: YandexPlaylist = {
         uid: "my_vibe",
@@ -345,12 +342,7 @@
     isLoading = true;
     canLoadMore = false;
     try {
-      const res = (await YandexApi.getArtistDetails(String(data.id))) as {
-        artist?: { name?: string; description?: string };
-        cover?: string;
-        tracks?: YandexTrack[];
-        albums?: YandexAlbum[];
-      } | null;
+      const res = await YandexApi.getArtistDetails(String(data.id));
 
       const headerData = {
         name: res?.artist?.name ?? "",
@@ -363,7 +355,7 @@
       const active = stack[stack.length - 1];
       if (active?.view === "yandex_artist_details") {
         active.data = { ...active.data, ...headerData };
-        navigationStack.set(stack);
+        setNavigationStack(stack);
       }
 
       tracksStore.set(res?.tracks ?? []);
@@ -387,12 +379,7 @@
     isLoading = true;
     canLoadMore = false;
     try {
-      const res = (await YandexApi.getAlbumDetails(String(data.id))) as {
-        title?: string;
-        artist?: string;
-        cover?: string;
-        tracks?: YandexTrack[];
-      } | null;
+      const res = await YandexApi.getAlbumDetails(String(data.id));
 
       const headerData = {
         name: res?.title ?? "",
@@ -405,7 +392,7 @@
       const active = stack[stack.length - 1];
       if (active?.view === "yandex_album_details") {
         active.data = { ...active.data, ...headerData };
-        navigationStack.set(stack);
+        setNavigationStack(stack);
       }
       tracksStore.set(res?.tracks ?? []);
 
@@ -435,7 +422,7 @@
       canLoadMore = false;
       return 0;
     }
-    const res = (await YandexApi.getPlaylistTracks(uid, kind, offset)) as { tracks?: YandexTrack[] } | null;
+    const res = await YandexApi.getPlaylistTracks(uid, kind, offset);
     const tracks = res?.tracks;
     if (tracks) {
       if (offset === 0) tracksStore.set(tracks);
@@ -485,7 +472,7 @@
           const active = stack[stack.length - 1];
           if (active) {
             active.data = { ...active.data, query: val };
-            navigationStack.set(stack);
+            setNavigationStack(stack);
           }
           performSearch();
         }
@@ -500,7 +487,7 @@
     isLoading = true;
     searchResults = { tracks: [], albums: [], artists: [] };
     try {
-      const res = (await YandexApi.search(q)) as Partial<YandexSearchResultsType> | null;
+      const res = await YandexApi.search(q);
       if (seq !== searchSeq) return; // superseded by a newer search — drop stale result
       const normalized: YandexSearchResultsType = {
         tracks: res?.tracks ?? [],
@@ -546,14 +533,14 @@
     showToast(MSG.startingContext(contextName), "info");
 
     try {
-      const res = (await YandexApi.playPlaylist(raw, contextName, source)) as { status?: string };
+      const res = await YandexApi.playPlaylist(raw, contextName, source);
       if (res.status === "ok") {
         showToast(MSG.PLAY_PLAYING, "success");
       } else {
         showToast(MSG.PLAY_ERROR_STARTING, "error");
       }
     } catch (e) {
-      console.error(e);
+      logger.error(e);
       showToast(MSG.PLAY_NETWORK_ERROR, "error");
     }
   }
@@ -563,12 +550,12 @@
     if (!raw || raw.length === 0) return;
     showToast(MSG.addingTracks(raw.length), "info");
     try {
-      const res = (await YandexApi.addTracksToQueue(raw)) as { status?: string };
+      const res = await YandexApi.addTracksToQueue(raw);
       if (res.status === "ok") {
         showToast(MSG.PLAY_ADDED_TO_QUEUE, "success");
       }
     } catch (e) {
-      console.error(e);
+      logger.error(e);
       showToast(MSG.PLAY_FAILED_TO_ADD, "error");
     }
   }
@@ -589,34 +576,17 @@
 
 <div class="view-container scrollable relative-parent">
   {#if !isTokenSet}
-    <div class="token-alert content-padded">
-      <h3>Yandex Music Not Connected</h3>
-      <p>Please go to Settings and connect your account.</p>
-    </div>
+    <YandexNotConnected />
   {:else}
     {#if viewMode === "dashboard" || viewMode === "search"}
-      <div class="content-padded no-bottom-pad">
-        <div class="search-input-container">
-          <span class="search-icon">{@html ICONS.SEARCH}</span>
-          <input
-            type="text"
-            placeholder="Search Yandex Music..."
-            bind:value={searchQuery}
-            oninput={handleSearchInput}
-          />
-          {#if searchQuery}
-            <button
-              class="clear-btn"
-              onclick={() => {
-                searchQuery = "";
-                if (viewMode === "search") window.history.back();
-              }}
-            >
-              {@html ICONS.CLOSE}
-            </button>
-          {/if}
-        </div>
-      </div>
+      <YandexSearchBar
+        bind:value={searchQuery}
+        oninput={handleSearchInput}
+        onClear={() => {
+          searchQuery = "";
+          if (viewMode === "search") window.history.back();
+        }}
+      />
     {/if}
 
     {#if viewMode === "dashboard"}
@@ -632,7 +602,7 @@
 
     {#if ["playlist", "search", "artist_details", "album_details"].includes(viewMode)}
       <BaseList
-        itemsStore={tracksStore as unknown as import("svelte/store").Writable<Track[]>}
+        itemsStore={tracksStore}
         {isLoading}
         isEditMode={false}
         emptyText="No tracks found"
@@ -663,8 +633,10 @@
         {/snippet}
 
         {#snippet row({ item, index })}
+          <!-- Tag list items with the neutral source id so TrackRow/LikeButton
+               resolve the owning source from the registry (no isYandex flag). -->
           <TrackRow
-            track={item}
+            track={yandexTrackToTrack(item, yandexSource.id)}
             {index}
             onplay={() => YandexApi.playTrack(String(item.id))}
           />
@@ -685,48 +657,6 @@
 
   .relative-parent {
     position: relative;
-  }
-  .token-alert {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    height: 50vh;
-    text-align: center;
-    color: var(--c-text-secondary);
-  }
-  .search-input-container {
-    display: flex;
-    align-items: center;
-    background: var(--c-surface-input);
-    border: 1px solid var(--c-border);
-    border-radius: 8px;
-    padding: 8px 12px;
-    margin-bottom: 10px;
-    gap: 10px;
-  }
-  input {
-    flex: 1;
-    background: transparent;
-    border: none;
-    color: var(--c-text-primary);
-    outline: none;
-    font-size: 15px;
-  }
-  .search-icon,
-  .clear-btn {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    color: var(--c-text-muted);
-    width: 20px;
-    height: 20px;
-  }
-  .clear-btn {
-    background: none;
-    border: none;
-    padding: 0;
-    cursor: pointer;
   }
 
   .loading-footer {

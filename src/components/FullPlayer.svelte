@@ -2,7 +2,7 @@
 <!-- Copyright (c) 2025 dmitrymake -->
 <script lang="ts">
   import { fly } from "svelte/transition";
-  import * as MPD from "../lib/mpd";
+  import { seek, nav, togglePlay } from "../lib/playerActions";
   import { ICONS } from "../lib/icons";
   import {
     currentSong,
@@ -11,7 +11,8 @@
     stations,
     getTrackCoverUrl,
   } from "../lib/store.js";
-  import { formatTime, getPct, isRadioStream, getQualityLabel } from "../lib/playerHelpers";
+  import { formatTime, isRadioStream, getQualityLabel } from "../lib/playerHelpers";
+  import { createSeekController } from "../lib/seekDrag.svelte";
   import ImageLoader from "./ImageLoader.svelte";
   import VolumeSlider from "./VolumeSlider.svelte";
   import PlayModeButton from "./PlayModeButton.svelte";
@@ -54,35 +55,26 @@
 
   let artSrc = $derived(getTrackCoverUrl($currentSong, $stations, $currentSong.stationName));
 
-  let isDraggingBar = $state(false);
-  let dragProgress = $state(0);
   let progressBar: HTMLElement;
 
   let duration = $derived($status.duration || 1);
   let elapsed = $derived($status.elapsed || 0);
   let isRadio = $derived(isRadioStream($currentSong));
   let isPlaying = $derived($status.state === "play");
+
+  const seekCtl = createSeekController({
+    getElement: () => progressBar,
+    getDuration: () => duration,
+    getElapsed: () => elapsed,
+    getIsRadio: () => isRadio,
+    seekTo: seek,
+  });
+
+  let isDraggingBar = $derived(seekCtl.isDragging);
   let isSmooth = $derived(isPlaying && !isDraggingBar && !isRadio);
-  let progressPct = $derived(isRadio ? 0 : isDraggingBar ? dragProgress * 100 : (elapsed / duration) * 100);
+  let progressPct = $derived(seekCtl.fraction * 100);
   let qualityLabel = $derived(getQualityLabel($status));
   let artworkRadius = $derived(isDocked ? "8px" : "var(--radius-xl)");
-
-  function handleSeekStart(e: MouseEvent | TouchEvent) {
-    if (isRadio) return;
-    isDraggingBar = true;
-    dragProgress = getPct(e, progressBar);
-  }
-
-  function handleSeekMove(e: MouseEvent | TouchEvent) {
-    if (isDraggingBar) dragProgress = getPct(e, progressBar);
-  }
-
-  function handleSeekEnd() {
-    if (isDraggingBar && !isRadio) {
-      MPD.seek(dragProgress * duration);
-    }
-    isDraggingBar = false;
-  }
 </script>
 
 <div
@@ -147,12 +139,12 @@
           class="bar-hit-area"
           class:is-docked-bar={isDocked}
           bind:this={progressBar}
-          onmousedown={handleSeekStart}
-          ontouchstart={handleSeekStart}
-          onmousemove={isDraggingBar ? handleSeekMove : null}
-          ontouchmove={isDraggingBar ? handleSeekMove : null}
-          onmouseup={handleSeekEnd}
-          ontouchend={handleSeekEnd}
+          onmousedown={seekCtl.onMouseDown}
+          ontouchstart={seekCtl.onTouchStart}
+          onmousemove={isDraggingBar ? seekCtl.onMouseMove : null}
+          ontouchmove={isDraggingBar ? seekCtl.onTouchMove : null}
+          onmouseup={seekCtl.onMouseUp}
+          ontouchend={seekCtl.onTouchEnd}
           role="slider"
           aria-label="Seek"
           aria-valuemin={0}
@@ -170,7 +162,7 @@
           </div>
         </div>
         <div class="time-row">
-          <span>{isDraggingBar ? formatTime(dragProgress * duration) : formatTime(elapsed)}</span>
+          <span>{formatTime(seekCtl.displaySeconds)}</span>
           <span>{isRadio ? "LIVE" : formatTime(duration)}</span>
         </div>
       </div>
@@ -178,15 +170,15 @@
       <div class="buttons-row">
         <LikeButton track={$currentSong} />
 
-        <button class="btn-icon side-btn" onclick={() => MPD.nav("previous")}>
+        <button class="btn-icon side-btn" onclick={() => nav("previous")}>
           {@html ICONS.PREVIOUS}
         </button>
 
-        <button class="play-btn-large flex-center" onclick={MPD.togglePlay}>
+        <button class="play-btn-large flex-center" onclick={togglePlay}>
           {@html $status.state === "play" ? ICONS.PAUSE : ICONS.PLAY}
         </button>
 
-        <button class="btn-icon side-btn" onclick={() => MPD.nav("next")}>
+        <button class="btn-icon side-btn" onclick={() => nav("next")}>
           {@html ICONS.NEXT}
         </button>
 

@@ -3,9 +3,10 @@
 <script lang="ts">
   import { fade, scale } from "svelte/transition";
   import { writable } from "svelte/store";
-  import type { Writable } from "svelte/store";
   import { sortItems } from "../../lib/librarySort";
   import { loadLibraryView } from "../../lib/libraryData";
+  import { libraryItemToTrack } from "../../lib/trackMapper";
+  import { libraryRevision } from "../../lib/db";
   import { logger } from "../../lib/logger";
   import {
     navigationStack,
@@ -16,7 +17,7 @@
   } from "../../lib/store";
   import TrackRow from "../TrackRow.svelte";
   import Skeleton from "../Skeleton.svelte";
-  import * as MPD from "../../lib/mpd";
+  import { playAllTracks, addAllToQueue, playTrackOptimistic } from "../../lib/playerActions";
   import { ICONS } from "../../lib/icons";
   import ImageLoader from "../ImageLoader.svelte";
   import BaseList from "./BaseList.svelte";
@@ -80,6 +81,10 @@
   });
 
   $effect(() => {
+    // Re-read on a libraryRevision bump too, not just on navigation, so a resync
+    // that completes while this view is already mounted (e.g. after the v4
+    // migration cleared the store) repopulates it instead of leaving it blank.
+    void $libraryRevision;
     loadContent(activeCategory, currentView);
   });
 
@@ -122,7 +127,7 @@
       if (ctrl.signal.aborted) return;
 
       itemsStore.set(items);
-      if (header.headerItem) headerItem = header.headerItem as unknown as Track;
+      if (header.headerItem) headerItem = libraryItemToTrack(header.headerItem);
       trackCount = header.trackCount;
       headerTotalDuration = header.totalDuration;
       headerQuality = header.quality;
@@ -165,7 +170,7 @@
         type: "confirm",
         onConfirm: () => {
           pressedPlayAll = true;
-          MPD.playAllTracks(items as unknown as Track[]);
+          playAllTracks(items.map(libraryItemToTrack));
         },
       });
     }
@@ -175,7 +180,7 @@
     const items = $itemsStore;
     if (items.length > 0) {
       pressedAddToQueue = true;
-      MPD.addAllToQueue(items as unknown as Track[]);
+      addAllToQueue(items.map(libraryItemToTrack));
 
       setTimeout(() => {
         pressedAddToQueue = false;
@@ -190,7 +195,7 @@
 >
   {#if currentView?.view === "tracks_by_album"}
     <BaseList
-      itemsStore={itemsStore as unknown as Writable<Track[]>}
+      itemsStore={itemsStore}
       {isLoading}
       isEditMode={false}
       emptyText="No tracks found"
@@ -275,11 +280,12 @@
       {/snippet}
 
       {#snippet row({ item, index })}
+        {@const track = libraryItemToTrack(item)}
         <TrackRow
-          track={item}
+          {track}
           {index}
           isEditable={false}
-          onplay={() => MPD.playTrackOptimistic(item)}
+          onplay={() => playTrackOptimistic(track)}
         />
       {/snippet}
     </BaseList>
@@ -368,7 +374,7 @@
               >
                 <div class="card-img-container">
                   <ImageLoader
-                    src={getTrackThumbUrl(item as unknown as Track, "md")}
+                    src={getTrackThumbUrl(item, "md")}
                     alt={item.displayName}
                     radius="8px"
                   >

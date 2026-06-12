@@ -11,10 +11,11 @@ import {
   saveScrollPosition,
   getScrollPosition,
   scrollPositions,
+  setNavigationStack,
 } from "../../stores/library.js";
 
 beforeEach(() => {
-  navigationStack.set([{ view: "root" }]);
+  setNavigationStack([{ view: "root" }]);
   scrollPositions.set({});
 });
 

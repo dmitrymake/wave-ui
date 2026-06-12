@@ -16,7 +16,8 @@ import {
 } from "../store";
 import { db } from "../db";
 import { resolveSource } from "../sources/trackSource";
-import { isRemoteUrl, findStationByStream } from "../utils";
+import { isRemoteUrl } from "../utils";
+import { findStationByStream } from "../radio";
 import { MSG } from "../messages";
 import { logger } from "../logger";
 import type { Track, MpdStatus, CurrentSong, Station } from "../types";
@@ -112,7 +113,8 @@ async function syncQueue(newVersion: number): Promise<void> {
     const tracks: Track[] = rawTracks.map((t) => {
       const fileUrl: string = t.file || "";
       const source = resolveSource(fileUrl);
-      const isYandex: boolean = source?.id === "yandex";
+      // Neutral source tag: the owning source's id, or undefined for plain local files.
+      const service: string | undefined = source?.id;
 
       // The owning source gets first chance to enrich from its own cache.
       if (source?.enrichQueueTrack) {
@@ -131,14 +133,14 @@ async function syncQueue(newVersion: number): Promise<void> {
           title: t.title || cached.title,
           artist: t.artist || cached.artist,
           album: t.album || cached.album,
-          isYandex: isYandex,
+          service,
           _uid: String(t.id ?? `${t.pos}:${t.file}`),
         };
       }
 
       return {
         ...t,
-        isYandex: isYandex,
+        service,
         _uid: String(t.id ?? `${t.pos}:${t.file}`),
       };
     });
@@ -158,9 +160,12 @@ function resolveStationName(
   serverSong: CurrentSong,
   oldSong: CurrentSong,
   allStations: Station[],
+  streamsHaveElapsed: boolean,
 ): void {
   const isRadio = !!isRemoteUrl(serverSong.file);
-  if (!isRadio || serverSong.isYandex) return;
+  // A streaming-source track (real duration) is never an internet-radio station,
+  // even though its file is a remote url, so skip station-name resolution for it.
+  if (!isRadio || streamsHaveElapsed) return;
 
   const found = findStationByStream(allStations, serverSong.file, serverSong.title);
   if (found) {
@@ -175,7 +180,12 @@ function reconcileStatus(
   serverSong: CurrentSong,
   oldSong: CurrentSong,
   isRadio: boolean,
+  streamsHaveElapsed: boolean,
 ): void {
+  // Tick the elapsed timer when the track has a real duration: either a normal
+  // (non-radio) track, or a streaming-source track whose file looks like a remote
+  // stream but still exposes elapsed/duration (e.g. Yandex).
+  const hasElapsed = !isRadio || streamsHaveElapsed;
   status.update((localStatus) => {
     const isPlaying = serverStatus.state === "play";
     const now = performance.now();
@@ -189,8 +199,8 @@ function reconcileStatus(
       isInitialSync = false;
       forceHardSync = false;
       timeDriftSpeed = 1.0;
-      if (isRadio && !serverSong.isYandex) serverStatus.elapsed = 0;
-      manageTicker(isPlaying && (!isRadio || !!serverSong.isYandex));
+      if (isRadio && !streamsHaveElapsed) serverStatus.elapsed = 0;
+      manageTicker(isPlaying && hasElapsed);
       return serverStatus;
     }
 
@@ -199,11 +209,11 @@ function reconcileStatus(
     if (forceHardSync) {
       forceHardSync = false;
       timeDriftSpeed = 1.0;
-      manageTicker(isPlaying && (!isRadio || !!serverSong.isYandex));
+      manageTicker(isPlaying && hasElapsed);
       return serverStatus;
     }
 
-    if (isPlaying && (!isRadio || !!serverSong.isYandex)) {
+    if (isPlaying && hasElapsed) {
       const diff = serverStatus.elapsed - localStatus.elapsed;
       if (Math.abs(diff) > 2.0) {
         timeDriftSpeed = 1.0;
@@ -225,12 +235,17 @@ function reconcileStatus(
 function updateStores(serverStatus: MpdStatus, serverSong: CurrentSong): void {
   const oldSong = get(currentSong);
 
-  resolveSource(serverSong.file)?.enrichCurrentSong?.(serverSong, serverStatus);
-  resolveStationName(serverSong, oldSong, get(stations));
+  const source = resolveSource(serverSong.file);
+  source?.enrichCurrentSong?.(serverSong, serverStatus);
+  // Capability of the owning source: keep the elapsed timer running for streams
+  // that have a real duration (vs internet radio, which has none).
+  const streamsHaveElapsed = !!source?.streamsHaveElapsed;
+
+  resolveStationName(serverSong, oldSong, get(stations), streamsHaveElapsed);
   currentSong.set(serverSong);
 
   const isRadio = !!isRemoteUrl(serverSong.file);
-  reconcileStatus(serverStatus, serverSong, oldSong, isRadio);
+  reconcileStatus(serverStatus, serverSong, oldSong, isRadio, streamsHaveElapsed);
 }
 
 function manageTicker(shouldRun: boolean): void {
@@ -309,10 +324,22 @@ function applyOptimisticTrack(track: Track): void {
     album: track.album,
     file: track.file,
     image: track.image,
-    isYandex: track.isYandex,
+    service: track.service,
     id: track.id,
     stationName: track.stationName,
   }));
+}
+
+// Roll back an optimistic transport mutation when its MPD command fails (typically
+// a dead socket). Re-arming the status poller's ignore window would keep the bogus
+// optimistic value on screen, so clear it and force a hard re-sync; the next poll —
+// or, if the socket is down, the eventual reconnect — restores the true state. The
+// error is logged rather than swallowed so a silent no-op never masquerades as success.
+function rollbackOptimistic(context: string, e: unknown): void {
+  logger.error(`[Player] ${context} failed`, e);
+  ignoreUpdatesUntil = 0;
+  forceHardSync = true;
+  if (mpdClient.isConnected) refreshStatus();
 }
 
 export const PlayerActions = {
@@ -326,7 +353,12 @@ export const PlayerActions = {
       else stopTicker();
       return { ...curr, state: newState };
     });
-    await mpdClient.send(isPlaying ? "pause 1" : "play");
+    try {
+      await mpdClient.send(isPlaying ? "pause 1" : "play");
+    } catch (e) {
+      rollbackOptimistic("togglePlay", e);
+      return;
+    }
     setTimeout(refreshStatus, 900);
   },
 
@@ -350,7 +382,12 @@ export const PlayerActions = {
     ignoreUpdatesUntil = performance.now() + 600;
     status.update((s) => ({ ...s, elapsed: 0 }));
     stopTicker();
-    await mpdClient.send("next");
+    try {
+      await mpdClient.send("next");
+    } catch (e) {
+      rollbackOptimistic("next", e);
+      return;
+    }
     refreshStatus();
   },
 
@@ -369,7 +406,12 @@ export const PlayerActions = {
     ignoreUpdatesUntil = performance.now() + 600;
     status.update((s) => ({ ...s, elapsed: 0 }));
     stopTicker();
-    await mpdClient.send("previous");
+    try {
+      await mpdClient.send("previous");
+    } catch (e) {
+      rollbackOptimistic("previous", e);
+      return;
+    }
     refreshStatus();
   },
 
@@ -377,7 +419,11 @@ export const PlayerActions = {
     // MPD setvol expects an integer 0-100 and ACKs out-of-range/fractional values.
     const v: number = Math.max(0, Math.min(100, Math.round(val)));
     status.update((s) => ({ ...s, volume: v }));
-    await mpdClient.send(`setvol ${v}`);
+    try {
+      await mpdClient.send(`setvol ${v}`);
+    } catch (e) {
+      rollbackOptimistic("setVolume", e);
+    }
   },
 
   async seek(seconds: number): Promise<void> {
@@ -386,7 +432,12 @@ export const PlayerActions = {
     const duration: number = get(status).duration;
     const t: number = Math.max(0, Math.min(seconds, duration || seconds));
     status.update((s) => ({ ...s, elapsed: t }));
-    await mpdClient.send(`seekcur ${t}`);
+    try {
+      await mpdClient.send(`seekcur ${t}`);
+    } catch (e) {
+      rollbackOptimistic("seek", e);
+      return;
+    }
     setTimeout(refreshStatus, 600);
   },
 
@@ -394,14 +445,22 @@ export const PlayerActions = {
     const s: MpdStatus = get(status);
     const newVal: boolean = !s.random;
     status.update((curr) => ({ ...curr, random: newVal }));
-    await mpdClient.send(`random ${newVal ? 1 : 0}`);
+    try {
+      await mpdClient.send(`random ${newVal ? 1 : 0}`);
+    } catch (e) {
+      rollbackOptimistic("toggleRandom", e);
+    }
   },
 
   async toggleRepeat(): Promise<void> {
     const s: MpdStatus = get(status);
     const newVal: boolean = !s.repeat;
     status.update((curr) => ({ ...curr, repeat: newVal }));
-    await mpdClient.send(`repeat ${newVal ? 1 : 0}`);
+    try {
+      await mpdClient.send(`repeat ${newVal ? 1 : 0}`);
+    } catch (e) {
+      rollbackOptimistic("toggleRepeat", e);
+    }
   },
 
   async playUri(uri: string, meta: Partial<Track> = {}): Promise<void> {
@@ -547,6 +606,68 @@ export const PlayerActions = {
     }, 2000);
   },
 
+  async playQueuePosition(pos: number): Promise<void> {
+    try {
+      await mpdClient.send(`play ${pos}`);
+    } catch (e) {
+      logger.error("[Player] playQueuePosition failed", e);
+      showToast(MSG.PLAY_FAILED_TO_PLAY, "error");
+    }
+  },
+
+  async clearQueue(): Promise<void> {
+    // Lock the queue so the 1s status poller's syncQueue cannot race the
+    // optimistic wipe and briefly repopulate the view from a stale playlistinfo
+    // snapshot, matching removeFromQueue/moveTrack.
+    isQueueLocked.set(true);
+    if (queueUnlockTimer) clearTimeout(queueUnlockTimer);
+
+    // Snapshot before the optimistic wipe. If MPD rejects `clear` we restore the
+    // queue, now-playing slot, and status so the view never lies about an empty
+    // queue while the server still holds tracks.
+    const prevQueue: Track[] = get(queue);
+    const prevSong: CurrentSong = get(currentSong);
+    const prevStatus: MpdStatus = get(status);
+
+    // Optimistically empty the local queue and reset the now-playing slot so the
+    // view updates instantly; the MPD `clear` command then reconciles the server.
+    queue.set([]);
+    currentSong.set({
+      title: "Not Playing",
+      artist: "",
+      album: "",
+      file: "",
+      genre: "",
+      time: 0,
+      track: "",
+      stationName: null,
+      id: undefined,
+      pos: null,
+    });
+    status.update((s) => ({
+      ...s,
+      state: "stop",
+      song: -1,
+      songId: -1,
+      elapsed: 0,
+    }));
+
+    try {
+      await mpdClient.send("clear");
+    } catch (e) {
+      logger.error("Clear queue failed", e);
+      queue.set(prevQueue);
+      currentSong.set(prevSong);
+      status.set(prevStatus);
+      showToast(MSG.PLAY_FAILED_REMOVE, "error");
+      isQueueLocked.set(false);
+      return;
+    }
+    queueUnlockTimer = setTimeout(() => {
+      isQueueLocked.set(false);
+    }, 1000);
+  },
+
   async playAllTracks(tracks: Track[]): Promise<void> {
     if (!tracks || tracks.length === 0) return;
     try {
@@ -608,5 +729,23 @@ export const PlayerActions = {
     } else {
       await write(false);
     }
+  },
+
+  async getQueueLength(): Promise<number> {
+    const text: string = await mpdClient.send("status");
+    return parseInt(MpdParser.parseKeyValue(text).playlistlength);
+  },
+
+  async getQueueItemIdAt(pos: number): Promise<number> {
+    const text: string = await mpdClient.send(`playlistinfo ${pos}`);
+    return parseInt(MpdParser.parseKeyValue(text).id);
+  },
+
+  async moveById(songId: number, toPos: number): Promise<void> {
+    await mpdClient.send(`moveid ${songId} ${toPos}`);
+  },
+
+  async playById(songId: number): Promise<void> {
+    await mpdClient.send(`playid ${songId}`);
   },
 };

@@ -16,10 +16,6 @@ export function connect(): void {
   LibraryActions.loadFavorites();
 }
 
-export function runMpdRequest(cmd: string): Promise<string> {
-  return mpdClient.send(cmd);
-}
-
 export const {
   togglePlay,
   toggleRandom,

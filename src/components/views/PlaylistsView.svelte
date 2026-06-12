@@ -2,7 +2,6 @@
 <!-- Copyright (c) 2025 dmitrymake -->
 <script lang="ts">
   import { onMount, tick } from "svelte";
-  import { escapeArg } from "../../lib/mpd/escape";
   import {
     playlists,
     isLoadingPlaylists,
@@ -20,9 +19,20 @@
     currentTheme,
   } from "../../lib/store";
   import Skeleton from "../Skeleton.svelte";
-  import * as MPD from "../../lib/mpd";
+  import {
+    playTrackOptimistic,
+    playAllTracks,
+    addAllToQueue,
+    openPlaylistDetails,
+    loadPlaylists,
+    createEmptyPlaylist,
+    addPlaylistToQueue,
+    removeFromPlaylist,
+    movePlaylistTrack,
+  } from "../../lib/playerActions";
   import { searchPlaylists } from "../../lib/playlistSearch";
-  import { LibraryActions } from "../../lib/mpd/library";
+  import { getPlaylistCoverStyle } from "../../lib/playlistColor";
+  import { formatTotalDuration } from "../../lib/utils";
   import { ICONS } from "../../lib/icons";
   import TrackRow from "../TrackRow.svelte";
   import BaseList from "./BaseList.svelte";
@@ -112,7 +122,7 @@
   }
 
   function playTrack(track: Track) {
-    if (!isEditMode) MPD.playTrackOptimistic(track);
+    if (!isEditMode) playTrackOptimistic(track);
   }
 
   function playFoundTracks(tracks: Track[], playlistName: string) {
@@ -122,14 +132,14 @@
       confirmLabel: "Play",
       type: "confirm",
       onConfirm: () => {
-        MPD.playAllTracks(tracks);
+        playAllTracks(tracks);
       },
     });
   }
 
   function queueFoundTracks(tracks: Track[]) {
     if (!tracks || tracks.length === 0) return;
-    MPD.addAllToQueue(tracks);
+    addAllToQueue(tracks);
   }
 
   $effect(() => {
@@ -149,14 +159,14 @@
     if (isDetailsView && currentView.data) {
       const data = currentView.data as { name: string };
       if ($activePlaylistName !== data.name) {
-        MPD.openPlaylistDetails(data.name);
+        openPlaylistDetails(data.name);
       }
     }
   });
 
   onMount(() => {
     if (!isDetailsView && $playlists.length === 0) {
-      MPD.loadPlaylists();
+      loadPlaylists();
     }
   });
 
@@ -165,13 +175,7 @@
       (acc, t) => acc + (parseFloat(String(t.time)) || 0),
       0,
     );
-    if (totalSec > 0) {
-      const h = Math.floor(totalSec / 3600);
-      const m = Math.floor((totalSec % 3600) / 60);
-      headerTotalDuration = h > 0 ? `${h} hr ${m} min` : `${m} min`;
-    } else {
-      headerTotalDuration = "";
-    }
+    headerTotalDuration = formatTotalDuration(totalSec);
 
     const formats = new Set();
     tracks.forEach((t) => {
@@ -197,7 +201,7 @@
       placeholder: "Playlist Name",
       confirmLabel: "Create",
       onConfirm: (name) => {
-        if (name) LibraryActions.createEmptyPlaylist(name);
+        if (name) createEmptyPlaylist(name);
       },
     });
   }
@@ -219,7 +223,7 @@
       onConfirm: () => {
         pressedPlayAll = true;
         if ($activePlaylistTracks && $activePlaylistTracks.length > 0) {
-          MPD.playAllTracks($activePlaylistTracks);
+          playAllTracks($activePlaylistTracks);
         } else {
           pressedPlayAll = false;
         }
@@ -230,8 +234,7 @@
   function handleAddToQueue() {
     if ($activePlaylistTracks.length > 0) {
       const data = (currentView.data ?? {}) as { name: string };
-      const safeName = escapeArg(data.name);
-      MPD.runMpdRequest(`load "${safeName}"`);
+      addPlaylistToQueue(data.name);
       pressedAddToQueue = true;
       setTimeout(() => {
         pressedAddToQueue = false;
@@ -253,7 +256,7 @@
     activePlaylistTracks.set(next);
     calculateMeta(next);
 
-    const ok = await MPD.removeFromPlaylist(playlistName, index);
+    const ok = await removeFromPlaylist(playlistName, index);
     if (!ok) {
       // Restore the optimistically-removed track on backend failure.
       const restored = [...next.slice(0, index), removed, ...next.slice(index)];
@@ -263,31 +266,17 @@
   }
 
   function handleMoveTrack(fromIndex: number, toIndex: number) {
-    MPD.movePlaylistTrack((currentView.data as { name: string }).name, fromIndex, toIndex);
+    movePlaylistTrack((currentView.data as { name: string }).name, fromIndex, toIndex);
   }
 
   let isFavPlaylist = $derived(currentView?.data?.name === "Favorites");
 
-  function resolveHeaderStyle(data: Playlist & { colorVar?: string; color?: string } | null) {
+  // Reads only the optional name/colour fields off a playlist-card descriptor, so
+  // the loosely-typed NavigationEntry.data assigns with a single narrowing cast
+  // instead of an `as unknown as Playlist` double cast.
+  function resolveHeaderStyle(data: { name?: string; colorVar?: string; color?: string } | null) {
     if (!data) return "";
-
-    if (data.name === "Favorites") {
-      if ($currentTheme === "gruvbox") {
-        const c = "var(--c-heart)";
-        return `background: linear-gradient(135deg, ${c}, transparent); background-color: ${c};`;
-      }
-      return `background: linear-gradient(135deg, hsl(348, 95%, 58%), hsl(348, 90%, 40%));`;
-    }
-
-    const defaultColor = "var(--c-bg-card)";
-
-    if ($currentTheme === "gruvbox") {
-      const c = data.colorVar || data.color || defaultColor;
-      return `background: linear-gradient(135deg, ${c}, transparent); background-color: ${c};`;
-    }
-
-    const c = data.color || data.colorVar || defaultColor;
-    return `background: ${c}`;
+    return getPlaylistCoverStyle(data, $currentTheme);
   }
 </script>
 
@@ -333,7 +322,7 @@
       {#snippet header()}
         <div class="content-padded">
           <div class="view-header">
-            <div class="header-art" style={resolveHeaderStyle((currentView.data as unknown as Playlist & { colorVar?: string; color?: string }) ?? null)}>
+            <div class="header-art" style={resolveHeaderStyle((currentView.data as { name?: string; colorVar?: string; color?: string }) ?? null)}>
               <div class="header-icon-wrap">
                 {@html isFavPlaylist ? ICONS.HEART_FILLED : ICONS.PLAYLISTS}
               </div>

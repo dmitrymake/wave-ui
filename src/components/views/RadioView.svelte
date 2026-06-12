@@ -8,8 +8,8 @@
     status,
     isLoadingRadio,
   } from "../../lib/store";
-  import * as MPD from "../../lib/mpd";
-  import { getStationImageUrl } from "../../lib/utils";
+  import { playStation } from "../../lib/playerActions";
+  import { getStationImageUrl } from "../../lib/radio";
   import { ICONS } from "../../lib/icons";
   import ImageLoader from "../ImageLoader.svelte";
   import Skeleton from "../Skeleton.svelte";
@@ -74,8 +74,8 @@
             class:is-active={isActive}
             role="button"
             tabindex="0"
-            onclick={() => MPD.playStation(station)}
-            onkeydown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); MPD.playStation(station); }}}
+            onclick={() => playStation(station)}
+            onkeydown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); playStation(station); }}}
           >
             <div class="card-img-container">
               <ImageLoader src={imgUrl ?? ""} alt={station.name} radius="8px">

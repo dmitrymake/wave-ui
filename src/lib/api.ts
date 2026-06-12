@@ -2,16 +2,8 @@
 // Copyright (c) 2025 dmitrymake
 import { get } from "svelte/store";
 import { API_ENDPOINTS, PLAYER_CONFIG } from "./constants";
-import {
-  isSyncingLibrary,
-  showToast,
-  isLoadingRadio,
-  stations,
-  yandexAuthStatus,
-  yandexFavorites,
-} from "./store";
+import { isSyncingLibrary, showToast, isLoadingRadio, stations } from "./store";
 import SyncWorker from "./workers/sync.worker.js?worker";
-import { YandexApi } from "./yandex";
 import { MSG } from "./messages";
 import { logger } from "./logger";
 import { isRemoteUrl } from "./utils";
@@ -168,61 +160,5 @@ export const ApiActions = {
       logger.error("Failed to get server time", e);
     }
     return null;
-  },
-
-  async checkYandexAuth(): Promise<boolean> {
-    try {
-      const res = await YandexApi.request("status") as { authorized: boolean };
-      yandexAuthStatus.set(res.authorized);
-      return res.authorized;
-    } catch (e) {
-      logger.error("Yandex Auth Check Failed", e);
-      yandexAuthStatus.set(false);
-      return false;
-    }
-  },
-
-  async saveYandexToken(token: string): Promise<boolean> {
-    try {
-      const res = await fetch(API_ENDPOINTS.YANDEX + "?action=save_token", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ token }),
-      });
-
-      const data = await res.json();
-
-      if (!res.ok) {
-        throw new Error(data.error || "Failed to save");
-      }
-
-      showToast(MSG.YANDEX_CONNECTED, "success");
-      yandexAuthStatus.set(true);
-      return true;
-    } catch (e) {
-      logger.error(e);
-      showToast(MSG.YANDEX_INVALID_TOKEN, "error");
-      yandexAuthStatus.set(false);
-      return false;
-    }
-  },
-
-  async getYandexDebugDump(): Promise<Record<string, unknown>> {
-    const res = await fetch(API_ENDPOINTS.YANDEX + "?action=debug_dump");
-    if (!res.ok) throw new Error("debug_dump request failed");
-    return await res.json();
-  },
-
-  async syncYandexFavorites(): Promise<void> {
-    if (!get(yandexAuthStatus)) return;
-    try {
-      const res = await YandexApi.getFavoritesIds() as { ids?: (string | number)[] } | null;
-      if (res && res.ids) {
-        yandexFavorites.set(new Set(res.ids.map(String)));
-        logger.log(`[API] Loaded ${res.ids.length} Yandex likes.`);
-      }
-    } catch (e) {
-      logger.warn("[API] Failed to sync Yandex likes", e);
-    }
   },
 };

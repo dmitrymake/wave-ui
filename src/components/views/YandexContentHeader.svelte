@@ -5,7 +5,7 @@
   import ImageLoader from "../ImageLoader.svelte";
   import Skeleton from "../Skeleton.svelte";
   import type { Writable } from "svelte/store";
-  import type { YandexAlbum, YandexArtist, YandexHeaderData } from "../../lib/types";
+  import type { YandexAlbum, YandexArtist, YandexHeaderData } from "../../lib/types/yandex";
 
   let { headerData = null, viewMode = "", isLoading = false, tracksCount = 0, albumsStore, onPlayAll, onAddAllToQueue, onPlayVibe, onOpenAlbum }: {
     headerData?: YandexHeaderData;

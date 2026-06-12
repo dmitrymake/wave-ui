@@ -1,6 +1,18 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2025 dmitrymake
 
+import type { NavigationEntry } from "./types/nav";
+
+/**
+ * Map a navigation stack entry to the Yandex view mode string. Pure: the root
+ * entry (or no entry) is the dashboard; `yandex_*` views map to their suffix.
+ */
+export function getModeFromStack(view: NavigationEntry | undefined): string {
+  if (!view || view.view === "root") return "dashboard";
+  if (view.view.startsWith("yandex_")) return view.view.replace("yandex_", "");
+  return "dashboard";
+}
+
 /**
  * Small Map-backed LRU cache for Yandex navigation views, keyed by mode + the
  * route data. Oldest entries are evicted once `maxSize` is exceeded. The cache

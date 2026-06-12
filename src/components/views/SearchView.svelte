@@ -6,7 +6,7 @@
   import { db } from "../../lib/db";
   import TrackRow from "../TrackRow.svelte";
   import ImageLoader from "../ImageLoader.svelte";
-  import * as MPD from "../../lib/mpd";
+  import { playTrackOptimistic } from "../../lib/playerActions";
   import { ICONS } from "../../lib/icons";
   import { navigateTo, getTrackThumbUrl, searchQuery } from "../../lib/store";
   import BaseList from "./BaseList.svelte";
@@ -99,7 +99,7 @@
   }
 
   function playTrack(track: Track) {
-    MPD.playTrackOptimistic(track);
+    playTrackOptimistic(track);
   }
 
   function goToAlbum(album: SearchAlbumResult) {
@@ -165,7 +165,7 @@
                 <div class="music-card" role="button" tabindex="0" onclick={() => goToAlbum(album)} onkeydown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); goToAlbum(album); }}}>
                   <div class="card-img-container">
                     <ImageLoader
-                      src={getTrackThumbUrl(album as unknown as Track, "md")}
+                      src={getTrackThumbUrl(album, "md")}
                       alt={album.name}
                       radius="8px"
                     >

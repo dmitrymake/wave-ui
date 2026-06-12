@@ -3,6 +3,7 @@
 <script lang="ts">
   import { ICONS } from "../../lib/icons";
   import { longpress } from "../../lib/actions";
+  import { getPlaylistCoverStyle } from "../../lib/playlistColor";
   import type { Playlist } from "../../lib/types";
 
   let { playlists = [], currentTheme = "", onOpenPlaylist, onContextMenu, onNewPlaylist }: {
@@ -14,19 +15,7 @@
   } = $props();
 
   function resolveCardStyle(playlist: Playlist) {
-    if (playlist.name === "Favorites") {
-      if (currentTheme === "gruvbox") {
-        const c = "var(--c-heart)";
-        return `background: linear-gradient(135deg, ${c}, transparent); background-color: ${c};`;
-      }
-      return `background: linear-gradient(135deg, hsl(348, 95%, 58%), hsl(348, 90%, 40%));`;
-    }
-
-    const c = playlist.colorVar || playlist.color || "var(--c-bg-card)";
-    if (currentTheme === "gruvbox") {
-      return `background: linear-gradient(135deg, ${c}, transparent); background-color: ${c};`;
-    }
-    return `background: ${c}`;
+    return getPlaylistCoverStyle(playlist, currentTheme, { defaultFallback: "colorVar" });
   }
 
   function handleContext(e: Event, playlist: Playlist) {

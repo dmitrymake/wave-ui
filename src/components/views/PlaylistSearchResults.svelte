@@ -3,6 +3,7 @@
 <script lang="ts">
   import { ICONS } from "../../lib/icons";
   import TrackRow from "../TrackRow.svelte";
+  import { getPlaylistCoverStyle } from "../../lib/playlistColor";
   import type { Playlist, Track } from "../../lib/types";
 
   let { matchedPlaylists = [], searchResultsGrouped = [], isSearching = false, searchTerm = "", currentTheme = "", playingFile = "", isPlaying = false, onOpenPlaylist, onPlayFoundTracks, onQueueFoundTracks, onPlayTrack }: {
@@ -20,18 +21,7 @@
   } = $props();
 
   function resolveCardStyle(playlist: Playlist) {
-    if (playlist.name === "Favorites") {
-      if (currentTheme === "gruvbox") {
-        const c = "var(--c-heart)";
-        return `background: linear-gradient(135deg, ${c}, transparent); background-color: ${c};`;
-      }
-      return `background: linear-gradient(135deg, hsl(348, 95%, 58%), hsl(348, 90%, 40%));`;
-    }
-
-    if (currentTheme === "gruvbox") {
-      return `background: linear-gradient(135deg, ${playlist.colorVar}, transparent); background-color: ${playlist.colorVar};`;
-    }
-    return `background: ${playlist.color}`;
+    return getPlaylistCoverStyle(playlist, currentTheme, { fallbackToDefault: false });
   }
 
   import { horizontalWheelScroll as handleHorizontalScroll } from "../../lib/horizontalScroll";

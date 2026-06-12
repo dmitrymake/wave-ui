@@ -8,20 +8,32 @@
     currentSong,
     status,
     isQueueLocked,
-    yandexState,
-    showToast,
   } from "../../lib/store";
-  import { MSG } from "../../lib/messages";
-  import { PlayerActions } from "../../lib/mpd/player";
-  import * as MPD from "../../lib/mpd";
+  import {
+    playQueuePosition,
+    clearQueue,
+    removeFromQueue,
+    moveTrack,
+    saveQueue,
+    loadPlaylists,
+  } from "../../lib/playerActions";
+  import { getActiveDaemon } from "../../lib/sources";
   import { ICONS } from "../../lib/icons";
+  import { formatTotalDuration } from "../../lib/utils";
 
   import TrackRow from "../TrackRow.svelte";
   import BaseList from "./BaseList.svelte";
 
   let isEditMode = $state(false);
   let headerTotalDuration = $state("");
-  let statusInterval: ReturnType<typeof setInterval> | undefined;
+
+  const daemon = getActiveDaemon();
+  let daemonState = $state<{ active: boolean; label: string | null }>({
+    active: false,
+    label: null,
+  });
+  let stopPolling: (() => void) | undefined;
+  let unsubscribeDaemon: (() => void) | undefined;
 
   let serverPlayingIndex = $derived(Number($status.song));
   let optimisticPlayingIndex = $state(-1);
@@ -41,56 +53,31 @@
       (acc, t) => acc + (parseFloat(String(t.time)) || 0),
       0,
     );
-    if (totalSec > 0) {
-      const h = Math.floor(totalSec / 3600);
-      const m = Math.floor((totalSec % 3600) / 60);
-      headerTotalDuration = h > 0 ? `${h} hr ${m} min` : `${m} min`;
-    } else {
-      headerTotalDuration = "";
-    }
+    headerTotalDuration = formatTotalDuration(totalSec);
   });
 
-  async function fetchYandexStatus() {
-    try {
-      const res = await fetch("/wave-yandex-api.php?action=get_state");
-      if (res.ok) {
-        const data = await res.json();
-        yandexState.set(data);
-      }
-    } catch (e) {
-      console.warn("[Queue] Failed to fetch Yandex state:", e);
-    }
-  }
-
-  async function stopDaemon() {
-    try {
-      await fetch("/wave-yandex-api.php?action=stop_daemon");
-      showToast(MSG.QUEUE_DAEMON_STOPPED, "info");
-      fetchYandexStatus();
-    } catch (e) {
-      showToast(MSG.QUEUE_FAILED_STOP_DAEMON, "error");
-    }
-  }
-
   onMount(() => {
-    fetchYandexStatus();
-    statusInterval = setInterval(fetchYandexStatus, 5000);
+    if (daemon) {
+      unsubscribeDaemon = daemon.state.subscribe((s) => (daemonState = s));
+      stopPolling = daemon.startPolling();
+    }
   });
 
   onDestroy(() => {
-    if (statusInterval) clearInterval(statusInterval);
+    stopPolling?.();
+    unsubscribeDaemon?.();
   });
 
   function toggleEditMode() {
     isEditMode = !isEditMode;
   }
   function playTrack(pos: number) {
-    if (!isEditMode) MPD.runMpdRequest(`play ${pos}`);
+    if (!isEditMode) playQueuePosition(pos);
   }
   function handleRemove(index: number) {
     if (index < optimisticPlayingIndex) optimisticPlayingIndex -= 1;
     else if (index === optimisticPlayingIndex) optimisticPlayingIndex = -1;
-    PlayerActions.removeFromQueue(index);
+    removeFromQueue(index);
   }
 
   async function handleSaveQueue() {
@@ -102,8 +89,8 @@
       confirmLabel: "Save",
       onConfirm: async (name) => {
         if (name && name.trim().length > 0) {
-          await PlayerActions.saveQueue(name);
-          MPD.loadPlaylists();
+          await saveQueue(name);
+          loadPlaylists();
         }
       },
     });
@@ -117,30 +104,10 @@
       confirmLabel: "Clear All",
       type: "confirm",
       onConfirm: async () => {
-        if ($yandexState.active) {
-          await stopDaemon();
+        if (daemonState.active) {
+          await daemon?.stop();
         }
-        queue.set([]);
-        currentSong.set({
-          title: "Not Playing",
-          artist: "",
-          album: "",
-          file: "",
-          genre: "",
-          time: 0,
-          track: "",
-          stationName: null,
-          id: undefined,
-          pos: null,
-        });
-        status.update((s) => ({
-          ...s,
-          state: "stop",
-          song: -1,
-          songid: -1,
-          elapsed: 0,
-        }));
-        await MPD.runMpdRequest("clear");
+        await clearQueue();
       },
     });
   }
@@ -151,7 +118,7 @@
     else if (fromIndex < p && toIndex >= p) p -= 1;
     else if (fromIndex > p && toIndex <= p) p += 1;
     optimisticPlayingIndex = p;
-    PlayerActions.moveTrack(fromIndex, toIndex);
+    moveTrack(fromIndex, toIndex);
   }
 </script>
 
@@ -174,9 +141,9 @@
               <div class="header-label">Now Playing</div>
 
               <h1 class="header-title">
-                {#if $yandexState && $yandexState.active}
+                {#if daemonState.active}
                   <span class="daemon-active">
-                    {$yandexState.context_name || "Yandex Stream"}
+                    {daemonState.label}
                   </span>
                 {:else}
                   Current Queue
@@ -189,15 +156,15 @@
                   <span class="meta-tag">{headerTotalDuration}</span>
                 {/if}
 
-                {#if $yandexState && $yandexState.active}
+                {#if daemonState.active}
                   <span class="meta-tag active-badge">Daemon Active</span>
                 {/if}
               </div>
             </div>
 
             <div class="header-actions">
-              {#if $yandexState && $yandexState.active}
-                <button class="btn-primary" onclick={stopDaemon}>
+              {#if daemonState.active}
+                <button class="btn-primary" onclick={() => daemon?.stop()}>
                   Stop Stream
                 </button>
               {:else}

@@ -3,7 +3,8 @@
 <script lang="ts">
   import type { Track } from "../lib/types";
   import { ICONS } from "../lib/icons";
-  import { favorites, yandexFavorites } from "../lib/store.js";
+  import { favorites } from "../lib/store.js";
+  import { yandexFavorites } from "../lib/stores/yandex";
   import { isTrackLiked, toggleLike } from "../lib/playerHelpers";
 
   interface Props {

@@ -57,14 +57,28 @@ vi.mock("../../store", () => {
     }),
     currentSong: writable({
       title: "Not Playing", artist: "", album: "", file: "",
-      stationName: null, id: null, pos: null, isYandex: false,
+      stationName: null, id: null, pos: null,
     }),
     stations: writable([]),
     queue: writable([]),
     queueVersion: writable(0),
     isQueueLocked: writable(false),
     showToast: vi.fn(),
-    yandexContext: writable({ active: false, tracks: [], streamCache: {} }),
+    activeMenuTab: writable("library"),
+    navigationStack: writable([]),
+  };
+});
+
+// Yandex stores now live in their own domain module; the imported yandexSource
+// reads them from "../../stores/yandex" (no longer re-exported by the shared
+// barrel), so the stubs must be wired here.
+vi.mock("../../stores/yandex", () => {
+  const { writable } = require("svelte/store");
+  return {
+    yandexContext: writable({ streamCache: {} }),
+    yandexFavorites: writable(new Set()),
+    yandexState: writable({ active: false, context_name: "" }),
+    yandexAuthStatus: writable(false),
   };
 });
 
@@ -89,7 +103,7 @@ vi.mock("../../yandex", () => ({
 // Registering the Yandex source lets resolveSource() route Yandex tracks in tests.
 import "../../sources/yandexSource";
 import { PlayerActions } from "../../mpd/player.js";
-import { status, currentSong, queue } from "../../store";
+import { status, currentSong, queue, isQueueLocked } from "../../store";
 import type { MpdStatus, Track } from "../../types";
 
 beforeEach(() => {
@@ -113,6 +127,34 @@ describe("PlayerActions.togglePlay", () => {
     status.set({ state: "stop", volume: 50, elapsed: 0, duration: 0, random: false, repeat: false } as MpdStatus);
     await PlayerActions.togglePlay();
     expect(mockSend).toHaveBeenCalledWith("play");
+  });
+});
+
+describe("PlayerActions optimistic rollback on dead socket", () => {
+  it("togglePlay swallows no errors but resolves when send rejects", async () => {
+    status.set({ state: "stop", volume: 50, elapsed: 0, duration: 0, random: false, repeat: false } as MpdStatus);
+    // The transport command fails (e.g. socket closed mid-flight). The action must
+    // settle (not reject up to the click handler) and attempt a reconciling refresh.
+    mockSend.mockRejectedValueOnce(new Error("Connection lost"));
+
+    await expect(PlayerActions.togglePlay()).resolves.toBeUndefined();
+
+    // The first call is the failed "play"; the rollback then re-syncs via "status".
+    expect(mockSend).toHaveBeenCalledWith("play");
+    expect(mockSend).toHaveBeenCalledWith("status");
+  });
+
+  it("setVolume settles when send rejects", async () => {
+    mockSend.mockRejectedValueOnce(new Error("Connection lost"));
+    await expect(PlayerActions.setVolume(40)).resolves.toBeUndefined();
+    expect(mockSend).toHaveBeenCalledWith("setvol 40");
+  });
+
+  it("seek settles when send rejects", async () => {
+    status.set({ state: "play", elapsed: 0, duration: 100 } as MpdStatus);
+    mockSend.mockRejectedValueOnce(new Error("Connection lost"));
+    await expect(PlayerActions.seek(20)).resolves.toBeUndefined();
+    expect(mockSend).toHaveBeenCalledWith("seekcur 20");
   });
 });
 
@@ -140,8 +182,8 @@ describe("PlayerActions.next Yandex feedback", () => {
     const { YandexApi } = await import("../../yandex");
 
     (queueStore as unknown as { set: (v: unknown) => void }).set([
-      { file: "yandex:12345", id: "12345", isYandex: true, title: "t" },
-      { file: "yandex:67890", id: "67890", isYandex: true, title: "next" },
+      { file: "yandex:12345", id: "12345", service: "yandex", title: "t" },
+      { file: "yandex:67890", id: "67890", service: "yandex", title: "next" },
     ]);
     status.set({ state: "play", elapsed: 42, duration: 180, song: 0 } as MpdStatus);
 
@@ -156,7 +198,7 @@ describe("PlayerActions.next Yandex feedback", () => {
     const { YandexApi } = await import("../../yandex");
 
     (queueStore as unknown as { set: (v: unknown) => void }).set([
-      { file: "Music/a.flac", id: "0", isYandex: false, title: "local" },
+      { file: "Music/a.flac", id: "0", title: "local" },
     ]);
     status.set({ state: "play", elapsed: 10, duration: 180, song: 0 } as MpdStatus);
 
@@ -252,5 +294,78 @@ describe("PlayerActions.moveTrack", () => {
   it("does nothing for same position", async () => {
     await PlayerActions.moveTrack(3, 3);
     expect(mockSend).not.toHaveBeenCalled();
+  });
+});
+
+describe("PlayerActions.clearQueue", () => {
+  it("optimistically empties the queue and sends clear on success", async () => {
+    queue.set([{ file: "a" }, { file: "b" }] as unknown as Track[]);
+
+    await PlayerActions.clearQueue();
+
+    expect(mockSend).toHaveBeenCalledWith("clear");
+    expect(get(queue)).toEqual([]);
+  });
+
+  it("restores the queue and unlocks when MPD rejects clear", async () => {
+    queue.set([{ file: "a" }, { file: "b" }] as unknown as Track[]);
+    isQueueLocked.set(false);
+    mockSend.mockRejectedValueOnce(new Error("MPD clear failed"));
+
+    await PlayerActions.clearQueue();
+
+    // Rolled back so the view never lies about an empty queue while the server
+    // still holds tracks, and the lock is released immediately on failure.
+    expect(get(queue).map((t) => t.file)).toEqual(["a", "b"]);
+    expect(get(isQueueLocked)).toBe(false);
+  });
+
+  it("locks the queue during the wipe and unlocks after the poll-guard timer", async () => {
+    queue.set([{ file: "a" }] as unknown as Track[]);
+    isQueueLocked.set(false);
+
+    await PlayerActions.clearQueue();
+
+    // Locked so the 1s status poller cannot race the optimistic wipe and
+    // repopulate the view from a stale playlistinfo snapshot...
+    expect(get(isQueueLocked)).toBe(true);
+    // ...and released once the reconciliation window passes.
+    vi.advanceTimersByTime(1000);
+    expect(get(isQueueLocked)).toBe(false);
+  });
+});
+
+// The gateway methods source plugins (e.g. Yandex) drive their MPD through, instead
+// of touching mpdClient directly. parseKeyValue is mocked in this file, so set its
+// return per-case to drive the parse step.
+describe("PlayerActions queue gateway", () => {
+  it("getQueueLength reads playlistlength from status", async () => {
+    const { MpdParser } = await import("../../mpd/parser");
+    (MpdParser.parseKeyValue as ReturnType<typeof vi.fn>).mockReturnValueOnce({ playlistlength: "7" });
+
+    const len = await PlayerActions.getQueueLength();
+
+    expect(mockSend).toHaveBeenCalledWith("status");
+    expect(len).toBe(7);
+  });
+
+  it("getQueueItemIdAt requests playlistinfo for the position and parses its id", async () => {
+    const { MpdParser } = await import("../../mpd/parser");
+    (MpdParser.parseKeyValue as ReturnType<typeof vi.fn>).mockReturnValueOnce({ id: "123" });
+
+    const id = await PlayerActions.getQueueItemIdAt(4);
+
+    expect(mockSend).toHaveBeenCalledWith("playlistinfo 4");
+    expect(id).toBe(123);
+  });
+
+  it("moveById sends moveid with the song id and target position", async () => {
+    await PlayerActions.moveById(55, 2);
+    expect(mockSend).toHaveBeenCalledWith("moveid 55 2");
+  });
+
+  it("playById sends playid with the song id", async () => {
+    await PlayerActions.playById(88);
+    expect(mockSend).toHaveBeenCalledWith("playid 88");
   });
 });

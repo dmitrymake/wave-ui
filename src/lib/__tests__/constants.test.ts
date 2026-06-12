@@ -59,6 +59,6 @@ describe("constants", () => {
     const { DATABASE } = await import("../constants.js");
     expect(DATABASE.NAME).toBe("MoodePlayerDB");
     expect(DATABASE.STORE_NAME).toBe("music");
-    expect(DATABASE.VERSION).toBe(3);
+    expect(DATABASE.VERSION).toBe(4);
   });
 });

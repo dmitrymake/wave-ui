@@ -1,7 +1,7 @@
 <!-- SPDX-License-Identifier: MIT -->
 <!-- Copyright (c) 2025 dmitrymake -->
 <script lang="ts">
-  import * as MPD from "../lib/mpd";
+  import { PlayMode } from "../lib/playerActions";
   import { status } from "../lib/store.js";
   import { ICONS } from "../lib/icons";
   import { getPlayMode, cyclePlayMode } from "../lib/playerHelpers";
@@ -17,7 +17,7 @@
 
   function toggle(e?: MouseEvent) {
     if (e) e.stopPropagation();
-    cyclePlayMode($status, MPD);
+    cyclePlayMode($status, PlayMode);
   }
 </script>
 

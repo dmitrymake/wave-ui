@@ -1,73 +1,37 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2025 dmitrymake
-import { API_ENDPOINTS } from "./constants";
-import type { Station } from "./types";
+// Radio/Station helpers now live in ./radio; re-exported here so existing import
+// paths (and their test mocks of "./utils") keep resolving unchanged.
+export { getStationImageUrl, findStationByStream, findStationByName } from "./radio";
 
 export function isRemoteUrl(url: string | null | undefined): boolean {
   return !!url && (url.startsWith("http") || url.includes("://"));
-}
-
-export function getStationImageUrl(station: Pick<Station, "name" | "image">): string | null {
-  if (!station || !station.image) return null;
-
-  if (isRemoteUrl(station.image)) {
-    return station.image;
-  }
-
-  let filename = "";
-  if (station.image === "local") {
-    filename = `${station.name}.jpg`;
-  } else {
-    filename = station.image;
-  }
-
-  return API_ENDPOINTS.RADIO_LOGOS(filename);
 }
 
 export function generateUid(): string {
   return Date.now().toString(36) + Math.random().toString(36).slice(2);
 }
 
+// Single source of truth for the "m:ss" clock format shown next to a track. A
+// missing/NaN value renders "0:00" so a row never shows a blank or "NaN:NaN".
+export function formatClock(seconds: number | null | undefined): string {
+  if (seconds === null || seconds === undefined || isNaN(seconds)) return "0:00";
+  const total = Math.floor(seconds);
+  const m = Math.floor(total / 60) || 0;
+  const s = total % 60 || 0;
+  return `${m}:${s.toString().padStart(2, "0")}`;
+}
+
+// Coarse "X hr Y min" / "Y min" summary used for a collection's total runtime
+// (queue, playlist, album header). Empty string for a zero/unknown total so the
+// caller can omit the line entirely.
+export function formatTotalDuration(totalSeconds: number): string {
+  if (!totalSeconds || totalSeconds <= 0) return "";
+  const h = Math.floor(totalSeconds / 3600);
+  const m = Math.floor((totalSeconds % 3600) / 60);
+  return h > 0 ? `${h} hr ${m} min` : `${m} min`;
+}
+
 export function normalizeForMatch(str: string | null | undefined): string {
   return (str || "").toString().toLowerCase().replace(/[^a-z0-9]/g, "");
-}
-
-export function findStationByStream(
-  stationList: Station[],
-  songFile: string | null | undefined,
-  songTitle: string | null | undefined,
-): Station | undefined {
-  const targetUrl = normalizeForMatch(songFile);
-  const targetTitle = normalizeForMatch(songTitle);
-
-  return stationList.find((s) => {
-    const sUrl = normalizeForMatch(s.station || s.file || s.url);
-    const sName = normalizeForMatch(s.name);
-    return (
-      (sUrl && targetUrl.includes(sUrl)) ||
-      (sName && targetTitle.includes(sName))
-    );
-  });
-}
-
-export function findStationByName(
-  stationList: Station[],
-  trackTitle: string | null | undefined,
-  trackStationName: string | null | undefined,
-  selectedRadioName: string | null | undefined,
-): Station | undefined {
-  const targetTitle = normalizeForMatch(trackTitle);
-  const targetStationName = normalizeForMatch(trackStationName);
-  const targetSelected = normalizeForMatch(selectedRadioName);
-
-  return stationList.find((s) => {
-    const sName = normalizeForMatch(s.name);
-    if (!sName) return false;
-    return (
-      sName === targetStationName ||
-      sName === targetSelected ||
-      (targetTitle && sName === targetTitle) ||
-      (targetTitle && targetTitle.includes(sName) && sName.length > 3)
-    );
-  });
 }

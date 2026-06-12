@@ -12,6 +12,8 @@ vi.mock("../mpd/client", () => ({
 
 const requestMock = vi.fn().mockResolvedValue({});
 vi.mock("../yandex", () => ({
+  // The Yandex meta-fetch endpoint URL moved into the Yandex domain module.
+  YANDEX_ENDPOINT: { URL: "/wave-yandex-api.php" },
   YandexApi: {
     request: (...a: unknown[]) => requestMock(...a),
     feedbackSkip: vi.fn().mockResolvedValue({}),
@@ -26,14 +28,28 @@ vi.mock("../store", () => {
     status: writable({ duration: 0 }),
     currentSong: writable({ file: "" }),
     queue: writable([]),
-    yandexContext: writable({ active: false, tracks: [], streamCache: {} }),
+    activeMenuTab: writable("library"),
+    navigationStack: writable([]),
     showToast: vi.fn(),
+  };
+});
+
+// Yandex stores now live in their own domain module; production code imports
+// them from "../stores/yandex" (no longer re-exported by the shared barrel), so
+// the stubs must be wired here for the test to share the same store instances.
+vi.mock("../stores/yandex", () => {
+  const { writable } = require("svelte/store");
+  return {
+    yandexContext: writable({ streamCache: {} }),
+    yandexFavorites: writable(new Set()),
+    yandexState: writable({ active: false, context_name: "" }),
+    yandexAuthStatus: writable(false),
   };
 });
 
 import { yandexSource } from "../sources/yandexSource";
 import type { TrackSource } from "../sources/trackSource";
-import { yandexContext } from "../store";
+import { yandexContext } from "../stores/yandex";
 
 // These TrackSource methods are optional on the interface but always implemented by
 // the Yandex source; narrow them so the tests can call them without `?.`/`!` noise.
@@ -54,14 +70,7 @@ const baseTrack = (over: Partial<Track>): Track => ({
 beforeEach(() => {
   vi.clearAllMocks();
   requestMock.mockResolvedValue({});
-  yandexContext.set({
-    active: false,
-    tracks: [],
-    currentIndex: 0,
-    currentTrackId: null,
-    currentTrackFile: null,
-    streamCache: {},
-  });
+  yandexContext.set({ streamCache: {} });
 });
 
 describe("src.playUri", () => {
@@ -131,11 +140,6 @@ describe("src.playNext", () => {
 describe("src.enrichQueueTrack", () => {
   it("enriches a queue track from the stream cache (by file key)", () => {
     yandexContext.set({
-      active: true,
-      tracks: [],
-      currentIndex: 0,
-      currentTrackId: null,
-      currentTrackFile: null,
       streamCache: {
         "yandex:55": {
           id: "55",
@@ -156,7 +160,7 @@ describe("src.enrichQueueTrack", () => {
     expect(result).not.toBeNull();
     expect(result?.title).toBe("Cached Title");
     expect(result?.artist).toBe("Cached Artist");
-    expect(result?.isYandex).toBe(true);
+    expect(result?.service).toBe("yandex");
     expect(result?.id).toBe("55");
     expect(toFetch).toHaveLength(0);
   });

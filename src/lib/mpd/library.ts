@@ -3,7 +3,7 @@
 import { get } from "svelte/store";
 import { mpdClient } from "./client";
 import { MpdParser } from "./parser";
-import { escapeArg } from "./escape";
+import { escapeArg, escapePath } from "./escape";
 import {
   isLoadingPlaylists,
   playlists,
@@ -17,7 +17,12 @@ import { db } from "../db";
 import { generateUid, isRemoteUrl } from "../utils";
 import { MSG } from "../messages";
 import { logger } from "../logger";
+import { getGradient, assignColorVar } from "../playlistColor";
 import type { Track, Playlist } from "../types";
+
+// Re-exported for backward compatibility: the colour helpers used to live here
+// before being centralised in playlistColor.ts. Keeps any import path stable.
+export { getGradient, assignColorVar } from "../playlistColor";
 
 const FAV_PLAYLIST: string = "Favorites";
 
@@ -43,28 +48,6 @@ const cleanUrl = (url: string | null | undefined): string => {
     .split("?")[0]
     .replace(/\/$/, "");
 };
-
-function getGradient(name: string): string {
-  if (name === "Favorites") {
-    return `linear-gradient(135deg, hsl(348, 95%, 58%), hsl(348, 90%, 40%))`;
-  }
-  let hash: number = 0;
-  for (let i = 0; i < name.length; i++) {
-    hash = name.charCodeAt(i) + ((hash << 5) - hash);
-  }
-  const hue: number = Math.abs(hash % 360);
-  return `linear-gradient(135deg, hsl(${hue}, 60%, 40%), hsl(${(hue + 40) % 360}, 60%, 30%))`;
-}
-
-function assignColorVar(name: string): string {
-  if (name === "Favorites") return "var(--c-heart)";
-  let hash: number = 0;
-  for (let i = 0; i < name.length; i++) {
-    hash = name.charCodeAt(i) + ((hash << 5) - hash);
-  }
-  const index: number = Math.abs(hash % 6);
-  return `var(--c-pl-${index})`;
-}
 
 export const LibraryActions = {
   async loadPlaylists(): Promise<void> {
@@ -192,6 +175,46 @@ export const LibraryActions = {
     }
   },
 
+  async addPlaylistToQueue(playlistName: string): Promise<void> {
+    if (!playlistName) return;
+    const safeName: string = escapeArg(playlistName);
+    await mpdClient.send(`load "${safeName}"`);
+  },
+
+  async playPlaylist(name: string): Promise<void> {
+    if (!name) return;
+    const safeName: string = escapeArg(name);
+    try {
+      await mpdClient.send("stop");
+      await mpdClient.send("clear");
+      await mpdClient.send(`load "${safeName}"`);
+      await mpdClient.send("play 0");
+    } catch (e) {
+      logger.error(e);
+      showToast(MSG.PLAY_FAILED_TO_PLAY, "error");
+    }
+  },
+
+  async addToPlaylist(track: Track, playlistName: string): Promise<void> {
+    // Yandex rows carry no local file path, so there is nothing to add to an MPD playlist.
+    if (!track || !track.file) return;
+    const safeName: string = escapeArg(playlistName);
+    const safeFile: string = escapePath(track.file);
+    try {
+      await mpdClient.send(`playlistadd "${safeName}" "${safeFile}"`);
+      showToast(MSG.addedToPlaylist(playlistName), "success");
+    } catch (e) {
+      logger.error(e);
+      showToast(MSG.PLAY_FAILED_TO_ADD, "error");
+    }
+  },
+
+  async getPlaylistTracks(name: string): Promise<Track[]> {
+    const safeName: string = escapeArg(name);
+    const raw: string = await mpdClient.send(`listplaylistinfo "${safeName}"`);
+    return MpdParser.parseTracks(raw);
+  },
+
   async movePlaylistTrack(playlistName: string, fromPos: number, toPos: number): Promise<void> {
     const safeName: string = escapeArg(playlistName);
     try {
@@ -235,7 +258,10 @@ export const LibraryActions = {
     if (!track || !track.file) return;
 
     const rawFile: string = track.file;
-    const safeFile: string = escapeArg(rawFile);
+    // track.file is a file/stream path (it can contain backslashes), so it needs
+    // escapePath — not escapeArg — exactly like addToPlaylist. escapeArg only
+    // escapes quotes and would under-escape a backslash-bearing local path.
+    const safeFile: string = escapePath(rawFile);
     const isUrl: boolean = isRemoteUrl(rawFile);
 
     const currentFavs: Set<string> = get(favorites);

@@ -6,7 +6,7 @@
   import Skeleton from "./Skeleton.svelte";
   import LikeButton from "./LikeButton.svelte";
   import TrackPlaybackIndicator from "./TrackPlaybackIndicator.svelte";
-  import * as MPD from "../lib/mpd";
+  import { togglePlay } from "../lib/playerActions";
   import { ICONS } from "../lib/icons";
   import {
     activeMenuTab,
@@ -16,11 +16,12 @@
     openContextMenu,
     navigationStack,
     navigateTo,
+    resetNavigation,
     type EventWithDetail,
   } from "../lib/store.js";
   import { longpress } from "../lib/actions";
-  import { isRemoteUrl } from "../lib/utils";
-  import { getYandexIdFromUrl } from "../lib/sources/yandexUri";
+  import { isRemoteUrl, formatClock } from "../lib/utils";
+  import { resolveSourceForTrack } from "../lib/sources/trackSource";
 
   let {
     track,
@@ -48,27 +49,29 @@
 
   let isHovering = $state(false);
 
-  let isYandexTrack = $derived(track.isYandex || track.service === "yandex");
+  // The streaming source (today only Yandex) that owns this track, if any. Drives
+  // the brand icon, vibe actions and stream-aware now-playing/artist handling
+  // below via TrackSource capabilities, so the row never depends on a concrete service.
+  let source = $derived(resolveSourceForTrack(track));
+  let isStreamTrack = $derived(!!source);
   let currentView = $derived($navigationStack[$navigationStack.length - 1]);
   let isQueueContext = $derived(
     currentView?.view === "queue" ||
     (currentView?.view === "root" && $activeMenuTab === "queue"));
   let isExactActive = $derived(isQueueContext ? Number(index) === playingIndex : false);
-  // Yandex tracks carry the same numeric id on both sides, but expressed
-  // differently: source lists use `yandex:<id>` while the playing MPD file is a
-  // RAM cache path / CDN url. Compare by extracted id so the now-playing
-  // highlight works in album/playlist/search views too, not just the queue.
-  let playingYandexId = $derived(isYandexTrack ? getYandexIdFromUrl($currentSong.file) : null);
+  // Delegate stream-source now-playing matching (e.g. `yandex:<id>` list uris vs
+  // the RAM-cache/CDN url the player reports) to the source; fall back to a plain
+  // file comparison for generic local/radio tracks.
   let isPlayingFile = $derived(
-    isYandexTrack
-      ? playingYandexId !== null && getYandexIdFromUrl(track.file) === playingYandexId
+    source?.matchesPlaying
+      ? source.matchesPlaying(track, $currentSong.file)
       : track.file === playingFile,
   );
   let showStripes = $derived(isPlayingFile && !isExactActive);
   let isRadio = $derived(
     track.file &&
     (isRemoteUrl(track.file) || String(track.file).includes("RADIO")) &&
-    !isYandexTrack);
+    !isStreamTrack);
   let displayTitle = $derived(track.title || track.file?.split("/").pop());
   let duration = $derived(formatDuration(track.time));
   let quality = $derived(track.qualityBadge ? track.qualityBadge.split(" ")[0] : null);
@@ -78,15 +81,12 @@
     if (isRadio) return "\u221e";
     const val = parseFloat(String(time));
     if (!val || isNaN(val) || val === 0) return "0:00";
-    const totalSeconds = Math.round(val);
-    const m = Math.floor(totalSeconds / 60);
-    const s = totalSeconds % 60;
-    return `${m}:${s.toString().padStart(2, "0")}`;
+    return formatClock(Math.round(val));
   }
 
   function handleAction(e?: Event) {
     e?.stopPropagation();
-    if (isPlayingFile) MPD.togglePlay();
+    if (isPlayingFile) togglePlay();
     else onplay?.();
   }
 
@@ -117,16 +117,14 @@
     }
   }
 
-  function handleArtistClick(e: MouseEvent) {
+  function handleArtistClick(e: MouseEvent | KeyboardEvent) {
     e.stopPropagation();
-    if (isYandexTrack && track.artist) {
-      activeMenuTab.set("yandex");
-      if (window.location.hash !== "#/yandex") history.pushState(null, "", "#/yandex");
-      navigationStack.set([{ view: "root" }, { view: "yandex_search", data: { query: track.artist } }]);
+    if (source?.navigateToArtist && track.artist) {
+      source.navigateToArtist(track);
     } else if (!isRadio && track.artist) {
       activeMenuTab.set("artists");
       if (window.location.hash !== "#/artists") history.pushState(null, "", "#/artists");
-      navigationStack.set([{ view: "root" }]);
+      resetNavigation();
       navigateTo("albums_by_artist", { name: track.artist });
     }
     onartistclick?.(track);
@@ -180,7 +178,7 @@
     <div class="title-row">
       {#if track.title}
         <div class="title text-ellipsis" title={track.title}>{track.title}</div>
-      {:else if track.file && !isYandexTrack}
+      {:else if track.file && !isStreamTrack}
         <div class="title text-ellipsis">{track.file.split("/").pop()}</div>
       {:else}
         <Skeleton width="60%" height="15px" radius="4px" />
@@ -191,11 +189,11 @@
     </div>
 
     {#if track.artist}
-      {#if !isRadio || isYandexTrack}
+      {#if !isRadio || isStreamTrack}
         <div
           class="artist text-ellipsis link"
           onclick={handleArtistClick}
-          onkeydown={(e) => { if (e.key === "Enter") handleArtistClick(e as unknown as MouseEvent); }}
+          onkeydown={(e) => { if (e.key === "Enter") handleArtistClick(e); }}
           role="link"
           tabindex="0"
         >
@@ -206,7 +204,7 @@
           {track.artist}
         </div>
       {/if}
-    {:else if track.title || (track.file && !isYandexTrack)}
+    {:else if track.title || (track.file && !isStreamTrack)}
       <div class="artist text-ellipsis">Unknown Artist</div>
     {:else}
       <Skeleton width="40%" height="13px" radius="4px" style="margin-top: 4px;" />
@@ -214,9 +212,9 @@
   </div>
 
   <div class="right">
-    {#if isYandexTrack}
-      <span class="yandex-icon-inline" title="Yandex Music">
-        {@html ICONS.YANDEX}
+    {#if source?.brandIcon}
+      <span class="brand-icon-inline" title={source.id}>
+        {@html source.brandIcon}
       </span>
     {/if}
 
@@ -373,7 +371,7 @@
   .context-menu-btn { opacity: 0.6; transition: opacity 0.2s; }
   .context-menu-btn:hover { opacity: 1; color: var(--c-text-primary); }
 
-  .yandex-icon-inline {
+  .brand-icon-inline {
     width: 16px;
     height: 16px;
     display: flex;
@@ -381,5 +379,5 @@
     margin-right: 4px;
     opacity: 0.8;
   }
-  .yandex-icon-inline :global(svg) { width: 100%; height: 100%; }
+  .brand-icon-inline :global(svg) { width: 100%; height: 100%; }
 </style>

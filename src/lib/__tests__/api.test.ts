@@ -7,7 +7,6 @@ import { get } from "svelte/store";
 vi.mock("../constants", () => ({
   API_ENDPOINTS: {
     get SYNC() { return "/wave-api.php"; },
-    get YANDEX() { return "/wave-yandex-api.php"; },
     STATIONS: () => "/wave-api.php?action=stations",
   },
 }));
@@ -18,9 +17,19 @@ vi.mock("../store", () => {
     isSyncingLibrary: writable(false),
     isLoadingRadio: writable(false),
     stations: writable([]),
+    showToast: vi.fn(),
+  };
+});
+
+// Yandex stores now live in their own domain module; production code imports
+// them from "../stores/yandex" (no longer re-exported by the shared barrel), so
+// the stubs must be wired here for the test to share the same store instances.
+vi.mock("../stores/yandex", () => {
+  const { writable } = require("svelte/store");
+  return {
     yandexAuthStatus: writable(false),
     yandexFavorites: writable(new Set()),
-    showToast: vi.fn(),
+    yandexState: writable({ active: false, context_name: "" }),
   };
 });
 
@@ -36,6 +45,9 @@ vi.mock("../workers/sync.worker.js?worker", () => {
 });
 
 vi.mock("../yandex", () => ({
+  // The Yandex endpoint URL moved into the Yandex domain module ("../yandex")
+  // from shared constants; saveYandexToken reads YANDEX_ENDPOINT.URL.
+  YANDEX_ENDPOINT: { URL: "/wave-yandex-api.php" },
   YandexApi: {
     request: vi.fn(),
     getFavoritesIds: vi.fn(),
@@ -43,7 +55,9 @@ vi.mock("../yandex", () => ({
 }));
 
 import { ApiActions } from "../api.js";
-import { stations, yandexAuthStatus, showToast } from "../store";
+import { YandexService } from "../yandexService.js";
+import { stations, showToast } from "../store";
+import { yandexAuthStatus } from "../stores/yandex";
 import { YandexApi } from "../yandex";
 
 beforeEach(() => {
@@ -107,29 +121,29 @@ describe("ApiActions.getServerTime", () => {
   });
 });
 
-describe("ApiActions.checkYandexAuth", () => {
+describe("YandexService.checkYandexAuth", () => {
   it("returns true when authorized", async () => {
     (YandexApi.request as ReturnType<typeof vi.fn>).mockResolvedValue({ authorized: true });
-    const result = await ApiActions.checkYandexAuth();
+    const result = await YandexService.checkYandexAuth();
     expect(result).toBe(true);
     expect(get(yandexAuthStatus)).toBe(true);
   });
 
   it("returns false on error", async () => {
     (YandexApi.request as ReturnType<typeof vi.fn>).mockRejectedValue(new Error("fail"));
-    const result = await ApiActions.checkYandexAuth();
+    const result = await YandexService.checkYandexAuth();
     expect(result).toBe(false);
     expect(get(yandexAuthStatus)).toBe(false);
   });
 });
 
-describe("ApiActions.saveYandexToken", () => {
+describe("YandexService.saveYandexToken", () => {
   it("saves token successfully", async () => {
     (globalThis.fetch as ReturnType<typeof vi.fn>).mockResolvedValue({
       ok: true,
       json: () => Promise.resolve({ success: true }),
     });
-    const result = await ApiActions.saveYandexToken("my-token");
+    const result = await YandexService.saveYandexToken("my-token");
     expect(result).toBe(true);
     expect(get(yandexAuthStatus)).toBe(true);
     expect(showToast).toHaveBeenCalledWith("Yandex connected successfully", "success");
@@ -140,7 +154,7 @@ describe("ApiActions.saveYandexToken", () => {
       ok: false,
       json: () => Promise.resolve({ error: "invalid token" }),
     });
-    const result = await ApiActions.saveYandexToken("bad-token");
+    const result = await YandexService.saveYandexToken("bad-token");
     expect(result).toBe(false);
     expect(get(yandexAuthStatus)).toBe(false);
   });

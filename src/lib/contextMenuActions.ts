@@ -2,18 +2,14 @@
 // Copyright (c) 2025 dmitrymake
 import { PlayerActions } from "./mpd/player";
 import { LibraryActions } from "./mpd/library";
-import { mpdClient } from "./mpd/client";
-import { escapeArg } from "./mpd/escape";
-import { resolveSource } from "./sources/trackSource";
+import { toggleLike as toggleLikeForTrack } from "./playerHelpers";
+import { resolveSource, resolveSourceForTrack } from "./sources/trackSource";
 import {
   closeContextMenu,
   navigateTo,
   activePlaylistTracks,
   showModal,
-  showToast,
 } from "./store";
-import { MSG } from "./messages";
-import { logger } from "./logger";
 import type { Track, ContextMenuContext } from "./types.js";
 
 export function playNext(track: Track | null): void {
@@ -27,24 +23,23 @@ export function addToQueue(track: Track | null): void {
 }
 
 export function toggleLike(track: Track | null): void {
-  if (track) LibraryActions.toggleFavorite(track);
+  // Route through the source-aware helper so a Yandex row toggles its real liked
+  // state instead of always poking the MPD Favorites playlist.
+  if (track) toggleLikeForTrack(track);
   closeContextMenu();
 }
 
 export function goToAlbum(track: Track | null): void {
-  if (track && track.album) {
-    if (!track.isYandex) {
-      navigateTo("tracks_by_album", { name: track.album, artist: track.artist });
-    }
+  // Local-library navigation only; a streaming-source track has no local album view.
+  if (track && track.album && !resolveSourceForTrack(track)) {
+    navigateTo("tracks_by_album", { name: track.album, artist: track.artist });
   }
   closeContextMenu();
 }
 
 export function goToArtist(track: Track | null): void {
-  if (track && track.artist) {
-    if (!track.isYandex) {
-      navigateTo("albums_by_artist", { name: track.artist });
-    }
+  if (track && track.artist && !resolveSourceForTrack(track)) {
+    navigateTo("albums_by_artist", { name: track.artist });
   }
   closeContextMenu();
 }
@@ -82,11 +77,7 @@ export function removeFromQueue(context: ContextMenuContext): void {
 export function playlistPlay(context: ContextMenuContext): void {
   const pl = context.playlist;
   if (pl) {
-    mpdClient
-      .send("stop")
-      .then(() => mpdClient.send("clear"))
-      .then(() => mpdClient.send(`load "${escapeArg(pl.name)}"`))
-      .then(() => mpdClient.send("play 0"));
+    LibraryActions.playPlaylist(pl.name);
   }
   closeContextMenu();
 }
@@ -143,14 +134,6 @@ export async function radioByArtist(track: Track | null): Promise<void> {
 
 export async function addToPlaylist(track: Track | null, playlistName: string): Promise<void> {
   if (!track) return;
-  try {
-    const safePl = escapeArg(playlistName);
-    const safeFile = escapeArg(track.file);
-    await mpdClient.send(`playlistadd "${safePl}" "${safeFile}"`);
-    showToast(MSG.addedToPlaylist(playlistName), "success");
-    closeContextMenu();
-  } catch (e) {
-    logger.error(e);
-    showToast(MSG.PLAY_FAILED_TO_ADD, "error");
-  }
+  await LibraryActions.addToPlaylist(track, playlistName);
+  closeContextMenu();
 }

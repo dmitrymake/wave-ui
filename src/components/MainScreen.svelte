@@ -12,6 +12,7 @@
     handleBrowserBack,
     isFullPlayerOpen,
     toastMessage,
+    connectionStatus,
     ignoreNextPopState,
   } from "../lib/store";
 
@@ -29,6 +30,11 @@
 
   let isMobileMenuOpen = $state(false);
 
+  // Surface a WebSocket outage to the user: while the MPD socket is down the
+  // optimistic transport controls silently no-op, so a quiet banner tells them
+  // playback control is unavailable and that we are reconnecting.
+  let isOffline = $derived($connectionStatus !== "Connected");
+
   onMount(() => {
     window.history.replaceState({ depth: $navigationStack.length }, "", "");
     const onPopState = () => {
@@ -45,6 +51,13 @@
 
 <div class="app-container">
   <div class="app-layout">
+    {#if isOffline}
+      <div class="offline-banner" role="status" transition:fly={{ y: -40, duration: 300 }}>
+        <span class="offline-dot"></span>
+        Connection lost — reconnecting…
+      </div>
+    {/if}
+
     {#if $toastMessage}
       <div class="toast-container" transition:fly={{ y: -50, duration: 300 }}>
         <div class="toast-body {$toastMessage.type}">
@@ -165,6 +178,41 @@
     box-shadow: 0 4px 15px var(--c-shadow-popover);
     font-weight: 600;
     font-size: 14px;
+  }
+
+  /* Unobtrusive offline indicator: a slim pill anchored under the header, themed via
+     CSS variables so both palettes render it correctly. Sits just below toasts. */
+  .offline-banner {
+    position: fixed;
+    top: 12px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: calc(var(--z-toast) - 1);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background: var(--c-error);
+    color: var(--c-text-inverse);
+    padding: 7px 16px;
+    border-radius: var(--radius-full);
+    box-shadow: 0 4px 15px var(--c-shadow-popover);
+    font-weight: 600;
+    font-size: 13px;
+    pointer-events: none;
+  }
+
+  .offline-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--c-text-inverse);
+    opacity: 0.85;
+    animation: offline-pulse 1.4s ease-in-out infinite;
+  }
+
+  @keyframes offline-pulse {
+    0%, 100% { opacity: 0.85; }
+    50% { opacity: 0.2; }
   }
 
   .content-area {

@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2025 dmitrymake
 import { db } from "./db";
+import { formatTotalDuration } from "./utils";
 import type { NavigationEntry, LibraryItem } from "./types";
 
 export interface LibraryHeader {
@@ -56,11 +57,7 @@ export async function loadLibraryView(
     header.subtitle = items[0].year;
 
     const totalSec = items.reduce((acc, t) => acc + (t.time || 0), 0);
-    if (totalSec > 0) {
-      const h = Math.floor(totalSec / 3600);
-      const m = Math.floor((totalSec % 3600) / 60);
-      header.totalDuration = h > 0 ? `${h} hr ${m} min` : `${m} min`;
-    }
+    header.totalDuration = formatTotalDuration(totalSec);
     if (items[0].qualityBadge) header.quality = items[0].qualityBadge;
   }
 

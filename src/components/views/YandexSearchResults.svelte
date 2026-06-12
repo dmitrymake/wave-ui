@@ -3,7 +3,7 @@
 <script lang="ts">
   import { ICONS } from "../../lib/icons";
   import ImageLoader from "../ImageLoader.svelte";
-  import type { YandexSearchResults as YandexSearchResultsType, YandexArtist, YandexAlbum } from "../../lib/types";
+  import type { YandexSearchResults as YandexSearchResultsType, YandexArtist, YandexAlbum } from "../../lib/types/yandex";
 
   let { searchResults = { tracks: [], albums: [], artists: [] }, isLoading = false, onOpenArtist, onOpenAlbum }: {
     searchResults?: YandexSearchResultsType;

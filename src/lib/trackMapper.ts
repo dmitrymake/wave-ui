@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2025 dmitrymake
 import md5 from "md5";
-import type { DbTrack } from "./types";
+import type { DbTrack, LibraryItem, Track } from "./types";
 
 // Raw track shape as delivered by the moOde library API. Values are loosely typed —
 // a tag can arrive as a string, a string[] (multi-value tags), or a number.
@@ -64,6 +64,12 @@ export function mapRawTrack(item: RawTrackData): DbTrack {
     ? decodeEntities(rawAlbumArtist).normalize("NFC").trim()
     : undefined;
 
+  // Effective grouping artist for the composite [album, albumKey] index. Mirrors the
+  // album_artist || artist fallback used throughout db.ts, but is always populated so
+  // the index never drops a record (and so same-named albums by different artists stay
+  // distinct). album_artist itself keeps its undefined-when-absent contract.
+  const albumKey: string = album_artist || artist;
+
   let thumbHash: string | undefined;
   if (file) {
     try {
@@ -89,6 +95,7 @@ export function mapRawTrack(item: RawTrackData): DbTrack {
     album,
     genre,
     album_artist,
+    albumKey,
 
     time: parseFloat(String(item.time || 0)),
     track: String(parseInt(String(item.tracknum || 0))),
@@ -97,5 +104,29 @@ export function mapRawTrack(item: RawTrackData): DbTrack {
 
     thumbHash,
     qualityBadge,
+  };
+}
+
+// Bridge a library-list row to a full Track. LibraryItem is a loose view-model
+// (album/artist/track rows share it) so it omits Track's required fields; for
+// `tracks_by_album` the row IS already a DbTrack, the rest of the time only the
+// artwork/playback fields (file, thumbHash, displayName) are meaningful. This
+// fills the required Track shape explicitly instead of an `as unknown as` cast,
+// so the conversion is structurally checked.
+export function libraryItemToTrack(item: LibraryItem): Track {
+  return {
+    file: item.file ?? "",
+    title: item.title ?? item.name ?? item.displayName ?? "",
+    artist: item.artist ?? "",
+    // tracks_by_album rows carry the real album; list rows don't, so fall back
+    // to the row name (mirrors the values the old DbTrack cast exposed).
+    album: item.album ?? item.name ?? "",
+    genre: "",
+    time: item.time ?? 0,
+    track: item.track ?? "",
+    year: item.year ? parseInt(item.year) || undefined : undefined,
+    thumbHash: item.thumbHash,
+    qualityBadge: item.qualityBadge,
+    _uid: item._uid,
   };
 }

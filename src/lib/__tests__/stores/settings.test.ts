@@ -50,17 +50,4 @@ describe("settings stores", () => {
     expect(get(isAlarmEnabled)).toBe(true);
     expect(get(alarmPlaylist)).toBe("Night Jazz");
   });
-
-  it("yandex enabled defaults to false", async () => {
-    vi.resetModules();
-    const { isYandexEnabled } = await import("../../stores/settings.js");
-    expect(get(isYandexEnabled)).toBe(false);
-  });
-
-  it("yandex enabled persists to localStorage", async () => {
-    vi.resetModules();
-    const { isYandexEnabled } = await import("../../stores/settings.js");
-    isYandexEnabled.set(true);
-    expect(localStorage.getItem("yandex_enabled")).toBe("true");
-  });
 });

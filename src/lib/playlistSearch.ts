@@ -1,8 +1,6 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2025 dmitrymake
-import { mpdClient } from "./mpd/client";
-import { MpdParser } from "./mpd/parser";
-import { escapeArg } from "./mpd/escape";
+import { LibraryActions } from "./mpd/library";
 import { logger } from "./logger";
 import type { Track, Playlist } from "./types";
 
@@ -39,12 +37,10 @@ export async function searchPlaylists(
   for (const pl of targets) {
     if (signal.aborted) break;
     try {
-      const raw = await mpdClient.send(
-        `listplaylistinfo "${escapeArg(pl.name)}"`,
-      );
+      const tracks = await LibraryActions.getPlaylistTracks(pl.name);
       if (signal.aborted) break;
 
-      const matches: Track[] = MpdParser.parseTracks(raw)
+      const matches: Track[] = tracks
         .map((t, i) => ({ ...t, playlistPos: i }))
         .filter(
           (t) =>

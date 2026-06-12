@@ -8,9 +8,9 @@
     activeMenuTab,
     isSyncingLibrary,
     isSidebarCollapsed,
-    isYandexEnabled,
-    navigationStack,
+    resetNavigation,
   } from "../lib/store";
+  import { isYandexEnabled } from "../lib/stores/yandex";
   import { ApiActions } from "../lib/api";
 
   let { isOpen = false, onClose }: { isOpen?: boolean; onClose?: () => void } = $props();
@@ -41,7 +41,7 @@
       window.location.hash === targetHash
     ) {
       activeMenuTab.set(id);
-      navigationStack.set([{ view: "root" }]);
+      resetNavigation();
     } else {
       window.location.hash = targetHash;
     }

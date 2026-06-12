@@ -1,7 +1,7 @@
 <!-- SPDX-License-Identifier: MIT -->
 <!-- Copyright (c) 2025 dmitrymake -->
 <script lang="ts">
-  import * as MPD from "../lib/mpd";
+  import { setVolume } from "../lib/playerActions";
   import { status } from "../lib/store.js";
   import { ICONS } from "../lib/icons";
   import { getVolumeIcon, getPct } from "../lib/playerHelpers";
@@ -22,16 +22,16 @@
     if (e) e.stopPropagation();
     if ($status.volume > 0) {
       lastVolume = $status.volume;
-      MPD.setVolume(0);
+      setVolume(0);
     } else {
-      MPD.setVolume(lastVolume > 0 ? lastVolume : 30);
+      setVolume(lastVolume > 0 ? lastVolume : 30);
     }
   }
 
   function handleVolStart(e: MouseEvent | TouchEvent) {
     isDraggingVol = true;
     const vol = Math.round(getPct(e, volumeBar) * 100);
-    MPD.setVolume(vol);
+    setVolume(vol);
     window.addEventListener("mousemove", onVolMove);
     window.addEventListener("mouseup", onVolEnd);
     window.addEventListener("touchmove", onVolMove, { passive: false });
@@ -42,7 +42,7 @@
     if (!isDraggingVol) return;
     e.preventDefault();
     const vol = Math.round(getPct(e, volumeBar) * 100);
-    MPD.setVolume(vol);
+    setVolume(vol);
   }
 
   function onVolEnd() {

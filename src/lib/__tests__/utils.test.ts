@@ -1,44 +1,9 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2025 dmitrymake
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect } from "vitest";
 
-vi.mock("../constants", () => ({
-  API_ENDPOINTS: {
-    RADIO_LOGOS: (filename: string) => `/imagesw/radio-logos/thumbs/${encodeURIComponent(filename)}`,
-    COVER_ART: (path: string) => `/coverart.php/${encodeURI(path)}`,
-  },
-}));
-
-import { getStationImageUrl, generateUid } from "../utils.js";
+import { generateUid, formatClock, formatTotalDuration } from "../utils.js";
 import { getYandexIdFromUrl } from "../sources/yandexUri.js";
-
-describe("getStationImageUrl", () => {
-  it("returns null for null/undefined station", () => {
-    expect(getStationImageUrl(null as any)).toBeNull();
-    expect(getStationImageUrl(undefined as any)).toBeNull();
-  });
-
-  it("returns null if station has no image", () => {
-    expect(getStationImageUrl({ name: "Test" } as any)).toBeNull();
-  });
-
-  it("returns http URL directly", () => {
-    const station = { name: "Radio", image: "http://example.com/logo.png" };
-    expect(getStationImageUrl(station)).toBe("http://example.com/logo.png");
-  });
-
-  it("builds URL for local image", () => {
-    const station = { name: "Jazz FM", image: "local" };
-    const url = getStationImageUrl(station);
-    expect(url).toBe("/imagesw/radio-logos/thumbs/Jazz%20FM.jpg");
-  });
-
-  it("builds URL for custom image filename", () => {
-    const station = { name: "Radio", image: "custom_logo.png" };
-    const url = getStationImageUrl(station);
-    expect(url).toBe("/imagesw/radio-logos/thumbs/custom_logo.png");
-  });
-});
 
 describe("getYandexIdFromUrl", () => {
   it("returns null for empty input", () => {
@@ -93,5 +58,48 @@ describe("generateUid", () => {
       ids.add(generateUid());
     }
     expect(ids.size).toBe(100);
+  });
+});
+
+describe("formatClock (m:ss)", () => {
+  it("renders 0:00 for null/undefined/NaN", () => {
+    expect(formatClock(null)).toBe("0:00");
+    expect(formatClock(undefined)).toBe("0:00");
+    expect(formatClock(NaN)).toBe("0:00");
+  });
+
+  it("zero-pads the seconds field", () => {
+    expect(formatClock(5)).toBe("0:05");
+    expect(formatClock(65)).toBe("1:05");
+  });
+
+  it("floors fractional seconds", () => {
+    expect(formatClock(125.9)).toBe("2:05");
+  });
+
+  it("does not introduce an hours field — minutes accumulate past 60", () => {
+    // 1h 1m 1s renders as 61:01, matching the existing track-row format.
+    expect(formatClock(3661)).toBe("61:01");
+  });
+});
+
+describe("formatTotalDuration (collection runtime)", () => {
+  it("returns empty string for zero or unknown totals", () => {
+    expect(formatTotalDuration(0)).toBe("");
+    expect(formatTotalDuration(-5)).toBe("");
+    expect(formatTotalDuration(NaN)).toBe("");
+  });
+
+  it("renders only minutes under an hour", () => {
+    expect(formatTotalDuration(125)).toBe("2 min");
+  });
+
+  it("renders hours and minutes past an hour", () => {
+    // 1h 1m
+    expect(formatTotalDuration(3660)).toBe("1 hr 1 min");
+  });
+
+  it("drops residual seconds (rounds toward the minute)", () => {
+    expect(formatTotalDuration(7259)).toBe("2 hr 0 min");
   });
 });
