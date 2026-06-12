@@ -3,7 +3,23 @@
 ini_set('display_errors', 0);
 error_reporting(E_ALL);
 
-header('Access-Control-Allow-Origin: *');
+// Reflect the request Origin only when it matches the host the API is served from,
+// instead of a blanket "*", so cross-origin pages get no CORS grant for their
+// (preflighted) requests while the same-origin app is unaffected.
+function applyCorsOrigin() {
+    $origin = $_SERVER['HTTP_ORIGIN'] ?? '';
+    if (!$origin) return;
+    $oHost = parse_url($origin, PHP_URL_HOST);
+    $oPort = parse_url($origin, PHP_URL_PORT);
+    $oHostPort = $oHost . ($oPort ? ":$oPort" : "");
+    $host = $_SERVER['HTTP_HOST'] ?? '';
+    if ($oHostPort === $host || $oHost === $host) {
+        header("Access-Control-Allow-Origin: $origin");
+        header("Vary: Origin");
+    }
+}
+
+applyCorsOrigin();
 header('Access-Control-Allow-Methods: GET, POST, OPTIONS');
 header('Access-Control-Allow-Headers: Authorization, Content-Type, Accept-Language');
 

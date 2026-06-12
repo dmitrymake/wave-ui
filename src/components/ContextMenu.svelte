@@ -251,7 +251,7 @@
     flex-direction: column;
     overflow: hidden;
     border: 1px solid var(--c-border);
-    z-index: 10001;
+    z-index: var(--z-context-menu);
   }
 
   .menu-header {

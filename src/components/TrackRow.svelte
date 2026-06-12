@@ -1,9 +1,8 @@
 <!-- SPDX-License-Identifier: MIT -->
 <!-- Copyright (c) 2025 dmitrymake -->
 <script lang="ts">
-  import { fade } from "svelte/transition";
   import type { Track } from "../lib/types";
-  import ImageLoader from "./ImageLoader.svelte";
+  import TrackThumb from "./TrackThumb.svelte";
   import Skeleton from "./Skeleton.svelte";
   import LikeButton from "./LikeButton.svelte";
   import TrackPlaybackIndicator from "./TrackPlaybackIndicator.svelte";
@@ -14,7 +13,6 @@
     stations,
     currentSong,
     getTrackThumbUrl,
-    getTrackCoverUrl,
     openContextMenu,
     navigationStack,
     navigateTo,
@@ -48,9 +46,6 @@
   } = $props();
 
   let isHovering = $state(false);
-  let imgError = $state(false);
-
-  $effect(() => { if (track) imgError = false; });
 
   let isYandexTrack = $derived(track.isYandex || track.service === "yandex");
   let currentView = $derived($navigationStack[$navigationStack.length - 1]);
@@ -76,9 +71,7 @@
   let displayTitle = $derived(track.title || track.file?.split("/").pop());
   let duration = $derived(formatDuration(track.time));
   let quality = $derived(track.qualityBadge ? track.qualityBadge.split(" ")[0] : null);
-  let imgUrl = $derived(imgError
-    ? getTrackCoverUrl(track, $stations, null)
-    : getTrackThumbUrl(track, "sm", $stations, null));
+  let thumbKey = $derived(getTrackThumbUrl(track, "sm", $stations, null));
 
   function formatDuration(time: number | string | undefined) {
     if (isRadio) return "\u221e";
@@ -176,13 +169,9 @@
     {/if}
 
     <div class="thumb">
-      <ImageLoader src={imgUrl} alt={displayTitle} radius="4px" onError={() => (imgError = true)}>
-        {#snippet fallback()}
-          <div class="icon-ph" in:fade>
-            {@html isRadio ? ICONS.RADIO : ICONS.ALBUMS}
-          </div>
-        {/snippet}
-      </ImageLoader>
+      {#key thumbKey}
+        <TrackThumb {track} isRadio={!!isRadio} alt={displayTitle ?? ""} />
+      {/key}
     </div>
   </div>
 
@@ -328,15 +317,6 @@
     flex-shrink: 0;
     overflow: hidden;
   }
-  .icon-ph {
-    color: var(--c-icon-faint);
-    width: 100%;
-    height: 100%;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-  }
-  .icon-ph :global(svg) { width: 20px; height: 20px; }
 
   .info {
     flex: 1;

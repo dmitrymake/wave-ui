@@ -456,7 +456,7 @@
       position: fixed;
       inset: 0;
       background: var(--c-overlay-backdrop);
-      z-index: 999;
+      z-index: var(--z-sidebar);
       backdrop-filter: blur(4px);
     }
 

@@ -1,10 +1,27 @@
 <?php
 ini_set('display_errors', 0);
-set_time_limit(0); 
+set_time_limit(0);
 ignore_user_abort(true);
 
+// Reflect the request Origin only when it is the same host the API is served from,
+// instead of a blanket "*". A cross-origin page then gets no CORS grant, so its
+// (preflighted) JSON POSTs — e.g. save_token — are blocked, while the same-origin app
+// is unaffected in both production and the dev proxy.
+function applyCorsOrigin() {
+    $origin = $_SERVER['HTTP_ORIGIN'] ?? '';
+    if (!$origin) return;
+    $oHost = parse_url($origin, PHP_URL_HOST);
+    $oPort = parse_url($origin, PHP_URL_PORT);
+    $oHostPort = $oHost . ($oPort ? ":$oPort" : "");
+    $host = $_SERVER['HTTP_HOST'] ?? '';
+    if ($oHostPort === $host || $oHost === $host) {
+        header("Access-Control-Allow-Origin: $origin");
+        header("Vary: Origin");
+    }
+}
+
 header('Content-Type: application/json');
-header('Access-Control-Allow-Origin: *');
+applyCorsOrigin();
 header('Access-Control-Allow-Methods: GET, POST, OPTIONS');
 header('Access-Control-Allow-Headers: Content-Type, Authorization, Accept-Language');
 

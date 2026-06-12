@@ -42,7 +42,7 @@
 .sort-backdrop {
   position: fixed;
   inset: 0;
-  z-index: 9000;
+  z-index: var(--z-menu);
   background: transparent;
   cursor: default;
 }
@@ -63,7 +63,7 @@
   flex-direction: column;
   overflow: hidden;
   padding: 6px 0;
-  z-index: 9001;
+  z-index: calc(var(--z-menu) + 1);
 }
 
 .sort-item {

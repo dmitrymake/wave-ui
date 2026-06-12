@@ -97,6 +97,9 @@ export const THEMES: Theme[] = [
       "--z-modal": "2000",
       "--z-toast": "3000",
       "--z-drag-item": "9999",
+      "--z-sidebar": "999",
+      "--z-menu": "9000",
+      "--z-context-menu": "10001",
 
       "--trans-fast": "0.2s ease",
       "--trans-smooth": "0.3s cubic-bezier(0.2, 0.8, 0.2, 1)",
@@ -204,6 +207,9 @@ export const THEMES: Theme[] = [
       "--z-modal": "2000",
       "--z-toast": "3000",
       "--z-drag-item": "9999",
+      "--z-sidebar": "999",
+      "--z-menu": "9000",
+      "--z-context-menu": "10001",
 
       "--trans-fast": "0.2s ease",
       "--trans-smooth": "0.3s cubic-bezier(0.2, 0.8, 0.2, 1)",
