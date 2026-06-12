@@ -472,6 +472,12 @@
 .btn-primary {
   background: var(--c-accent);
   color: var(--c-text-primary);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+.btn-primary:disabled {
+  opacity: 0.6;
+  cursor: default;
 }
 
 .btn-secondary {
@@ -480,6 +486,9 @@
 }
 .btn-secondary:hover {
   background: var(--c-surface-button-hover);
+}
+.btn-secondary:active {
+  background: var(--c-surface-active);
 }
 
 .btn-action {
@@ -498,13 +507,14 @@
 
 .btn-action:hover {
   background: var(--c-surface-hover);
+  border-color: var(--c-text-primary);
 }
 
 /* Force icons in header actions to 18px */
 .btn-action :global(svg) {
   width: 18px !important;
   height: 18px !important;
-  stroke-width: 2;
+  stroke-width: 1.5;
 }
 
 /* Small icons in search/lists */

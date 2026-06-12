@@ -10,9 +10,9 @@ import {
   yandexContext,
   showToast,
 } from "../store";
-import { ApiActions } from "../api";
 import { YandexApi } from "../yandex";
 import { getYandexIdFromUrl } from "./yandexUri";
+import { API_ENDPOINTS } from "../constants";
 import { MSG } from "../messages";
 import { logger } from "../logger";
 import { registerTrackSource, type TrackSource } from "./trackSource";
@@ -34,6 +34,35 @@ function trimStreamCache(
   return trimmed;
 }
 
+async function getYandexMeta(url: string): Promise<Record<string, unknown> | null> {
+  try {
+    const res = await fetch(
+      API_ENDPOINTS.YANDEX + "?action=get_meta&url=" + encodeURIComponent(url),
+    );
+    if (res.ok) return await res.json();
+  } catch (e) {
+    logger.warn("[Yandex] Failed to fetch meta:", e);
+  }
+  return null;
+}
+
+async function batchGetYandexMeta(
+  urls: string[],
+): Promise<Record<string, Record<string, unknown> | null>> {
+  if (!urls.length) return {};
+  try {
+    const res = await fetch(API_ENDPOINTS.YANDEX + "?action=batch_get_meta", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ urls }),
+    });
+    if (res.ok) return await res.json();
+  } catch (e) {
+    logger.warn("[Yandex] Failed to batch-fetch meta:", e);
+  }
+  return {};
+}
+
 async function fetchMetaBatch(urls: string[]): Promise<void> {
   const yCtx: YandexContext = get(yandexContext);
   const missing = urls.filter((u) => {
@@ -44,7 +73,7 @@ async function fetchMetaBatch(urls: string[]): Promise<void> {
   });
   if (!missing.length) return;
 
-  const results = await ApiActions.batchGetYandexMeta(missing);
+  const results = await batchGetYandexMeta(missing);
   for (const url of Object.keys(results)) {
     const meta = results[url];
     if (!meta) continue;
@@ -112,7 +141,7 @@ async function fetchMetaForTrack(url: string): Promise<void> {
   const tId: string | null = getYandexIdFromUrl(url);
   if (tId && yCtx.streamCache && yCtx.streamCache[tId]) return;
 
-  const meta = await ApiActions.getYandexMeta(url);
+  const meta = await getYandexMeta(url);
   if (meta) {
     const cacheEntry = {
       id: String(meta.id ?? ""),

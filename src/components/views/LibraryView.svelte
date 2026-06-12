@@ -3,7 +3,9 @@
 <script lang="ts">
   import { fade, scale } from "svelte/transition";
   import { writable } from "svelte/store";
-  import { db } from "../../lib/db";
+  import { sortItems } from "../../lib/librarySort";
+  import { loadLibraryView } from "../../lib/libraryData";
+  import { logger } from "../../lib/logger";
   import {
     navigationStack,
     navigateTo,
@@ -21,7 +23,7 @@
 
   let { activeCategory = "artists" }: { activeCategory?: string } = $props();
 
-  const itemsStore = writable([]);
+  const itemsStore = writable<LibraryItem[]>([]);
   let isLoading = $state(true);
   let searchTerm = $state("");
 
@@ -45,8 +47,8 @@
   let headerSubtitle = $state("");
   let trackCount = $state(0);
 
-  // Race condition protection
-  let lastRequestId = 0;
+  // Cancels a slower in-flight load when a newer one starts.
+  let loadAbort: AbortController | null = null;
 
   let currentSortIcon = $derived(
     sortOption === "year_desc" ? ICONS.SORT_ASC : ICONS.SORT_DESC);
@@ -93,141 +95,40 @@
     isSortMenuOpen = false;
   }
 
-  function sortItems(items: LibraryItem[], option: string): LibraryItem[] {
-    if (!items || items.length === 0) return [];
-
-    const sorted = [...items].sort((a, b) => {
-      switch (option) {
-        case "name":
-          return a.displayName.localeCompare(b.displayName, undefined, {
-            sensitivity: "base",
-          });
-
-        case "artist":
-          const artA = a.artist || "";
-          const artB = b.artist || "";
-          const cmp = artA.localeCompare(artB, undefined, {
-            sensitivity: "base",
-          });
-          if (cmp !== 0) return cmp;
-          return (parseInt(a.year) || 0) - (parseInt(b.year) || 0);
-
-        case "year":
-          return (parseInt(a.year) || 0) - (parseInt(b.year) || 0);
-
-        case "year_desc":
-          return (parseInt(b.year) || 0) - (parseInt(a.year) || 0);
-
-        default:
-          return 0;
-      }
-    });
-
-    if (option === "artist") {
-      const grouped = [];
-      let lastArtist = null;
-
-      sorted.forEach((item) => {
-        const currentArtist = item.artist || "Unknown Artist";
-        if (currentArtist !== lastArtist) {
-          grouped.push({
-            _uid: `header-${currentArtist}`,
-            isHeader: true,
-            title: currentArtist,
-          });
-          lastArtist = currentArtist;
-        }
-        grouped.push(item);
-      });
-      return grouped;
-    }
-
-    return sorted;
-  }
-
   async function loadContent(category: string, viewState: NavigationEntry | undefined) {
     if (!viewState) return;
 
-    const requestId = ++lastRequestId;
+    loadAbort?.abort();
+    const ctrl = new AbortController();
+    loadAbort = ctrl;
 
     isLoading = true;
     itemsStore.set([]);
-
     headerItem = viewState.data;
     headerTotalDuration = "";
     headerQuality = "";
     headerSubtitle = "";
     trackCount = 0;
 
-    console.log(`[LibraryView #${requestId}] Start loading:`, viewState);
+    if (viewState.view === "albums_by_artist") sortOption = "year";
 
     try {
-      let data = [];
+      const { items, header } = await loadLibraryView(category, viewState);
+      if (ctrl.signal.aborted) return;
 
-      if (viewState.view === "root") {
-        data =
-          category === "artists" ? await db.getArtists() : await db.getAlbums();
-      } else if (viewState.view === "albums_by_artist") {
-        const artistName = viewState.data.name || viewState.data;
-        data = await db.getArtistAlbums(artistName);
-        sortOption = "year";
-      } else if (viewState.view === "tracks_by_album") {
-        const albumName = viewState.data.name || viewState.data;
-        const artistName = viewState.data.artist;
-        data = await db.getAlbumTracks(albumName, artistName);
-      }
-
-      if (requestId !== lastRequestId) {
-        console.warn(`[LibraryView #${requestId}] Request cancelled (stale).`);
-        return;
-      }
-
-      const enriched = data.map((item, idx) => {
-        const isString = typeof item === "string";
-        const obj = isString ? { name: item } : item;
-
-        let yStr = String(obj.year || "");
-        if (yStr.length > 4) yStr = yStr.substring(0, 4);
-
-        return {
-          ...obj,
-          displayName: obj.name || obj.title || obj.artist || "Unknown",
-          thumbFile: obj.file || null,
-          year: yStr,
-          _uid: (obj.file || obj.name || idx) + category + viewState.view,
-        };
-      });
-
-      console.log(
-        `[LibraryView #${requestId}] Setting ${enriched.length} items.`,
-      );
-      itemsStore.set(enriched);
-
-      if (viewState.view === "tracks_by_album" && enriched.length > 0) {
-        headerItem = enriched[0];
-        trackCount = enriched.length;
-        headerSubtitle = enriched[0].year;
-
-        const totalSec = enriched.reduce((acc, t) => acc + (t.time || 0), 0);
-        if (totalSec > 0) {
-          const h = Math.floor(totalSec / 3600);
-          const m = Math.floor((totalSec % 3600) / 60);
-          headerTotalDuration = h > 0 ? `${h} hr ${m} min` : `${m} min`;
-        }
-
-        if (enriched[0].qualityBadge) {
-          headerQuality = enriched[0].qualityBadge;
-        }
-      }
+      itemsStore.set(items);
+      if (header.headerItem) headerItem = header.headerItem;
+      trackCount = header.trackCount;
+      headerTotalDuration = header.totalDuration;
+      headerQuality = header.quality;
+      headerSubtitle = header.subtitle;
     } catch (e) {
-      if (requestId === lastRequestId) {
-        console.error(e);
+      if (!ctrl.signal.aborted) {
+        logger.error(e);
         itemsStore.set([]);
       }
     } finally {
-      if (requestId === lastRequestId) {
-        isLoading = false;
-      }
+      if (!ctrl.signal.aborted) isLoading = false;
     }
   }
 

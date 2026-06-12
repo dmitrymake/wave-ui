@@ -94,6 +94,13 @@ function resetDaemon() {
     debug("Daemon Reset Complete.");
 }
 
+// Normalize a Yandex cover URI (`...%%` template) to an absolute 400x400 URL.
+function yandexCoverUrl($uri, $size = '400x400') {
+    if (!$uri) return null;
+    $u = str_replace('%%', $size, (string)$uri);
+    return strpos($u, 'http') === 0 ? $u : 'https://' . $u;
+}
+
 function formatTrack($t) {
     if (!$t || !is_array($t)) return null;
     if (isset($t['isYandex']) && $t['isYandex'] === true) return $t;
@@ -112,11 +119,7 @@ function formatTrack($t) {
     $cover = null;
     if (!empty($t['ogImage'])) $cover = $t['ogImage'];
     elseif (!empty($t['coverUri'])) $cover = $t['coverUri'];
-    
-    if ($cover) {
-        $cover = str_replace('%%', '400x400', $cover);
-        if (strpos($cover, 'http') !== 0) $cover = 'https://' . $cover;
-    }
+    $cover = yandexCoverUrl($cover);
 
     return [
         'title'    => $t['title'] ?? 'Unknown Title',
@@ -135,6 +138,26 @@ function cacheTrackMeta($url, $track) {
     $formatted = formatTrack($track);
     if (!$formatted) return;
     storeTrackMeta($formatted, $url, null);
+}
+
+/**
+ * Materialize the first $limit tracks into MPD (download link + add) and stash the
+ * rest into $initialBuffer for the daemon to page later. Shared by play_station and
+ * play_playlist so the buffer-handoff contract lives in one place. Returns 'added',
+ * 'failed' (no stream url) or 'stashed'.
+ */
+function bufferTrack($clean, $api, $limit, &$count, &$initialBuffer, $stashAsYandexUri = false) {
+    if ($count < $limit) {
+        $url = $api->getDirectLink($clean['id']);
+        if (!$url) return 'failed';
+        cacheTrackMeta($url, $clean);
+        mpdAdd($url);
+        $count++;
+        return 'added';
+    }
+    $initialBuffer[] = $clean;
+    if ($stashAsYandexUri) cacheTrackMeta("yandex:" . $clean['id'], $clean);
+    return 'stashed';
 }
 
 try {
@@ -184,7 +207,7 @@ try {
             $albums = [];
             if (isset($res['albums']['results'])) {
                 foreach ($res['albums']['results'] as $a) {
-                    $cover = isset($a['coverUri']) ? "https://" . str_replace('%%', '400x400', $a['coverUri']) : null;
+                    $cover = isset($a['coverUri']) ? yandexCoverUrl($a['coverUri']) : null;
                     $artist = $a['artists'][0]['name'] ?? 'Unknown';
                     $albums[] = [
                         'title' => $a['title'],
@@ -199,7 +222,7 @@ try {
             $artists = [];
             if (isset($res['artists']['results'])) {
                 foreach ($res['artists']['results'] as $a) {
-                    $cover = isset($a['cover']['uri']) ? "https://" . str_replace('%%', '400x400', $a['cover']['uri']) : null;
+                    $cover = isset($a['cover']['uri']) ? yandexCoverUrl($a['cover']['uri']) : null;
                     $artists[] = [
                         'title' => $a['name'],
                         'id' => (string)$a['id'],
@@ -226,7 +249,7 @@ try {
                         foreach ($item['station']['restrictions2']['moodEnergy']['possibleValues'] as $m) {
                             if ($m['value'] === 'all') continue;
                             $img = $m['image']['src'] ?? $m['imageUrl'] ?? null;
-                            if ($img) $img = "https://" . str_replace('%%', '400x400', $img);
+                            if ($img) $img = yandexCoverUrl($img);
                             
                             $stations[] = [
                                 'title' => $m['name'],
@@ -244,7 +267,7 @@ try {
                 
                 if (isset($item['station']['name']) && $tag !== 'onyourwave') {
                     $img = $item['station']['icon']['imageUrl'] ?? null;
-                    if ($img) $img = "https://" . str_replace('%%', '400x400', $img);
+                    if ($img) $img = yandexCoverUrl($img);
                     $stations[] = [
                         'title' => $item['station']['name'],
                         'id' => $item['station']['id']['type'] . ':' . $item['station']['id']['tag'],
@@ -273,9 +296,9 @@ try {
                 if (empty($pl['title'])) continue;
                 $cover = null;
                 if (isset($pl['cover']['uri'])) {
-                    $cover = "https://" . str_replace('%%', '400x400', $pl['cover']['uri']);
+                    $cover = yandexCoverUrl($pl['cover']['uri']);
                 } elseif (isset($pl['cover']['itemsUri'][0])) {
-                    $cover = "https://" . str_replace('%%', '400x400', $pl['cover']['itemsUri'][0]);
+                    $cover = yandexCoverUrl($pl['cover']['itemsUri'][0]);
                 }
                 $result[] = [
                     'title' => $pl['title'],
@@ -312,7 +335,7 @@ try {
             $data['tracks'] = array_map('formatTrack', $data['tracks']);
             $cleanAlbums = [];
             foreach ($data['albums'] as $a) {
-                $cover = isset($a['coverUri']) ? "https://" . str_replace('%%', '400x400', $a['coverUri']) : null;
+                $cover = isset($a['coverUri']) ? yandexCoverUrl($a['coverUri']) : null;
                 $cleanAlbums[] = [
                     'title' => $a['title'],
                     'id' => (string)$a['id'],
@@ -323,7 +346,7 @@ try {
             }
             $data['albums'] = $cleanAlbums;
             if (isset($data['artist']['cover']['uri'])) {
-                $data['cover'] = "https://" . str_replace('%%', '400x400', $data['artist']['cover']['uri']);
+                $data['cover'] = yandexCoverUrl($data['artist']['cover']['uri']);
             }
             echo json_encode($data);
             break;
@@ -334,7 +357,7 @@ try {
             $res = [
                 'title' => $info['title'],
                 'artist' => $info['artists'][0]['name'] ?? 'Unknown',
-                'cover' => isset($info['coverUri']) ? "https://" . str_replace('%%', '400x400', $info['coverUri']) : null,
+                'cover' => isset($info['coverUri']) ? yandexCoverUrl($info['coverUri']) : null,
                 'year' => $info['year'] ?? '',
                 'tracks' => array_map('formatTrack', $data['tracks'])
             ];
@@ -427,17 +450,8 @@ try {
                 if (!$clean) continue;
                 if (in_array((string)$clean['id'], $globalHistory)) continue;
 
-                if ($count < 5) {
-                    $url = $api->getDirectLink($clean['id']);
-                    if ($url) {
-                        cacheTrackMeta($url, $clean);
-                        mpdAdd($url);
-                        $count++;
-                        $newHistory[] = (string)$clean['id'];
-                    }
-                } else {
-                    $initialBuffer[] = $clean;
-                    cacheTrackMeta("yandex:" . $clean['id'], $clean);
+                if (bufferTrack($clean, $api, 5, $count, $initialBuffer, true) === 'added') {
+                    $newHistory[] = (string)$clean['id'];
                 }
                 if (count($initialBuffer) >= 20) break;
             }
@@ -447,11 +461,7 @@ try {
                 foreach ($tracks as $clean) {
                     if (!$clean) continue;
                     if (in_array((string)$clean['id'], $newHistory)) continue;
-                    $url = $api->getDirectLink($clean['id']);
-                    if ($url) {
-                        cacheTrackMeta($url, $clean);
-                        mpdAdd($url);
-                        $count++;
+                    if (bufferTrack($clean, $api, 5, $count, $initialBuffer, true) === 'added') {
                         $newHistory[] = (string)$clean['id'];
                         if ($count >= 5) break;
                     }
@@ -489,16 +499,7 @@ try {
             foreach ($tracks as $t) {
                 $cleanTrack = formatTrack($t);
                 if (!$cleanTrack) continue;
-                if ($count < 5) {
-                    $url = $api->getDirectLink($cleanTrack['id']);
-                    if ($url) {
-                        cacheTrackMeta($url, $cleanTrack);
-                        mpdAdd($url);
-                        $count++;
-                    }
-                } else {
-                    $initialBuffer[] = $cleanTrack;
-                }
+                bufferTrack($cleanTrack, $api, 5, $count, $initialBuffer, false);
             }
             mpdSend("play");
             saveState([

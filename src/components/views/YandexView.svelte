@@ -5,6 +5,7 @@
   import { fade } from "svelte/transition";
   import { writable, get } from "svelte/store";
   import { YandexApi, isYandexAuthError, type PlaylistSource } from "../../lib/yandex";
+  import { ViewCache } from "../../lib/yandexViewCache";
   import {
     yandexAuthStatus,
     showToast,
@@ -78,20 +79,11 @@
     playlistContext?: typeof currentPlaylistContext;
     canLoadMore?: boolean;
   }
-  const viewCache = new Map<string, ViewCacheEntry>();
-  const MAX_CACHE_SIZE = 20;
-
-  function getCacheKey(mode: string, data: Record<string, unknown> | null): string {
-    return mode + JSON.stringify(data || {});
-  }
-
-  function saveToCache(key: string, entry: ViewCacheEntry) {
+  const viewCache = new ViewCache<ViewCacheEntry>(20);
+  const getCacheKey = (mode: string, data: Record<string, unknown> | null) =>
+    viewCache.key(mode, data);
+  const saveToCache = (key: string, entry: ViewCacheEntry) =>
     viewCache.set(key, entry);
-    if (viewCache.size > MAX_CACHE_SIZE) {
-      const firstKey = viewCache.keys().next().value;
-      if (firstKey) viewCache.delete(firstKey);
-    }
-  }
 
   function restoreFromCache(key: string): boolean {
     const cached = viewCache.get(key);
@@ -487,6 +479,14 @@
         if (viewMode !== "search") {
           navigateTo("yandex_search", { query: val });
         } else {
+          // Keep the active stack entry's query in sync so the view-cache key matches
+          // the current term (otherwise back-navigation can restore stale results).
+          const stack = get(navigationStack);
+          const active = stack[stack.length - 1];
+          if (active) {
+            active.data = { ...active.data, query: val };
+            navigationStack.set(stack);
+          }
           performSearch();
         }
       }, 600);

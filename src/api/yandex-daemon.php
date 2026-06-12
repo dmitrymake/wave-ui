@@ -108,6 +108,31 @@ function saveState($state) {
     fclose($fp);
 }
 
+/**
+ * Atomically read-modify-write the daemon state under a single exclusive lock,
+ * closing the race window between a separate getState()/saveState() pair. $mutate
+ * receives the FRESHEST state and returns the new state, or null to skip the write
+ * (e.g. when a concurrent API call has already flipped 'active' off). No blocking
+ * I/O may run inside $mutate — it executes while the lock is held.
+ */
+function updateState(callable $mutate) {
+    $fp = fopen(STATE_FILE, 'c+');
+    if (!$fp) return;
+    if (flock($fp, LOCK_EX)) {
+        $json = stream_get_contents($fp);
+        $state = json_decode($json, true) ?: [];
+        $new = $mutate($state);
+        if ($new !== null) {
+            ftruncate($fp, 0);
+            rewind($fp);
+            fwrite($fp, json_encode($new));
+            fflush($fp);
+        }
+        flock($fp, LOCK_UN);
+    }
+    fclose($fp);
+}
+
 function updateMetaCache($url, $track, $localPath = null) {
     storeTrackMeta($track, $url, $localPath);
 }
@@ -236,6 +261,43 @@ function isYandexFile($file) {
     return strpos($file, 'yandex') !== false
         || strpos($file, 'get-mp3') !== false
         || strpos($file, TRACKS_DIR) === 0;
+}
+
+/**
+ * De-duplicate a fresh batch of station tracks against the play history. Falls back
+ * to "not among the most recent 30 plays", then to the raw batch, so playback never
+ * stalls when the entire history filters everything out.
+ */
+function filterByHistory($newTracks, $history) {
+    $buffer = [];
+    $seen = [];
+    foreach ($newTracks as $nt) {
+        $tid = (string)$nt['id'];
+        if (isset($seen[$tid])) continue;          // de-dup within this batch
+        if (!in_array($tid, $history)) {
+            $seen[$tid] = true;
+            $buffer[] = $nt;
+        }
+    }
+    if (!empty($buffer)) return $buffer;
+
+    // Soft fallback: allow tracks that are NOT among the most recent plays.
+    $recent = array_slice($history, -30);
+    foreach ($newTracks as $nt) {
+        $tid = (string)$nt['id'];
+        if (isset($seen[$tid])) continue;
+        if (!in_array($tid, $recent)) {
+            $seen[$tid] = true;
+            $buffer[] = $nt;
+        }
+    }
+    if (!empty($buffer)) {
+        logMsg("History soft-fallback: " . count($buffer) . " not-recent tracks");
+        return $buffer;
+    }
+
+    logMsg("All station tracks recently played; accepting batch as-is");
+    return $newTracks;
 }
 
 // Singleton guard: a second daemon instance would double-add tracks and race on
@@ -384,47 +446,19 @@ while (true) {
                     $batchId = $result['batchId'];
 
                     if (!empty($newTracks)) {
-                        $newBuffer = [];
-                        $seen = [];
-                        foreach ($newTracks as $nt) {
-                            $tid = (string)$nt['id'];
-                            if (isset($seen[$tid])) continue;          // de-dup within this batch
-                            if (!in_array($tid, $history)) {
-                                $seen[$tid] = true;
-                                $newBuffer[] = $nt;
-                            }
-                        }
-                        // Soft fallback: if the full history filtered everything out,
-                        // allow tracks that are NOT among the most recent plays — so we
-                        // keep going without repeating what was just heard. Accept the
-                        // batch as-is only as a last resort.
-                        if (empty($newBuffer)) {
-                            $recent = array_slice($history, -30);
-                            foreach ($newTracks as $nt) {
-                                $tid = (string)$nt['id'];
-                                if (isset($seen[$tid])) continue;
-                                if (!in_array($tid, $recent)) {
-                                    $seen[$tid] = true;
-                                    $newBuffer[] = $nt;
-                                }
-                            }
-                            if (empty($newBuffer)) {
-                                logMsg("All station tracks recently played; accepting batch as-is");
-                                $newBuffer = $newTracks;
-                            } else {
-                                logMsg("History soft-fallback: " . count($newBuffer) . " not-recent tracks");
-                            }
-                        }
-                        // Re-read state to avoid overwriting concurrent changes
+                        $newBuffer = filterByHistory($newTracks, $history);
+                        // Atomically write the refilled buffer; skip if a concurrent
+                        // API call has deactivated the daemon meanwhile.
+                        $applied = false;
+                        updateState(function($s) use ($newBuffer, $batchId, &$applied) {
+                            if (empty($s['active'])) return null;
+                            $s['queue_buffer'] = $newBuffer;
+                            if ($batchId) $s['batch_id'] = $batchId;
+                            $applied = true;
+                            return $s;
+                        });
+                        if (!$applied) continue;
                         $state = getState();
-                        if (empty($state['active'])) {
-                             continue;
-                        }
-                        $state['queue_buffer'] = $newBuffer;
-                        if ($batchId) {
-                            $state['batch_id'] = $batchId;
-                        }
-                        saveState($state);
                         $buffer = $newBuffer;
                         logMsg("Buffer refilled with " . count($newBuffer) . " tracks (batchId=$batchId)");
                     } else {
@@ -559,14 +593,18 @@ while (true) {
                 }
             }
 
-            // Always persist buffer when tracks were consumed (added, skipped or deduped)
+            // Always persist buffer when tracks were consumed (added, skipped or deduped).
+            // Atomic read-check-write under one lock: a concurrent API call (stop_daemon
+            // / add_tracks) that fired during the download window above is seen here, so a
+            // stopped daemon is not resurrected by this write.
             if ($added > 0 || $skipped > 0 || $deduped > 0) {
-                $currentState = getState();
-                if (!empty($currentState['active'])) {
-                    $currentState['queue_buffer'] = $buffer;
-                    $currentState['played_history'] = $state['played_history'] ?? ($currentState['played_history'] ?? []);
-                    saveState($currentState);
-                }
+                $newHistory = $state['played_history'] ?? null;
+                updateState(function($s) use ($buffer, $newHistory) {
+                    if (empty($s['active'])) return null;
+                    $s['queue_buffer'] = $buffer;
+                    $s['played_history'] = $newHistory ?? ($s['played_history'] ?? []);
+                    return $s;
+                });
             }
 
             // Resume playback if MPD was stopped (end of queue) and we just added tracks

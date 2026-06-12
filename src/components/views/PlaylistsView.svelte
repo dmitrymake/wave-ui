@@ -19,8 +19,7 @@
   } from "../../lib/store";
   import Skeleton from "../Skeleton.svelte";
   import * as MPD from "../../lib/mpd";
-  import { MpdParser } from "../../lib/mpd/parser";
-  import { mpdClient } from "../../lib/mpd/client";
+  import { searchPlaylists } from "../../lib/playlistSearch";
   import { LibraryActions } from "../../lib/mpd/library";
   import { ICONS } from "../../lib/icons";
   import TrackRow from "../TrackRow.svelte";
@@ -38,7 +37,7 @@
   let searchTerm = $state("");
   let isDeepSearching = $state(false);
   let searchDebounceTimer: ReturnType<typeof setTimeout> | undefined;
-  let currentSearchId = 0;
+  let searchAbort: AbortController | null = null;
 
   let matchedPlaylists = $state<Playlist[]>([]);
   let searchResultsGrouped = $state<{ playlist: Playlist; tracks: Track[] }[]>([]);
@@ -86,56 +85,27 @@
   async function performDeepSearch(query: string) {
     if (!query) return;
 
-    currentSearchId++;
-    const searchId = currentSearchId;
+    searchAbort?.abort();
+    const ctrl = new AbortController();
+    searchAbort = ctrl;
     isDeepSearching = true;
-    const q = query.toLowerCase();
 
     matchedPlaylists = $playlists.filter((p) =>
-      p.name.toLowerCase().includes(q),
+      p.name.toLowerCase().includes(query.toLowerCase()),
     );
 
-    let newGroups = [];
-    const targets = $playlists.filter((p) => p.name !== "Favorites");
+    const { groups } = await searchPlaylists(
+      query,
+      $playlists,
+      ctrl.signal,
+      (g) => {
+        if (!ctrl.signal.aborted) searchResultsGrouped = g;
+      },
+    );
 
-    for (const pl of targets) {
-      if (searchId !== currentSearchId) break;
-
-      try {
-        const raw = await mpdClient.send(
-          `listplaylistinfo "${pl.name.replace(/"/g, '\\"')}"`,
-        );
-        const tracks = MpdParser.parseTracks(raw);
-
-        const tracksWithPos = tracks.map((t, i) => ({ ...t, playlistPos: i }));
-
-        const matches = tracksWithPos.filter(
-          (t) =>
-            (t.title && t.title.toLowerCase().includes(q)) ||
-            (t.artist && t.artist.toLowerCase().includes(q)),
-        );
-
-        if (matches.length > 0) {
-          const processedMatches = matches.map((t) => ({
-            ...t,
-            _uid: `${pl.name}-${t.playlistPos}`,
-          }));
-
-          newGroups.push({
-            playlist: pl,
-            tracks: processedMatches,
-          });
-
-          searchResultsGrouped = [...newGroups];
-        }
-      } catch (e) {
-        console.warn(`Failed to search in playlist ${pl.name}`, e);
-      }
-    }
-
-    if (searchId === currentSearchId) {
-      isDeepSearching = false;
-    }
+    if (ctrl.signal.aborted) return;
+    searchResultsGrouped = groups;
+    isDeepSearching = false;
   }
 
   function playTrack(track: Track) {

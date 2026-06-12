@@ -207,37 +207,6 @@ export const ApiActions = {
     }
   },
 
-  async getYandexMeta(url: string): Promise<Record<string, unknown> | null> {
-    try {
-      const res = await fetch(
-        API_ENDPOINTS.YANDEX +
-          "?action=get_meta&url=" +
-          encodeURIComponent(url),
-      );
-      if (res.ok) return await res.json();
-    } catch (e) {
-      logger.warn("[API] Failed to fetch Yandex meta:", e);
-    }
-    return null;
-  },
-
-  async batchGetYandexMeta(
-    urls: string[],
-  ): Promise<Record<string, Record<string, unknown> | null>> {
-    if (!urls.length) return {};
-    try {
-      const res = await fetch(API_ENDPOINTS.YANDEX + "?action=batch_get_meta", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ urls }),
-      });
-      if (res.ok) return await res.json();
-    } catch (e) {
-      logger.warn("[API] Failed to batch-fetch Yandex meta:", e);
-    }
-    return {};
-  },
-
   async getYandexDebugDump(): Promise<Record<string, unknown>> {
     const res = await fetch(API_ENDPOINTS.YANDEX + "?action=debug_dump");
     if (!res.ok) throw new Error("debug_dump request failed");

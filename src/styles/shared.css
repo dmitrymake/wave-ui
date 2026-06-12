@@ -239,74 +239,9 @@ input[type="range"]:hover::-webkit-slider-thumb {
    UNIFIED BUTTONS & BADGES
    ========================================= */
 
-/* --- Action Buttons (Edit, Save, etc) --- */
-.btn-action {
-  width: 40px;
-  height: 40px;
-  border-radius: 50%;
-  background: transparent;
-  border: 1px solid var(--c-border); 
-  color: var(--c-text-secondary);    
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  transition: all var(--trans-fast);
-}
-.btn-action:hover {
-  border-color: var(--c-text-primary);
-  color: var(--c-text-primary);
-  background: var(--c-surface-hover);
-}
-.btn-action.active {
-  background: var(--c-accent);
-  border-color: var(--c-accent);
-  color: var(--c-text-primary);
-}
-.btn-action :global(svg) {
-  width: 20px;
-  height: 20px;
-}
-
-/* --- Primary Button (Filled) --- */
-.btn-primary {
-  background: var(--c-accent);
-  color: var(--c-text-primary);
-  border: none;
-  padding: 12px 32px;
-  border-radius: 30px; 
-  font-size: 14px;
-  font-weight: 600;
-  cursor: pointer;
-  transition: transform var(--trans-fast), opacity var(--trans-fast);
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-}
-.btn-primary:active {
-  transform: scale(0.97);
-}
-.btn-primary:disabled {
-  opacity: 0.6;
-  cursor: default;
-}
-
-.btn-secondary {
-  background: transparent;
-  border: 1px solid var(--c-border-bright);
-  color: var(--c-text-primary);
-  padding: 11px 24px;
-  border-radius: 30px;
-  font-size: 14px;
-  font-weight: 600;
-  cursor: pointer;
-  transition: background var(--trans-fast);
-}
-.btn-secondary:hover {
-  border-color: var(--c-text-primary);
-}
-.btn-secondary:active {
-  background: var(--c-surface-active);
-}
+/* .btn-primary / .btn-secondary / .btn-action are defined once in MusicViews.css
+   (loaded after this file) — kept there to avoid the import-order cascade. The
+   responsive overrides for them live in the media query further down. */
 
 /* --- Header Actions Container --- */
 .header-actions {
