@@ -52,28 +52,55 @@ function getToken() {
     return file_exists(TOKEN_FILE) ? trim(file_get_contents(TOKEN_FILE)) : null;
 }
 
+// Atomic read-merge-write under an exclusive lock. The daemon writes STATE_FILE
+// under LOCK_EX (updateState/saveState); without the same lock here, this side's
+// read-modify-write could interleave with a daemon refill and clobber its
+// queue_buffer/played_history (or read a half-written file).
 function saveState($data) {
     if (!is_dir(STORAGE_DIR)) @mkdir(STORAGE_DIR, 0777, true);
-    $current = [];
-    if (file_exists(STATE_FILE)) $current = json_decode(file_get_contents(STATE_FILE), true) ?: [];
-    $newState = array_merge($current, $data);
-    file_put_contents(STATE_FILE, json_encode($newState));
+    $fp = fopen(STATE_FILE, 'c+');
+    if (!$fp) return;
+    if (flock($fp, LOCK_EX)) {
+        $current = json_decode(stream_get_contents($fp), true) ?: [];
+        $newState = array_merge($current, $data);
+        ftruncate($fp, 0);
+        rewind($fp);
+        fwrite($fp, json_encode($newState));
+        fflush($fp);
+        flock($fp, LOCK_UN);
+    }
+    fclose($fp);
 }
 
 function getState() {
-    return file_exists(STATE_FILE) ? json_decode(file_get_contents(STATE_FILE), true) : [];
+    if (!file_exists(STATE_FILE)) return [];
+    $fp = fopen(STATE_FILE, 'r');
+    if (!$fp) return [];
+    $state = [];
+    if (flock($fp, LOCK_SH)) {
+        $state = json_decode(stream_get_contents($fp), true) ?: [];
+        flock($fp, LOCK_UN);
+    }
+    fclose($fp);
+    return $state;
 }
 
 function mpdSend($cmd) {
     $fp = @fsockopen("localhost", 6600, $errno, $errstr, 5);
     if (!$fp) return false;
-    fgets($fp); 
+    // Bound the READ too, not just the connect: a stalled MPD (accepted the socket
+    // but never replies) would otherwise block fgets indefinitely.
+    stream_set_timeout($fp, 5);
+    fgets($fp);
     fwrite($fp, "$cmd\n");
     $resp = "";
     while (!feof($fp)) {
-        $line = fgets($fp); 
+        $line = fgets($fp);
+        if ($line === false) break;
         $resp .= $line;
         if (strpos($line, 'OK') === 0 || strpos($line, 'ACK') === 0) break;
+        $meta = stream_get_meta_data($fp);
+        if (!empty($meta['timed_out'])) break;
     }
     fclose($fp);
     return $resp;
@@ -96,7 +123,18 @@ function resetDaemon() {
         'queue_buffer' => [],
         'context_name' => 'Stopped'
     ];
-    file_put_contents(STATE_FILE, json_encode($blankState));
+    // Full replace under the same exclusive lock the daemon uses, so a reset cannot
+    // interleave with a daemon write and leave a half-blanked state.
+    $fp = fopen(STATE_FILE, 'c');
+    if ($fp) {
+        if (flock($fp, LOCK_EX)) {
+            ftruncate($fp, 0);
+            fwrite($fp, json_encode($blankState));
+            fflush($fp);
+            flock($fp, LOCK_UN);
+        }
+        fclose($fp);
+    }
     usleep(200000);
     mpdSend("stop");
     mpdSend("clear");
@@ -120,35 +158,10 @@ function yandexCoverUrl($uri, $size = '400x400') {
 
 function formatTrack($t) {
     if (!$t || !is_array($t)) return null;
+    // Already-formatted tracks (re-passed through the buffer/cache path) pass through.
     if (isset($t['isYandex']) && $t['isYandex'] === true) return $t;
-
-    $id = (string)($t['id'] ?? '');
-    if (!$id) return null;
-
-    $artistName = 'Unknown Artist';
-    if (!empty($t['artists'])) {
-        $names = array_map(function($a) { return $a['name']; }, $t['artists']);
-        $artistName = implode(', ', $names);
-    } elseif (isset($t['artist'])) {
-        $artistName = is_array($t['artist']) ? ($t['artist']['name'] ?? '') : $t['artist'];
-    }
-
-    $cover = null;
-    if (!empty($t['ogImage'])) $cover = $t['ogImage'];
-    elseif (!empty($t['coverUri'])) $cover = $t['coverUri'];
-    $cover = yandexCoverUrl($cover);
-
-    return [
-        'title'    => $t['title'] ?? 'Unknown Title',
-        'artist'   => $artistName,
-        'album'    => $t['album']['title'] ?? ($t['album'] ?? ''),
-        'id'       => $id,
-        'file'     => "yandex:" . $id,
-        'image'    => $cover,
-        'isYandex' => true,
-        'service'  => 'yandex',
-        'time'     => isset($t['durationMs']) ? ($t['durationMs'] / 1000) : ($t['time'] ?? 0)
-    ];
+    if (empty($t['id'])) return null;
+    return yandexFormatTrack($t);
 }
 
 function cacheTrackMeta($url, $track) {

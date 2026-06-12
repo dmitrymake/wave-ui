@@ -3,6 +3,7 @@
 <script lang="ts">
   import { fade, scale } from "svelte/transition";
   import { writable } from "svelte/store";
+  import type { Writable } from "svelte/store";
   import { sortItems } from "../../lib/librarySort";
   import { loadLibraryView } from "../../lib/libraryData";
   import { logger } from "../../lib/logger";
@@ -41,7 +42,7 @@
   let pressedPlayAll = $state(false);
   let pressedAddToQueue = $state(false);
 
-  let headerItem = $state(null);
+  let headerItem = $state<Track | null>(null);
   let headerTotalDuration = $state("");
   let headerQuality = $state("");
   let headerSubtitle = $state("");
@@ -66,6 +67,10 @@
   ));
 
   let currentView = $derived($navigationStack[$navigationStack.length - 1]);
+
+  let currentViewData = $derived(
+    (currentView?.data ?? {}) as { name?: string; displayName?: string },
+  );
 
   $effect(() => {
     if (activeCategory) {
@@ -104,7 +109,7 @@
 
     isLoading = true;
     itemsStore.set([]);
-    headerItem = viewState.data;
+    headerItem = (viewState.data ?? null) as Track | null;
     headerTotalDuration = "";
     headerQuality = "";
     headerSubtitle = "";
@@ -117,7 +122,7 @@
       if (ctrl.signal.aborted) return;
 
       itemsStore.set(items);
-      if (header.headerItem) headerItem = header.headerItem;
+      if (header.headerItem) headerItem = header.headerItem as unknown as Track;
       trackCount = header.trackCount;
       headerTotalDuration = header.totalDuration;
       headerQuality = header.quality;
@@ -147,9 +152,10 @@
   function handlePlayAll() {
     const items = $itemsStore;
     if (items.length > 0) {
+      const data = (currentView.data ?? {}) as { name?: string; displayName?: string };
       const targetName =
-        currentView.data.name ||
-        currentView.data.displayName ||
+        data.name ||
+        data.displayName ||
         "this selection";
 
       showModal({
@@ -159,7 +165,7 @@
         type: "confirm",
         onConfirm: () => {
           pressedPlayAll = true;
-          MPD.playAllTracks(items);
+          MPD.playAllTracks(items as unknown as Track[]);
         },
       });
     }
@@ -169,7 +175,7 @@
     const items = $itemsStore;
     if (items.length > 0) {
       pressedAddToQueue = true;
-      MPD.addAllToQueue(items);
+      MPD.addAllToQueue(items as unknown as Track[]);
 
       setTimeout(() => {
         pressedAddToQueue = false;
@@ -184,7 +190,7 @@
 >
   {#if currentView?.view === "tracks_by_album"}
     <BaseList
-      {itemsStore}
+      itemsStore={itemsStore as unknown as Writable<Track[]>}
       {isLoading}
       isEditMode={false}
       emptyText="No tracks found"
@@ -215,10 +221,10 @@
                 </div>
                 <h1
                   class="header-title"
-                  title={currentView.data.name || currentView.data.displayName}
+                  title={currentViewData.name || currentViewData.displayName}
                 >
-                  {currentView.data.name ||
-                    currentView.data.displayName ||
+                  {currentViewData.name ||
+                    currentViewData.displayName ||
                     "Unknown"}
                 </h1>
 
@@ -362,7 +368,7 @@
               >
                 <div class="card-img-container">
                   <ImageLoader
-                    src={getTrackThumbUrl(item, "md")}
+                    src={getTrackThumbUrl(item as unknown as Track, "md")}
                     alt={item.displayName}
                     radius="8px"
                   >

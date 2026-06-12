@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2025 dmitrymake
-import { writable, derived, get } from "svelte/store";
+import { writable, derived } from "svelte/store";
 import { stations, selectedStationName } from "./library";
 import { getStationImageUrl, isRemoteUrl, findStationByName } from "../utils";
 import { resolveSource } from "../sources/trackSource";
@@ -67,29 +67,43 @@ function resolveRadioImage(
   return null;
 }
 
+// Artwork resolution shared by cover and thumb: a remote image/cover URL, or a
+// radio-station image (with the caller's placeholder). Returns null for a normal
+// library file so the caller can pick cover-art vs thumb-cache.
+function resolveSharedArtwork(
+  track: Track | null,
+  radioPlaceholder: string,
+  stationList: Station[],
+  selectedRadioName: string | null,
+): string | null {
+  if (!track) return null;
+  if (isRemoteUrl(track.image)) return track.image!;
+  if (isRemoteUrl(track.cover)) return track.cover!;
+
+  if (track.file && (isRadioTrack(track.file) || track.genre === "Radio")) {
+    if (track.image) {
+      return (
+        getStationImageUrl({
+          name: track.stationName || track.title,
+          image: track.image!,
+        } as Pick<Station, "name" | "image">) || radioPlaceholder
+      );
+    }
+    return resolveRadioImage(track, stationList, selectedRadioName) || radioPlaceholder;
+  }
+
+  return null;
+}
+
 export function getTrackCoverUrl(
   track: Track | null,
   stationList: Station[] = [],
   selectedRadioName: string | null = null,
 ): string {
-  if (track && isRemoteUrl(track.image)) {
-    return track.image!;
-  }
-  if (track && isRemoteUrl(track.cover)) {
-    return track.cover!;
-  }
+  const shared = resolveSharedArtwork(track, "/images/radio_placeholder.png", stationList, selectedRadioName);
+  if (shared) return shared;
 
   if (!track || !track.file) return "/images/default_cover.png";
-
-  if (isRadioTrack(track.file) || track.genre === "Radio") {
-    if (track.image) {
-      return getStationImageUrl({ name: track.stationName || track.title, image: track.image! } as Pick<Station, "name" | "image">) || "/images/radio_placeholder.png";
-    }
-    return (
-      resolveRadioImage(track, stationList, selectedRadioName) ||
-      "/images/radio_placeholder.png"
-    );
-  }
 
   return API_ENDPOINTS.COVER_ART(track.file);
 }
@@ -102,26 +116,8 @@ export function getTrackThumbUrl(
 ): string {
   if (!track) return "/images/default_icon.png";
 
-  if (isRemoteUrl(track.image)) {
-    return track.image!;
-  }
-  if (isRemoteUrl(track.cover)) {
-    return track.cover!;
-  }
-
-  if (
-    track.file &&
-    (isRadioTrack(track.file) ||
-      track.genre === "Radio")
-  ) {
-    if (track.image) {
-      return getStationImageUrl({ name: track.stationName || track.title, image: track.image! } as Pick<Station, "name" | "image">) || "/images/radio_icon.png";
-    }
-    return (
-      resolveRadioImage(track, stationList, selectedRadioName) ||
-      "/images/radio_icon.png"
-    );
-  }
+  const shared = resolveSharedArtwork(track, "/images/radio_icon.png", stationList, selectedRadioName);
+  if (shared) return shared;
 
   if (!track.file) return "/images/default_icon.png";
 

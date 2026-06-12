@@ -38,7 +38,7 @@
 
   $effect(() => {
     const totalSec = $queue.reduce(
-      (acc, t) => acc + (parseFloat(t.time) || 0),
+      (acc, t) => acc + (parseFloat(String(t.time)) || 0),
       0,
     );
     if (totalSec > 0) {
@@ -126,8 +126,11 @@
           artist: "",
           album: "",
           file: "",
+          genre: "",
+          time: 0,
+          track: "",
           stationName: null,
-          id: null,
+          id: undefined,
           pos: null,
         });
         status.update((s) => ({

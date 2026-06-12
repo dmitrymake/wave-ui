@@ -11,6 +11,7 @@
     getTrackCoverUrl,
     stations,
     openContextMenu,
+    type EventWithDetail,
   } from "../lib/store.js";
   import { longpress } from "../lib/actions";
   import { formatTime, getPct, isRadioStream, getQualityLabel } from "../lib/playerHelpers";
@@ -97,8 +98,8 @@
     openContextMenu(e, $currentSong, { type: "general", source: "miniplayer" });
   }
 
-  function handleLongPress(e: CustomEvent<{ originalEvent: MouseEvent | TouchEvent }>) {
-    openContextMenu(e.detail.originalEvent, $currentSong, { type: "general", source: "miniplayer" });
+  function handleLongPress(e: CustomEvent<{ originalEvent: Event }>) {
+    openContextMenu(e.detail.originalEvent as EventWithDetail, $currentSong, { type: "general", source: "miniplayer" });
   }
 </script>
 

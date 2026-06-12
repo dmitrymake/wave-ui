@@ -199,6 +199,28 @@ async function fetchMetaForTrack(url: string): Promise<void> {
   }
 }
 
+// The track is appended server-side (the PHP daemon adds it to MPD), so we cannot
+// capture its id from `addid` the way the generic player does. Instead: confirm the
+// queue actually grew, then resolve the appended track's STABLE MPD Id from its
+// position. Callers then move/play by id (moveid/playid), which is immune to the
+// index shifts that made the old `move playlistlength-1` target the wrong track.
+async function appendYandexTrack(id: string): Promise<number> {
+  const lenBefore: number = parseInt(
+    MpdParser.parseKeyValue(await mpdClient.send("status")).playlistlength,
+  );
+  await YandexApi.request("play_track", { id, append: 1 });
+  const lenAfter: number = parseInt(
+    MpdParser.parseKeyValue(await mpdClient.send("status")).playlistlength,
+  );
+
+  const before: number = isNaN(lenBefore) ? 0 : lenBefore;
+  if (isNaN(lenAfter) || lenAfter <= before) return NaN;
+
+  return parseInt(
+    MpdParser.parseKeyValue(await mpdClient.send(`playlistinfo ${lenAfter - 1}`)).id,
+  );
+}
+
 export const yandexSource: TrackSource = {
   id: "yandex",
 
@@ -287,16 +309,15 @@ export const yandexSource: TrackSource = {
   async playUri(uri: string, currentPos: number): Promise<boolean> {
     if (!uri.startsWith("yandex:")) return false;
     const id: string = uri.split(":")[1];
-    await YandexApi.request("play_track", { id, append: 1 });
 
-    const statusRes: string = await mpdClient.send("status");
-    const len: number = parseInt(MpdParser.parseKeyValue(statusRes).playlistlength);
+    const newId: number = await appendYandexTrack(id);
+    if (isNaN(newId)) return true;
+
+    // Move/play BY ID (moveid/playid). The old code moved playlistlength-1 read from
+    // a separate status, so a concurrent queue change made len-1 the wrong track.
     const targetPos: number = isNaN(currentPos) ? 0 : currentPos + 1;
-
-    if (len > 0) {
-      await mpdClient.send(`move ${len - 1} ${targetPos}`);
-      await mpdClient.send(`play ${targetPos}`);
-    }
+    await mpdClient.send(`moveid ${newId} ${targetPos}`);
+    await mpdClient.send(`playid ${newId}`);
     return true;
   },
 
@@ -311,15 +332,12 @@ export const yandexSource: TrackSource = {
   async playNext(uri: string, currentPos: number): Promise<boolean> {
     if (!uri.startsWith("yandex:")) return false;
     const id: string = uri.split(":")[1];
-    await YandexApi.request("play_track", { id, append: 1 });
 
-    const statusRes: string = await mpdClient.send("status");
-    const len: number = parseInt(MpdParser.parseKeyValue(statusRes).playlistlength);
+    const newId: number = await appendYandexTrack(id);
+    if (isNaN(newId)) return true;
 
-    if (len > 0) {
-      await mpdClient.send(`move ${len - 1} ${currentPos + 1}`);
-      showToast(MSG.PLAY_WILL_PLAY_NEXT, "success");
-    }
+    await mpdClient.send(`moveid ${newId} ${currentPos + 1}`);
+    showToast(MSG.PLAY_WILL_PLAY_NEXT, "success");
     return true;
   },
 

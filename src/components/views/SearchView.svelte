@@ -108,7 +108,7 @@
 
   function handleHorizontalScroll(e: WheelEvent) {
     if (e.deltaY !== 0) {
-      e.currentTarget.scrollLeft += e.deltaY;
+      (e.currentTarget as HTMLElement).scrollLeft += e.deltaY;
     }
   }
 </script>
@@ -165,7 +165,7 @@
                 <div class="music-card" role="button" tabindex="0" onclick={() => goToAlbum(album)} onkeydown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); goToAlbum(album); }}}>
                   <div class="card-img-container">
                     <ImageLoader
-                      src={getTrackThumbUrl(album, "md")}
+                      src={getTrackThumbUrl(album as unknown as Track, "md")}
                       alt={album.name}
                       radius="8px"
                     >
@@ -184,7 +184,7 @@
                   <div class="card-sub-row">
                     <div class="card-sub text-ellipsis">{album.artist}</div>
 
-                    {#if album.year && album.year !== "0" && album.year !== 0}
+                    {#if album.year && String(album.year) !== "0"}
                       <div class="meta-tag">{album.year}</div>
                     {/if}
 

@@ -3,15 +3,8 @@
 <script lang="ts">
   import type { Track } from "../lib/types";
   import { ICONS } from "../lib/icons";
-  import { LibraryActions } from "../lib/mpd/library";
-  import { YandexApi } from "../lib/yandex";
-  import {
-    favorites,
-    yandexFavorites,
-    showToast,
-  } from "../lib/store.js";
-  import { MSG } from "../lib/messages";
-  import { isTrackLiked } from "../lib/playerHelpers";
+  import { favorites, yandexFavorites } from "../lib/store.js";
+  import { isTrackLiked, toggleLike } from "../lib/playerHelpers";
 
   interface Props {
     track: Track;
@@ -25,35 +18,10 @@
 
   async function handleClick(e: MouseEvent) {
     e.stopPropagation();
-    if (!track || (!track.file && !track.id)) return;
-
-    if (track.isYandex || track.service === "yandex") {
-      const wasLiked = $yandexFavorites.has(String(track.id));
-      try {
-        yandexFavorites.update((s) => {
-          const id = String(track.id);
-          if (wasLiked) s.delete(id);
-          else s.add(id);
-          return s;
-        });
-        showToast(
-          wasLiked ? MSG.FAV_REMOVED_YANDEX : MSG.FAV_ADDED_YANDEX,
-          wasLiked ? "info" : "success",
-        );
-        await YandexApi.toggleLike(track.id, wasLiked);
-      } catch (err) {
-        // Roll back the optimistic toggle so the heart reflects real server state.
-        yandexFavorites.update((s) => {
-          const id = String(track.id);
-          if (wasLiked) s.add(id);
-          else s.delete(id);
-          return s;
-        });
-        showToast(MSG.FAV_ERROR_UPDATING, "error");
-      }
-    } else {
-      LibraryActions.toggleFavorite(track);
-    }
+    // Single source of truth for the like/unlike flow (optimistic update + rollback
+    // for Yandex, MPD favourite toggle otherwise) lives in playerHelpers.toggleLike.
+    if (!track) return;
+    await toggleLike(track);
   }
 </script>
 

@@ -23,7 +23,7 @@
   import YandexDashboard from "./YandexDashboard.svelte";
   import YandexSearchResults from "./YandexSearchResults.svelte";
   import YandexContentHeader from "./YandexContentHeader.svelte";
-  import type { YandexTrack, YandexAlbum, YandexArtist, YandexPlaylist, YandexSearchResults as YandexSearchResultsType, NavigationEntry } from "../../lib/types";
+  import type { Track, YandexTrack, YandexAlbum, YandexArtist, YandexPlaylist, YandexSearchResults as YandexSearchResultsType, NavigationEntry, YandexHeaderData } from "../../lib/types";
 
   const tracksStore = writable<YandexTrack[]>([]);
   const albumsStore = writable<YandexAlbum[]>([]);
@@ -112,7 +112,7 @@
 
     if (newKey !== uniqueViewKey) {
       uniqueViewKey = newKey;
-      handleViewChange(mode, currentView?.data);
+      handleViewChange(mode, currentView?.data ?? null);
     }
   });
 
@@ -172,15 +172,15 @@
       }
     } else if (mode === "playlist") {
       if (!restoreFromCache(cacheKey)) {
-        await loadPlaylistData(data);
+        await loadPlaylistData(data ?? {});
       }
     } else if (mode === "artist_details") {
       if (!restoreFromCache(cacheKey)) {
-        await loadArtistData(data);
+        await loadArtistData(data ?? {});
       }
     } else if (mode === "album_details") {
       if (!restoreFromCache(cacheKey)) {
-        await loadAlbumData(data);
+        await loadAlbumData(data ?? {});
       }
     }
   }
@@ -632,7 +632,7 @@
 
     {#if ["playlist", "search", "artist_details", "album_details"].includes(viewMode)}
       <BaseList
-        itemsStore={tracksStore}
+        itemsStore={tracksStore as unknown as import("svelte/store").Writable<Track[]>}
         {isLoading}
         isEditMode={false}
         emptyText="No tracks found"
@@ -640,7 +640,7 @@
         {#snippet header()}
           <div class="content-padded">
             <YandexContentHeader
-              headerData={currentView?.data}
+              headerData={(currentView?.data ?? null) as YandexHeaderData}
               {viewMode}
               {isLoading}
               tracksCount={$tracksStore.length}
@@ -666,7 +666,7 @@
           <TrackRow
             track={item}
             {index}
-            onplay={() => YandexApi.playTrack(item.id)}
+            onplay={() => YandexApi.playTrack(String(item.id))}
           />
         {/snippet}
 

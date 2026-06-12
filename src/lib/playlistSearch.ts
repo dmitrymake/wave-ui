@@ -2,6 +2,7 @@
 // Copyright (c) 2025 dmitrymake
 import { mpdClient } from "./mpd/client";
 import { MpdParser } from "./mpd/parser";
+import { escapeArg } from "./mpd/escape";
 import { logger } from "./logger";
 import type { Track, Playlist } from "./types";
 
@@ -39,7 +40,7 @@ export async function searchPlaylists(
     if (signal.aborted) break;
     try {
       const raw = await mpdClient.send(
-        `listplaylistinfo "${pl.name.replace(/"/g, '\\"')}"`,
+        `listplaylistinfo "${escapeArg(pl.name)}"`,
       );
       if (signal.aborted) break;
 

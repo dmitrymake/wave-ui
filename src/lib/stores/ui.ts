@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2025 dmitrymake
-import { writable, get } from "svelte/store";
+import { writable } from "svelte/store";
 import { THEMES } from "../theme";
-import type { ToastMessage, ModalState, ContextMenuState, ContextMenuContext, Track, Playlist } from "../types";
+import type { ToastMessage, ModalState, ContextMenuState, ContextMenuContext, Track } from "../types";
 
 
 let savedTheme = "default";
@@ -110,11 +110,6 @@ export const contextMenu = writable<ContextMenuState>({
   triggerRect: null,
 });
 
-export const playlistSelector = writable<{ isOpen: boolean; track: Track | null }>({
-  isOpen: false,
-  track: null,
-});
-
 function vibrate(): void {
   if (typeof navigator !== "undefined" && navigator.vibrate) {
     try {
@@ -123,9 +118,13 @@ function vibrate(): void {
   }
 }
 
-interface EventWithDetail extends Event {
-  detail?: { originalEvent?: Event };
-}
+// Handlers receive either a raw pointer/touch event or the `longpress` CustomEvent
+// (whose detail carries the originating event). MouseEvent.detail is a number, so a
+// plain `extends Event` with an object detail does not fit — model the real union.
+export type EventWithDetail =
+  | MouseEvent
+  | TouchEvent
+  | CustomEvent<{ originalEvent?: Event }>;
 
 export function openContextMenu(
   e: EventWithDetail,
@@ -149,7 +148,13 @@ export function openContextMenu(
     rect = el.getBoundingClientRect();
   }
 
-  const evt = e.detail?.originalEvent || e;
+  // Only the longpress CustomEvent carries an object detail with originalEvent;
+  // for raw Mouse/Touch events `detail` is a number, so guard before reading it.
+  const customDetail = (e as CustomEvent<{ originalEvent?: Event }>).detail;
+  const evt: Event =
+    customDetail && typeof customDetail === "object" && customDetail.originalEvent
+      ? customDetail.originalEvent
+      : e;
   if ((evt as TouchEvent).touches && (evt as TouchEvent).touches.length > 0) {
     clientX = (evt as TouchEvent).touches[0].clientX;
     clientY = (evt as TouchEvent).touches[0].clientY;
@@ -184,13 +189,4 @@ export function closeContextMenu(): void {
     y: 0,
     triggerRect: null,
   });
-}
-
-export function openPlaylistSelector(track: Track): void {
-  closeContextMenu();
-  playlistSelector.set({ isOpen: true, track });
-}
-
-export function closePlaylistSelector(): void {
-  playlistSelector.set({ isOpen: false, track: null });
 }

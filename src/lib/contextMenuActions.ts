@@ -3,6 +3,7 @@
 import { PlayerActions } from "./mpd/player";
 import { LibraryActions } from "./mpd/library";
 import { mpdClient } from "./mpd/client";
+import { escapeArg } from "./mpd/escape";
 import { resolveSource } from "./sources/trackSource";
 import {
   closeContextMenu,
@@ -84,7 +85,7 @@ export function playlistPlay(context: ContextMenuContext): void {
     mpdClient
       .send("stop")
       .then(() => mpdClient.send("clear"))
-      .then(() => mpdClient.send(`load "${pl.name.replace(/"/g, '\\"')}"`))
+      .then(() => mpdClient.send(`load "${escapeArg(pl.name)}"`))
       .then(() => mpdClient.send("play 0"));
   }
   closeContextMenu();
@@ -143,8 +144,8 @@ export async function radioByArtist(track: Track | null): Promise<void> {
 export async function addToPlaylist(track: Track | null, playlistName: string): Promise<void> {
   if (!track) return;
   try {
-    const safePl = playlistName.replace(/"/g, '\\"');
-    const safeFile = track.file.replace(/"/g, '\\"');
+    const safePl = escapeArg(playlistName);
+    const safeFile = escapeArg(track.file);
     await mpdClient.send(`playlistadd "${safePl}" "${safeFile}"`);
     showToast(MSG.addedToPlaylist(playlistName), "success");
     closeContextMenu();

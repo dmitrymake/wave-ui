@@ -90,7 +90,7 @@
       inputValue: $currentTheme,
       options: options,
       onConfirm: (val) => {
-        currentTheme.set(val);
+        currentTheme.set(val ?? $currentTheme);
         showToast(MSG.SETTINGS_THEME_UPDATED, "success");
       },
     });

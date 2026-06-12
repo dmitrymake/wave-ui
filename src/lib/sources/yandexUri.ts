@@ -14,8 +14,13 @@ export function getYandexIdFromUrl(url: string | null | undefined): string | nul
   if (match) return match[1];
   match = url.match(/[?&]track-id=([^&]+)/);
   if (match) return match[1];
-  match = url.match(/[?&]id=([^&]+)/);
-  if (match) return match[1];
+  // A bare `?id=` is only trustworthy on a recognisably-Yandex URL. Without this
+  // guard ANY non-Yandex stream/file carrying `?id=` yields a spurious id, which is
+  // then used as a streamCache key and mis-enriches the track with Yandex metadata.
+  if (/yandex\.net|get-mp3|storage\.yandex\.net|\/dev\/shm\/yandex_music\//.test(url)) {
+    match = url.match(/[?&]id=([^&]+)/);
+    if (match) return match[1];
+  }
   match = url.match(/\/track\/(\d+)/);
   if (match) return match[1];
   return null;

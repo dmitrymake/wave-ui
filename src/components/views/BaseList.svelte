@@ -140,7 +140,7 @@
     >
       <div style="pointer-events: none; width: 100%; height: 100%;">
         {#if row}
-          {@render row({ item: $draggedItemData, index: $draggingIndex, isGhost: true, startDrag: () => {} })}
+          {@render row({ item: $draggedItemData, index: $draggingIndex ?? 0, isGhost: true, startDrag: () => {} })}
         {/if}
       </div>
     </div>

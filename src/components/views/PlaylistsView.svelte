@@ -2,6 +2,7 @@
 <!-- Copyright (c) 2025 dmitrymake -->
 <script lang="ts">
   import { onMount, tick } from "svelte";
+  import { escapeArg } from "../../lib/mpd/escape";
   import {
     playlists,
     isLoadingPlaylists,
@@ -11,6 +12,7 @@
     navigateTo,
     showModal,
     openContextMenu,
+    type EventWithDetail,
     status,
     currentSong,
     activePlaylistName,
@@ -51,6 +53,7 @@
 
   let currentView = $derived($navigationStack[$navigationStack.length - 1]);
   let isDetailsView = $derived(currentView.view === "details");
+  let currentViewName = $derived((currentView.data as { name?: string } | null)?.name ?? "");
 
   let lastViewKey = "";
   $effect(() => {
@@ -144,8 +147,9 @@
 
   $effect(() => {
     if (isDetailsView && currentView.data) {
-      if ($activePlaylistName !== currentView.data.name) {
-        MPD.openPlaylistDetails(currentView.data.name);
+      const data = currentView.data as { name: string };
+      if ($activePlaylistName !== data.name) {
+        MPD.openPlaylistDetails(data.name);
       }
     }
   });
@@ -158,7 +162,7 @@
 
   function calculateMeta(tracks: Track[]) {
     const totalSec = tracks.reduce(
-      (acc, t) => acc + (parseFloat(t.time) || 0),
+      (acc, t) => acc + (parseFloat(String(t.time)) || 0),
       0,
     );
     if (totalSec > 0) {
@@ -175,7 +179,7 @@
     });
     headerQuality =
       formats.size === 1
-        ? tracks[0].qualityBadge
+        ? tracks[0].qualityBadge ?? ""
         : formats.size > 1
           ? "Mixed"
           : "";
@@ -202,13 +206,14 @@
     if (playlist.name === "Favorites") return;
     e.stopPropagation();
     e.preventDefault();
-    openContextMenu(e, null, { type: "playlist-card", playlist: playlist });
+    openContextMenu(e as EventWithDetail, null, { type: "playlist-card", playlist: playlist });
   }
 
   function handlePlayAll() {
+    const data = (currentView.data ?? {}) as { name?: string };
     showModal({
       title: "Replace Queue?",
-      message: `This will clear your current queue and play "${currentView.data.name}".`,
+      message: `This will clear your current queue and play "${data.name}".`,
       confirmLabel: "Play",
       type: "confirm",
       onConfirm: () => {
@@ -224,7 +229,8 @@
 
   function handleAddToQueue() {
     if ($activePlaylistTracks.length > 0) {
-      const safeName = currentView.data.name.replace(/"/g, '\\"');
+      const data = (currentView.data ?? {}) as { name: string };
+      const safeName = escapeArg(data.name);
       MPD.runMpdRequest(`load "${safeName}"`);
       pressedAddToQueue = true;
       setTimeout(() => {
@@ -238,7 +244,7 @@
   }
 
   async function handleRemoveTrack(index: number) {
-    const playlistName = currentView.data.name;
+    const playlistName = (currentView.data as { name: string }).name;
     const original = $activePlaylistTracks;
     const removed = original[index];
 
@@ -257,7 +263,7 @@
   }
 
   function handleMoveTrack(fromIndex: number, toIndex: number) {
-    MPD.movePlaylistTrack(currentView.data.name, fromIndex, toIndex);
+    MPD.movePlaylistTrack((currentView.data as { name: string }).name, fromIndex, toIndex);
   }
 
   let isFavPlaylist = $derived(currentView?.data?.name === "Favorites");
@@ -327,7 +333,7 @@
       {#snippet header()}
         <div class="content-padded">
           <div class="view-header">
-            <div class="header-art" style={resolveHeaderStyle(currentView.data)}>
+            <div class="header-art" style={resolveHeaderStyle((currentView.data as unknown as Playlist & { colorVar?: string; color?: string }) ?? null)}>
               <div class="header-icon-wrap">
                 {@html isFavPlaylist ? ICONS.HEART_FILLED : ICONS.PLAYLISTS}
               </div>
@@ -336,8 +342,8 @@
             <div class="header-info">
               <div class="header-text-group">
                 <div class="header-label">Playlist</div>
-                <h1 class="header-title" title={currentView.data.name}>
-                  {currentView.data.name}
+                <h1 class="header-title" title={currentViewName}>
+                  {currentViewName}
                 </h1>
 
                 <div class="meta-badges">

@@ -113,17 +113,52 @@ describe("MpdClient", () => {
     await expect(promise).rejects.toThrow("ACK");
   });
 
-  it("handles Blob messages", async () => {
+  it("handles binary (ArrayBuffer) messages", async () => {
     mpdClient.connect();
     await vi.advanceTimersByTimeAsync(10);
 
     const promise = mpdClient.send("status");
     await vi.advanceTimersByTimeAsync(0);
 
-    const blob = new Blob(["state: play\nOK\n"]);
-    await mpdClient._handleMessage({ data: blob });
+    const buf = new TextEncoder().encode("state: play\nOK\n").buffer;
+    mpdClient._handleMessage({ data: buf });
     const result = await promise;
     expect(result).toBe("state: play");
+  });
+
+  it("assembles consecutive binary frames in arrival order (no async reorder)", async () => {
+    mpdClient.connect();
+    await vi.advanceTimersByTimeAsync(10);
+
+    const promise = mpdClient.send("status");
+    await vi.advanceTimersByTimeAsync(0);
+
+    // Two frames delivered back-to-back. A synchronous handler must append them in
+    // strict arrival order; the old async Blob.text() path could reorder them.
+    const enc = new TextEncoder();
+    mpdClient._handleMessage({ data: enc.encode("volume: 50\n").buffer });
+    mpdClient._handleMessage({ data: enc.encode("state: play\nOK\n").buffer });
+
+    const result = await promise;
+    expect(result).toBe("volume: 50\nstate: play");
+  });
+
+  it("stitches a multi-byte UTF-8 char split across two binary frames", async () => {
+    mpdClient.connect();
+    await vi.advanceTimersByTimeAsync(10);
+
+    const promise = mpdClient.send("currentsong");
+    await vi.advanceTimersByTimeAsync(0);
+
+    // "café": the é (U+00E9) encodes to bytes 0xC3 0xA9. Split the stream between
+    // those two bytes so each frame alone is an incomplete UTF-8 sequence.
+    const full = new TextEncoder().encode("Title: café\nOK\n");
+    const split = 11; // after "Title: caf" (10 bytes) + first byte of é
+    mpdClient._handleMessage({ data: full.slice(0, split).buffer });
+    mpdClient._handleMessage({ data: full.slice(split).buffer });
+
+    const result = await promise;
+    expect(result).toBe("Title: café");
   });
 
   it("cleanup rejects pending commands", () => {

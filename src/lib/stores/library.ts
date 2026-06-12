@@ -30,13 +30,17 @@ export function setNavigationCallback(fn: (view: string, data: Record<string, un
   onNavigateCallback = fn;
 }
 
-export function navigateTo(view: string, data: Record<string, unknown> | null = null): void {
-  if (data) pendingRouteData = data;
+// `data` is widened to `object` so callers can pass typed domain payloads
+// (LibraryItem, Playlist, YandexPlaylist, …) without an index signature. It is
+// stored/forwarded as Record<string, unknown> for views to narrow at the call site.
+export function navigateTo(view: string, data: object | null = null): void {
+  const payload = data as Record<string, unknown> | null;
+  if (payload) pendingRouteData = payload;
 
-  navigationStack.update((stack) => [...stack, { view, data }]);
+  navigationStack.update((stack) => [...stack, { view, data: payload }]);
 
   if (onNavigateCallback) {
-    onNavigateCallback(view, data);
+    onNavigateCallback(view, payload);
   }
 }
 

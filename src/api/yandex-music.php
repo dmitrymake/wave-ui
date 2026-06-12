@@ -1,4 +1,46 @@
 <?php
+
+// Canonical Yandex track formatter — the single source of truth shared by the
+// YandexMusic::formatTrack method and the API's global formatTrack wrapper. Builds the
+// normalised track shape the client consumes from a raw Yandex API track object.
+function yandexFormatTrack($t) {
+    if (!$t || !is_array($t)) return null;
+
+    $artistName = 'Unknown Artist';
+    if (!empty($t['artists'])) {
+        $names = array_map(function($a) { return $a['name']; }, $t['artists']);
+        $artistName = implode(', ', $names);
+    } elseif (isset($t['artist'])) {
+        $artistName = is_array($t['artist']) ? ($t['artist']['name'] ?? '') : $t['artist'];
+    }
+
+    $cover = null;
+    if (!empty($t['ogImage'])) $cover = $t['ogImage'];
+    elseif (!empty($t['coverUri'])) $cover = $t['coverUri'];
+    elseif (!empty($t['album']['coverUri'])) $cover = $t['album']['coverUri'];
+    if ($cover) {
+        $cover = str_replace('%%', '400x400', $cover);
+        if (strpos($cover, 'http') !== 0) $cover = 'https://' . $cover;
+    }
+
+    $albumTitle = '';
+    if (!empty($t['albums'][0]['title'])) $albumTitle = $t['albums'][0]['title'];
+    elseif (!empty($t['album']['title'])) $albumTitle = $t['album']['title'];
+    elseif (is_string($t['album'] ?? null)) $albumTitle = $t['album'];
+
+    return [
+        'title'    => $t['title'] ?? 'Unknown Title',
+        'artist'   => $artistName,
+        'album'    => $albumTitle,
+        'id'       => (string)($t['id'] ?? ''),
+        'file'     => "yandex:" . ($t['id'] ?? ''),
+        'image'    => $cover,
+        'isYandex' => true,
+        'service'  => 'yandex',
+        'time'     => isset($t['durationMs']) ? ($t['durationMs'] / 1000) : ($t['time'] ?? 0)
+    ];
+}
+
 class YandexMusic {
     const UA_OVERRIDE_FILE = '/var/local/www/yandex_client_ua.dat';
     const UA_DEFAULT = 'YandexMusicAndroid/24023621';
@@ -298,36 +340,7 @@ class YandexMusic {
         return $this->request("/users/{$uid}/likes/tracks/{$action}", ['track-id' => $trackId]);
     }
     public function formatTrack($t) {
-        if (!$t || !is_array($t)) return null;
-        $artistName = 'Unknown Artist';
-        if (!empty($t['artists'])) {
-            $names = array_map(function($a) { return $a['name']; }, $t['artists']);
-            $artistName = implode(', ', $names);
-        } elseif (isset($t['artist'])) {
-            $artistName = $t['artist'];
-        }
-        $cover = null;
-        if (!empty($t['ogImage'])) $cover = $t['ogImage'];
-        elseif (!empty($t['coverUri'])) $cover = $t['coverUri'];
-        elseif (!empty($t['album']['coverUri'])) $cover = $t['album']['coverUri'];
-        if ($cover) {
-            $cover = str_replace('%%', '400x400', $cover);
-            if (strpos($cover, 'http') !== 0) $cover = 'https://' . $cover;
-        }
-        $albumTitle = '';
-        if (!empty($t['albums'][0]['title'])) $albumTitle = $t['albums'][0]['title'];
-        elseif (!empty($t['album']['title'])) $albumTitle = $t['album']['title'];
-        return [
-            'title'    => $t['title'] ?? 'Unknown Title',
-            'artist'   => $artistName,
-            'album'    => $albumTitle,
-            'id'       => (string)($t['id'] ?? ''),
-            'file'     => "yandex:" . ($t['id'] ?? ''),
-            'image'    => $cover,
-            'isYandex' => true,
-            'service'  => 'yandex',
-            'time'     => isset($t['durationMs']) ? ($t['durationMs'] / 1000) : 0
-        ];
+        return yandexFormatTrack($t);
     }
 }
 ?>

@@ -101,7 +101,7 @@
           {#each group.tracks as track (track._uid)}
             <TrackRow
               {track}
-              index={track.playlistPos}
+              index={track.playlistPos ?? 0}
               {playingFile}
               {isPlaying}
               onplay={() => onPlayTrack?.(track)}

@@ -14,8 +14,8 @@
   import { calculateMenuPosition } from "../lib/menuPositioner";
   import { isRemoteUrl } from "../lib/utils";
 
-  let innerWidth: number;
-  let innerHeight: number;
+  let innerWidth = $state(0);
+  let innerHeight = $state(0);
   let menuEl: HTMLElement;
   let menuHeight = $state(0);
   let menuWidth = $state(0);
@@ -120,14 +120,14 @@
         {:else if isPlaylistCard}
           <div class="track-info">
             <div class="title text-ellipsis">
-              {$contextMenu.context.playlist.name}
+              {$contextMenu.context.playlist?.name}
             </div>
             <div class="artist text-ellipsis">Playlist</div>
           </div>
         {:else}
           <div class="track-info">
-            <div class="title text-ellipsis">{$contextMenu.track.title}</div>
-            <div class="artist text-ellipsis">{$contextMenu.track.artist}</div>
+            <div class="title text-ellipsis">{$contextMenu.track?.title}</div>
+            <div class="artist text-ellipsis">{$contextMenu.track?.artist}</div>
           </div>
         {/if}
       </div>

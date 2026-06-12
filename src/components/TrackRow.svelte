@@ -16,6 +16,7 @@
     openContextMenu,
     navigationStack,
     navigateTo,
+    type EventWithDetail,
   } from "../lib/store.js";
   import { longpress } from "../lib/actions";
   import { isRemoteUrl } from "../lib/utils";
@@ -83,8 +84,8 @@
     return `${m}:${s.toString().padStart(2, "0")}`;
   }
 
-  function handleAction(e: Event) {
-    e.stopPropagation();
+  function handleAction(e?: Event) {
+    e?.stopPropagation();
     if (isPlayingFile) MPD.togglePlay();
     else onplay?.();
   }
@@ -105,7 +106,7 @@
   function handleLongPress(e: Event) {
     if (isEditable) return;
     const detail = (e as CustomEvent<{ originalEvent?: Event }>).detail;
-    const origEvent = detail?.originalEvent ?? e;
+    const origEvent = (detail?.originalEvent ?? e) as EventWithDetail;
     openContextMenu(origEvent, track, getContextData());
   }
 

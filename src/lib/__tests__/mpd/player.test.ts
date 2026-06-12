@@ -89,8 +89,8 @@ vi.mock("../../yandex", () => ({
 // Registering the Yandex source lets resolveSource() route Yandex tracks in tests.
 import "../../sources/yandexSource";
 import { PlayerActions } from "../../mpd/player.js";
-import { status, currentSong } from "../../store";
-import type { MpdStatus } from "../../types";
+import { status, currentSong, queue } from "../../store";
+import type { MpdStatus, Track } from "../../types";
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -217,6 +217,29 @@ describe("PlayerActions.removeFromQueue", () => {
   it("sends delete command", async () => {
     await PlayerActions.removeFromQueue(5);
     expect(mockSend).toHaveBeenCalledWith("delete 5");
+  });
+
+  it("optimistically removes the track on success", async () => {
+    queue.set([
+      { file: "a" }, { file: "b" }, { file: "c" },
+    ] as unknown as Track[]);
+
+    await PlayerActions.removeFromQueue(1);
+
+    expect(get(queue).map((t) => t.file)).toEqual(["a", "c"]);
+  });
+
+  it("restores the queue when MPD rejects the delete", async () => {
+    queue.set([
+      { file: "a" }, { file: "b" }, { file: "c" },
+    ] as unknown as Track[]);
+    mockSend.mockRejectedValueOnce(new Error("MPD delete failed"));
+
+    await PlayerActions.removeFromQueue(1);
+
+    // Rolled back to the original order, not left short (which would desync
+    // subsequent index-based operations against MPD).
+    expect(get(queue).map((t) => t.file)).toEqual(["a", "b", "c"]);
   });
 });
 

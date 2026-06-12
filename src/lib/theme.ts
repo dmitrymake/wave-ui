@@ -224,11 +224,3 @@ export const THEMES: Theme[] = [
     },
   },
 ];
-
-export const THEME = {
-  COLORS: {
-    PRIMARY: "#fa2d48",
-    HEART: "#ff4444",
-    ERROR: "#ff4444",
-  },
-} as const;

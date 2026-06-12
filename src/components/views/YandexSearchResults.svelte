@@ -34,7 +34,7 @@
         <div class="music-card" role="button" tabindex="0" onclick={() => openArtist(artist)} onkeydown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); openArtist(artist); }}}>
           <div class="card-img-container">
             <ImageLoader
-              src={artist.image}
+              src={artist.image ?? ""}
               alt={artist.title}
               radius="8px"
             />
@@ -54,7 +54,7 @@
         <div class="music-card" role="button" tabindex="0" onclick={() => openAlbum(album)} onkeydown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); openAlbum(album); }}}>
           <div class="card-img-container">
             <ImageLoader
-              src={album.image}
+              src={album.image ?? ""}
               alt={album.title}
               radius="8px"
             />

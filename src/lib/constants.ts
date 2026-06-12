@@ -60,5 +60,3 @@ export const PLAYER_CONFIG = {
   WATCHDOG_TIMEOUT: 5000,
   SYNC_WORKER_TIMEOUT: 120_000,
 } as const;
-
-export const FAVORITES_PLAYLIST = "Favorites";

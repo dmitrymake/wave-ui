@@ -23,9 +23,6 @@ import {
   contextMenu,
   openContextMenu,
   closeContextMenu,
-  playlistSelector,
-  openPlaylistSelector,
-  closePlaylistSelector,
 } from "../../stores/ui.js";
 import type { Track } from "../../types";
 
@@ -172,37 +169,5 @@ describe("contextMenu", () => {
     const cm = get(contextMenu);
     expect(cm.x).toBe(50);
     expect(cm.y).toBe(80);
-  });
-});
-
-describe("playlistSelector", () => {
-  it("opens and closes playlist selector", () => {
-    const track = asTrack({ file: "test.mp3" });
-    openPlaylistSelector(track);
-    const ps = get(playlistSelector);
-    expect(ps.isOpen).toBe(true);
-    expect(ps.track).toEqual(track);
-
-    closePlaylistSelector();
-    const closed = get(playlistSelector);
-    expect(closed.isOpen).toBe(false);
-    expect(closed.track).toBeNull();
-  });
-
-  it("closes context menu when opening playlist selector", () => {
-    // First open context menu
-    const track = asTrack({ file: "test.mp3" });
-    const fakeEvent = {
-      currentTarget: { getBoundingClientRect: () => ({}) },
-      clientX: 0,
-      clientY: 0,
-    };
-    openContextMenu(asEvent(fakeEvent), track);
-    expect(get(contextMenu).isOpen).toBe(true);
-
-    // Then open playlist selector — context menu should close
-    openPlaylistSelector(track);
-    expect(get(contextMenu).isOpen).toBe(false);
-    expect(get(playlistSelector).isOpen).toBe(true);
   });
 });

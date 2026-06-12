@@ -17,6 +17,7 @@ class MpdClient {
   reconnectTimer: ReturnType<typeof setTimeout> | null;
   watchdogTimer: ReturnType<typeof setTimeout> | null;
   _buffer: string;
+  _decoder: TextDecoder;
 
   constructor() {
     this.socket = null;
@@ -25,6 +26,7 @@ class MpdClient {
     this.reconnectTimer = null;
     this.watchdogTimer = null;
     this._buffer = "";
+    this._decoder = new TextDecoder();
   }
 
   get isConnected(): boolean {
@@ -65,6 +67,10 @@ class MpdClient {
 
     try {
       this.socket = new WebSocket(wsUrl, ["binary"]);
+      // Receive binary frames as ArrayBuffer so _handleMessage can decode them
+      // synchronously. Decoding via Blob.text() (async) would let two back-to-back
+      // frames append to _buffer out of arrival order and corrupt the response stream.
+      this.socket.binaryType = "arraybuffer";
     } catch (e) {
       logger.error("[MPD] Connection Error:", e);
       this.reconnectTimer = setTimeout(() => this.connect(), 5000);
@@ -102,6 +108,9 @@ class MpdClient {
 
   _cleanup(): void {
     this._buffer = "";
+    // Drop any partial multi-byte sequence held by the streaming decoder so a
+    // mid-frame disconnect cannot bleed bytes into the next connection's stream.
+    this._decoder = new TextDecoder();
     if (this.watchdogTimer) {
       clearTimeout(this.watchdogTimer);
       this.watchdogTimer = null;
@@ -144,10 +153,30 @@ class MpdClient {
   // Only text MPD responses are supported over this socket. Binary commands
   // (albumart/readpicture) would interleave raw image bytes that this UTF-8 / "\nOK\n"
   // framing cannot parse, so cover art is fetched over HTTP instead.
-  async _handleMessage(event: MessageEvent): Promise<void> {
-    let text: string = event.data;
-    if (event.data instanceof Blob) {
-      text = await event.data.text();
+  //
+  // This handler MUST stay synchronous. The socket uses binaryType "arraybuffer",
+  // so frames decode here without awaiting; an await between frame arrival and the
+  // `this._buffer` append would let two back-to-back frames be appended out of order
+  // and misattribute a reply to the wrong queued command. The streaming TextDecoder
+  // also stitches multi-byte UTF-8 sequences split across frame boundaries.
+  _handleMessage(event: MessageEvent): void {
+    const data: unknown = event.data;
+    let text: string;
+    if (typeof data === "string") {
+      text = data;
+    } else if (data != null && typeof (data as { byteLength?: unknown }).byteLength === "number") {
+      // ArrayBuffer (binaryType "arraybuffer") or a typed-array view. Normalise to a
+      // Uint8Array in this realm before decoding — the Uint8Array constructor's
+      // buffer brand check is realm-independent, so cross-realm buffers (and the
+      // jsdom test environment) decode uniformly where `instanceof ArrayBuffer` would not.
+      const view: Uint8Array =
+        data instanceof Uint8Array ? data : new Uint8Array(data as ArrayBufferLike);
+      text = this._decoder.decode(view, { stream: true });
+    } else {
+      // Unexpected frame type under binaryType "arraybuffer" — ignore defensively
+      // rather than corrupt the buffer with a stringified object.
+      logger.warn("[MPD] Ignoring unexpected frame type", typeof data);
+      return;
     }
 
     this._buffer += text;

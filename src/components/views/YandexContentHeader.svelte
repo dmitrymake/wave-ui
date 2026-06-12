@@ -5,7 +5,7 @@
   import ImageLoader from "../ImageLoader.svelte";
   import Skeleton from "../Skeleton.svelte";
   import type { Writable } from "svelte/store";
-  import type { YandexAlbum, YandexHeaderData } from "../../lib/types";
+  import type { YandexAlbum, YandexArtist, YandexHeaderData } from "../../lib/types";
 
   let { headerData = null, viewMode = "", isLoading = false, tracksCount = 0, albumsStore, onPlayAll, onAddAllToQueue, onPlayVibe, onOpenAlbum }: {
     headerData?: YandexHeaderData;
@@ -18,6 +18,11 @@
     onPlayVibe?: (type: string) => void;
     onOpenAlbum?: (album: YandexAlbum) => void;
   } = $props();
+
+  // `image` lives on YandexAlbum/YandexArtist (not YandexPlaylist), `artist` only on YandexAlbum.
+  // Narrow the union for access; runtime value is unchanged.
+  const headerImage = $derived((headerData as YandexAlbum | YandexArtist | null)?.image);
+  const headerArtist = $derived((headerData as YandexAlbum | null)?.artist);
 
   import { horizontalWheelScroll as handleHorizontalScroll } from "../../lib/horizontalScroll";
 
@@ -39,7 +44,7 @@
 </script>
 
 {#if viewMode !== "search" && headerData}
-  {#if isLoading && !headerData.cover && !headerData.image}
+  {#if isLoading && !headerData.cover && !headerImage}
     <div class="view-header">
       <div class="header-art">
         <Skeleton width="100%" height="100%" radius="8px" />
@@ -78,7 +83,7 @@
           <div class="icon-wrap">{@html ICONS.HEART_FILLED}</div>
         {:else}
           <ImageLoader
-            src={headerData.cover || headerData.image}
+            src={headerData.cover || headerImage || ""}
             alt={headerData.title}
             radius="8px"
           >
@@ -101,9 +106,9 @@
           <h1 class="header-title">
             {headerData.title || headerData.name}
           </h1>
-          {#if headerData.artist || headerData.description}
+          {#if headerArtist || headerData.description}
             <h2 class="header-sub-text">
-              {headerData.artist || headerData.description}
+              {headerArtist || headerData.description}
             </h2>
           {/if}
         </div>
@@ -153,7 +158,7 @@
       <div class="music-card" role="button" tabindex="0" onclick={() => openAlbum(album)} onkeydown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); openAlbum(album); }}}>
         <div class="card-img-container">
           <ImageLoader
-            src={album.image}
+            src={album.image ?? ""}
             alt={album.title}
             radius="8px"
           />

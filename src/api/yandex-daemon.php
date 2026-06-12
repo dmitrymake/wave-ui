@@ -30,12 +30,20 @@ function logMsg($msg) {
 function mpdSend($cmd) {
     $fp = @fsockopen("localhost", 6600, $errno, $errstr, 5);
     if (!$fp) return false;
+    // Bound the READ too: the daemon is single-threaded and polls every ~2s, so a
+    // stalled MPD (connected but not replying) on an unbounded fgets would freeze
+    // feedback/queue-refill for all sessions until MPD recovers.
+    stream_set_timeout($fp, 5);
     fgets($fp);
     fwrite($fp, "$cmd\n");
     $resp = "";
     while (!feof($fp)) {
-        $line = fgets($fp); $resp .= $line;
+        $line = fgets($fp);
+        if ($line === false) break;
+        $resp .= $line;
         if (strpos($line, 'OK') === 0 || strpos($line, 'ACK') === 0) break;
+        $meta = stream_get_meta_data($fp);
+        if (!empty($meta['timed_out'])) break;
     }
     fclose($fp);
     return $resp;
@@ -60,13 +68,17 @@ function mpdAdd($url) {
 function mpdAddLocalSocket($path) {
     $fp = @fsockopen("unix:///run/mpd/socket", 0, $errno, $errstr, 3);
     if (!$fp) return false;
+    stream_set_timeout($fp, 5);
     fgets($fp); // greeting
     fwrite($fp, 'add "file://' . $path . "\"\n");
     $ok = false;
     while (!feof($fp)) {
         $line = fgets($fp);
+        if ($line === false) break;
         if (strpos($line, 'OK') === 0) { $ok = true; break; }
         if (strpos($line, 'ACK') === 0) { break; }
+        $meta = stream_get_meta_data($fp);
+        if (!empty($meta['timed_out'])) break;
     }
     fclose($fp);
     return $ok;

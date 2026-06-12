@@ -19,9 +19,14 @@ interface AlbumEntry {
   year: number;
 }
 
+let dbPromise: Promise<IDBDatabase> | null = null;
+
 export const db = {
   open(): Promise<IDBDatabase> {
-    return new Promise((resolve, reject) => {
+    // Memoize a single shared connection instead of opening (and leaking) a fresh
+    // one per query. A single connection also makes onversionchange effective.
+    if (dbPromise) return dbPromise;
+    dbPromise = new Promise<IDBDatabase>((resolve, reject) => {
       const request: IDBOpenDBRequest = indexedDB.open(DATABASE.NAME, DATABASE.VERSION);
 
       request.onupgradeneeded = (e: IDBVersionChangeEvent) => {
@@ -51,9 +56,34 @@ export const db = {
         }
       };
 
-      request.onsuccess = () => resolve(request.result);
-      request.onerror = () => reject(request.error);
+      // Another tab holds an older-version connection open and is blocking our
+      // upgrade. Surface it instead of hanging silently; it resolves once that
+      // connection closes (every connection closes itself on versionchange below).
+      request.onblocked = () => {
+        logger.warn("[DB] open blocked — another tab holds an older DB version open");
+      };
+
+      request.onsuccess = () => {
+        const database: IDBDatabase = request.result;
+        // If another tab requests a version upgrade, close so we don't block it and
+        // drop the memo so the next call reopens a fresh connection.
+        database.onversionchange = () => {
+          database.close();
+          dbPromise = null;
+        };
+        // Reconnect on abnormal close.
+        database.onclose = () => {
+          dbPromise = null;
+        };
+        resolve(database);
+      };
+
+      request.onerror = () => {
+        dbPromise = null;
+        reject(request.error);
+      };
     });
+    return dbPromise;
   },
 
   async clear(): Promise<void> {
@@ -77,6 +107,23 @@ export const db = {
     });
   },
 
+  // Atomically replace the whole store: clear + put run inside ONE transaction, so a
+  // failure mid-write rolls the clear back and the previous library cache survives.
+  // Doing clear() and bulkAdd() as two separate transactions could wipe the cache if
+  // the second one fails (quota, crash, worker.terminate by the sync watchdog).
+  async replaceAll(tracks: DbTrack[]): Promise<void> {
+    const database: IDBDatabase = await this.open();
+    return new Promise((resolve, reject) => {
+      const tx: IDBTransaction = database.transaction(DATABASE.STORE_NAME, "readwrite");
+      const store: IDBObjectStore = tx.objectStore(DATABASE.STORE_NAME);
+      store.clear();
+      for (const track of tracks) store.put(track);
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => reject(tx.error);
+      tx.onabort = () => reject(tx.error ?? new Error("replaceAll transaction aborted"));
+    });
+  },
+
   async getFilesMap(files: string[]): Promise<Map<string, DbTrack>> {
     if (!files || files.length === 0) return new Map();
     const database: IDBDatabase = await this.open();
@@ -84,20 +131,27 @@ export const db = {
       const tx: IDBTransaction = database.transaction(DATABASE.STORE_NAME, "readonly");
       const store: IDBObjectStore = tx.objectStore(DATABASE.STORE_NAME);
       const resultMap = new Map<string, DbTrack>();
-      let loaded: number = 0;
       files.forEach((rawFile) => {
         const searchKey: string = rawFile.normalize("NFC").trim();
         const req: IDBRequest<DbTrack | undefined> = store.get(searchKey);
         req.onsuccess = (e: Event) => {
-          if ((e.target as IDBRequest).result) resultMap.set(rawFile, (e.target as IDBRequest).result);
-          loaded++;
-          if (loaded === files.length) resolve(resultMap);
-        };
-        req.onerror = () => {
-          loaded++;
-          if (loaded === files.length) resolve(resultMap);
+          const found = (e.target as IDBRequest<DbTrack | undefined>).result;
+          if (found) resultMap.set(rawFile, found);
         };
       });
+      // Gate completion on the transaction, not a per-request counter: tx.oncomplete
+      // fires once all gets finish, and onerror/onabort guarantee we never hang
+      // forever (e.g. if the DB closes mid-read). Errors degrade to a partial map —
+      // callers in the enrichment path already treat misses as "not cached".
+      tx.oncomplete = () => resolve(resultMap);
+      tx.onerror = () => {
+        logger.warn("[DB] getFilesMap transaction error", tx.error);
+        resolve(resultMap);
+      };
+      tx.onabort = () => {
+        logger.warn("[DB] getFilesMap transaction aborted", tx.error);
+        resolve(resultMap);
+      };
     });
   },
 

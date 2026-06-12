@@ -3,6 +3,7 @@
 import { get } from "svelte/store";
 import { mpdClient } from "./client";
 import { MpdParser } from "./parser";
+import { escapeArg, escapePath } from "./escape";
 import {
   status,
   currentSong,
@@ -32,14 +33,6 @@ let isInitialSync: boolean = true;
 let forceHardSync: boolean = false;
 let ignoreUpdatesUntil: number = 0;
 let queueUnlockTimer: ReturnType<typeof setTimeout> | null = null;
-
-function escapePath(str: string | null | undefined): string {
-  if (!str) return "";
-  return String(str)
-    .normalize("NFC")
-    .replace(/\\/g, "\\\\")
-    .replace(/"/g, '\\"');
-}
 
 export function startStatusPoller(): void {
   stopStatusPoller();
@@ -507,14 +500,22 @@ export const PlayerActions = {
     isQueueLocked.set(true);
     if (queueUnlockTimer) clearTimeout(queueUnlockTimer);
 
+    // Snapshot before the optimistic splice. If MPD rejects the delete we restore it,
+    // otherwise the local queue stays shorter than MPD and later index-based
+    // move/remove operations would target the wrong track.
+    let previous: Track[] = [];
+    queue.update((q) => {
+      previous = q;
+      const copy: Track[] = [...q];
+      copy.splice(pos, 1);
+      return copy;
+    });
+
     try {
-      queue.update((q) => {
-        const copy: Track[] = [...q];
-        copy.splice(pos, 1);
-        return copy;
-      });
       await mpdClient.send(`delete ${pos}`);
     } catch (e) {
+      logger.error("Remove failed", e);
+      queue.set(previous);
       showToast(MSG.PLAY_FAILED_REMOVE, "error");
       isQueueLocked.set(false);
       return;
@@ -564,7 +565,7 @@ export const PlayerActions = {
 
   async saveQueue(name: string): Promise<void> {
     if (!name) return;
-    const safeName: string = name.replace(/"/g, '\\"');
+    const safeName: string = escapeArg(name);
 
     const write = async (overwrite: boolean): Promise<void> => {
       try {

@@ -3,6 +3,7 @@
 import { get } from "svelte/store";
 import { mpdClient } from "./client";
 import { MpdParser } from "./parser";
+import { escapeArg } from "./escape";
 import {
   isLoadingPlaylists,
   playlists,
@@ -88,7 +89,7 @@ export const LibraryActions = {
 
   async createEmptyPlaylist(name: string): Promise<void> {
     if (!name) return;
-    const safeName: string = name.replace(/"/g, '\\"');
+    const safeName: string = escapeArg(name);
     try {
       await mpdClient.send(`save "${safeName}"`);
       await mpdClient.send(`playlistclear "${safeName}"`);
@@ -102,7 +103,7 @@ export const LibraryActions = {
 
   async saveQueueAsPlaylist(name: string): Promise<void> {
     if (!name) return;
-    const safeName: string = name.replace(/"/g, '\\"');
+    const safeName: string = escapeArg(name);
     try {
       await mpdClient.send(`save "${safeName}"`);
       showToast(MSG.playlistCreated(name), "success");
@@ -115,7 +116,7 @@ export const LibraryActions = {
 
   async deletePlaylist(name: string): Promise<void> {
     if (!name) return;
-    const safeName: string = name.replace(/"/g, '\\"');
+    const safeName: string = escapeArg(name);
     try {
       await mpdClient.send(`rm "${safeName}"`);
       showToast(MSG.PL_DELETED, "info");
@@ -128,8 +129,8 @@ export const LibraryActions = {
 
   async renamePlaylist(oldName: string, newName: string): Promise<void> {
     if (!oldName || !newName) return;
-    const safeOld: string = oldName.replace(/"/g, '\\"');
-    const safeNew: string = newName.replace(/"/g, '\\"');
+    const safeOld: string = escapeArg(oldName);
+    const safeNew: string = escapeArg(newName);
     try {
       await mpdClient.send(`rename "${safeOld}" "${safeNew}"`);
       showToast(MSG.PL_RENAMED, "success");
@@ -145,7 +146,7 @@ export const LibraryActions = {
     activePlaylistName.set(playlistName);
     activePlaylistTracks.set([]);
     isLoadingTracks.set(true);
-    const safeName: string = playlistName.replace(/"/g, '\\"');
+    const safeName: string = escapeArg(playlistName);
     try {
       const text: string = await mpdClient.send(`listplaylistinfo "${safeName}"`);
       const rawTracks: Track[] = MpdParser.parseTracks(text);
@@ -192,7 +193,7 @@ export const LibraryActions = {
   },
 
   async movePlaylistTrack(playlistName: string, fromPos: number, toPos: number): Promise<void> {
-    const safeName: string = playlistName.replace(/"/g, '\\"');
+    const safeName: string = escapeArg(playlistName);
     try {
       await mpdClient.send(`playlistmove "${safeName}" ${fromPos} ${toPos}`);
     } catch (e) {
@@ -201,7 +202,7 @@ export const LibraryActions = {
   },
 
   async removeFromPlaylist(playlistName: string, pos: number): Promise<boolean> {
-    const safeName: string = playlistName.replace(/"/g, '\\"');
+    const safeName: string = escapeArg(playlistName);
     try {
       await mpdClient.send(`playlistdelete "${safeName}" ${pos}`);
       showToast(MSG.TRACK_REMOVED, "success");
@@ -234,7 +235,7 @@ export const LibraryActions = {
     if (!track || !track.file) return;
 
     const rawFile: string = track.file;
-    const safeFile: string = rawFile.replace(/"/g, '\\"');
+    const safeFile: string = escapeArg(rawFile);
     const isUrl: boolean = isRemoteUrl(rawFile);
 
     const currentFavs: Set<string> = get(favorites);

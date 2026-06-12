@@ -52,7 +52,7 @@ describe("YandexApi.request", () => {
 
   it("flags 401/403 as auth errors", async () => {
     (globalThis.fetch as ReturnType<typeof vi.fn>).mockResolvedValue({ ok: false, status: 401 });
-    const err = await YandexApi.request("status").catch((e) => e);
+    const err = (await YandexApi.request("status").catch((e) => e)) as YandexApiError;
     expect(err).toBeInstanceOf(YandexApiError);
     expect(err.status).toBe(401);
     expect(isYandexAuthError(err)).toBe(true);

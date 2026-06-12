@@ -91,6 +91,39 @@ describe("db.bulkAdd + db.clear", () => {
   });
 });
 
+describe("db.replaceAll", () => {
+  it("atomically replaces the entire store in one transaction", async () => {
+    await db.bulkAdd(asDbTracks(sampleTracks));
+    expect((await db.getArtists()).length).toBe(3);
+
+    await db.replaceAll(
+      asDbTracks([
+        {
+          file: "Music/New/Album/01.flac",
+          title: "Only Track",
+          artist: "New Artist",
+          album: "New Album",
+          album_artist: "New Artist",
+          genre: "Ambient",
+          track: "1",
+          disc: "1",
+          year: 2024,
+        },
+      ]),
+    );
+
+    const artists = await db.getArtists();
+    expect(artists.length).toBe(1);
+    expect(artists[0].name).toBe("New Artist");
+  });
+
+  it("clears the store when given an empty array", async () => {
+    await db.bulkAdd(asDbTracks(sampleTracks));
+    await db.replaceAll([]);
+    expect(await db.getArtists()).toHaveLength(0);
+  });
+});
+
 describe("db.getFilesMap", () => {
   it("returns empty map for empty input", async () => {
     const result = await db.getFilesMap([]);

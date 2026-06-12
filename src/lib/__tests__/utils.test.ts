@@ -65,6 +65,13 @@ describe("getYandexIdFromUrl", () => {
     expect(getYandexIdFromUrl("Music/Artist/Album/track.flac")).toBeNull();
   });
 
+  it("ignores a bare ?id= on a non-Yandex url but trusts it on a Yandex host", () => {
+    // The over-broad matcher used to return an id for ANY url carrying ?id=, then
+    // used it as a streamCache key and mis-enriched non-Yandex tracks.
+    expect(getYandexIdFromUrl("http://radio.example.com/stream?id=abc&x=1")).toBeNull();
+    expect(getYandexIdFromUrl("https://s12.storage.yandex.net/get-mp3/a?id=7777")).toBe("7777");
+  });
+
   it("matches the same id across the source uri and the playing file", () => {
     const sourceId = getYandexIdFromUrl("yandex:55"); // list item
     const playingId = getYandexIdFromUrl("/dev/shm/yandex_music/tracks/55.mp3"); // currentSong.file
