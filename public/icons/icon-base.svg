@@ -1,4 +1,7 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
-  <rect width="512" height="512" rx="96" fill="#1a1a2e"/>
-  <path d="M152 144l40 224l64 -140l64 140l40 -224" fill="none" stroke="#e74c5e" stroke-width="40" stroke-linecap="round" stroke-linejoin="round"/>
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512" role="img" aria-label="Wave">
+  <!-- MASKABLE master: full-bleed square ground, wave kept inside the central
+       80% safe zone (radius 204.8 from center); rasterized to icon-192/512 (maskable). -->
+  <rect width="512" height="512" fill="#121212"/>
+  <path d="M120 256 C 165 150, 211 150, 256 256 S 347 362, 392 256"
+        fill="none" stroke="#fa2d48" stroke-width="40" stroke-linecap="round" stroke-linejoin="round"/>
 </svg>

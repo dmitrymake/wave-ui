@@ -2,6 +2,8 @@
 <!-- Copyright (c) 2025 dmitrymake -->
 <script lang="ts">
   import { onDestroy } from "svelte";
+  import { fade } from "svelte/transition";
+  import { sendArt, receiveArt } from "../lib/transitions";
   import { seek, nav, togglePlay } from "../lib/playerActions";
   import { ICONS } from "../lib/icons";
   import {
@@ -20,6 +22,7 @@
   import VolumeSlider from "./VolumeSlider.svelte";
   import PlayModeButton from "./PlayModeButton.svelte";
   import LikeButton from "./LikeButton.svelte";
+  import IconButton from "./ui/IconButton.svelte";
 
   let isHoveringBar = $state(false);
   let progressBar: HTMLElement;
@@ -81,6 +84,7 @@
 {#if !$isFullPlayerOpen}
   <div
     class="dock"
+    transition:fade={{ duration: 220 }}
     onclick={() => isFullPlayerOpen.set(true)}
     use:longpress={500}
     onlongpress={handleLongPress}
@@ -90,7 +94,7 @@
   >
     <div
       class="progress-shadow"
-      style="width: {pct}%; transition: {smooth ? 'width 0.25s linear' : 'none'}"
+      style="transform: scaleX({pct / 100}); transition: {smooth ? 'transform var(--dur-slow-2) var(--ease-linear)' : 'none'}"
     ></div>
 
     <div
@@ -115,10 +119,14 @@
       <div class="rail"></div>
       <div
         class="fill"
-        style="width: {pct}%; transition: {smooth ? 'width 0.25s linear' : 'none'}"
-      >
-        {#if !isRadio}<div class="knob"></div>{/if}
-      </div>
+        style="transform: scaleX({pct / 100}); transition: {smooth ? 'transform var(--dur-slow-2) var(--ease-linear)' : 'none'}"
+      ></div>
+      {#if !isRadio}
+        <div
+          class="knob"
+          style="left: {pct}%; transition: transform var(--dur-fast){smooth ? ', left var(--dur-slow-2) var(--ease-linear)' : ''}"
+        ></div>
+      {/if}
 
       {#if (isHoveringBar || isDragging) && !isRadio}
         <div class="tooltip current" style="left: {pct}%">
@@ -130,7 +138,11 @@
 
     <div class="grid">
       <div class="info">
-        <div class="art">
+        <div
+          class="art"
+          in:receiveArt|global={{ key: "np-art" }}
+          out:sendArt|global={{ key: "np-art" }}
+        >
           <ImageLoader src={artSrc} alt="art" radius="4px">
             {#snippet fallback()}
               <div class="icon-fallback">
@@ -163,17 +175,17 @@
       <div class="controls">
         <LikeButton track={$currentSong} compact class="desktop" />
 
-        <button class="btn-icon" onclick={stop(() => nav("previous"))}>
+        <IconButton ariaLabel="Previous" onclick={stop(() => nav("previous"))}>
           {@html ICONS.PREVIOUS}
-        </button>
+        </IconButton>
 
         <button class="play-btn flex-center" onclick={stop(togglePlay)}>
           {@html $status.state === "play" ? ICONS.PAUSE : ICONS.PLAY}
         </button>
 
-        <button class="btn-icon" onclick={stop(() => nav("next"))}>
+        <IconButton ariaLabel="Next" onclick={stop(() => nav("next"))}>
           {@html ICONS.NEXT}
-        </button>
+        </IconButton>
 
         {#if !isRadio}
           <PlayModeButton compact class="desktop" />
@@ -189,62 +201,66 @@
 
 <style>
   .dock {
-    position: fixed; bottom: 0; left: 0; right: 0;
-    height: var(--mini-player-height, 90px);
-    background: var(--c-bg-glass);
-    border-top: 1px solid var(--c-border-dim);
+    position: fixed; bottom: var(--space-0); left: var(--space-0); right: var(--space-0);
+    height: var(--mini-player-height);
+    /* Opaque (= the glass colour at full alpha) so we can drop the persistent
+       backdrop-filter blur — it ran a 2-pass gaussian over the scrolling content
+       every frame for the whole session, invisibly under a ~0.95-opaque bar. */
+    background: var(--c-bg-main);
+    border-top: var(--border-default-dim);
     z-index: var(--z-dock);
-    backdrop-filter: blur(10px);
     cursor: pointer; user-select: none;
   }
 
   .progress-shadow {
-    position: absolute; top: 0; left: 0; bottom: 0;
+    position: absolute; top: var(--space-0); left: var(--space-0); bottom: var(--space-0);
+    width: 100%; transform-origin: left center;
     background: var(--c-surface-button); z-index: 101;
     pointer-events: none; opacity: 0.1;
   }
 
   .progress-bar {
-    position: absolute; top: -6px; left: 0; width: 100%;
-    height: 14px; z-index: 110; cursor: pointer;
+    position: absolute; top: calc(-1 * var(--space-2xs)); left: var(--space-0); width: 100%;
+    height: var(--space-14px); z-index: 110; cursor: pointer;
     display: flex; align-items: center;
   }
-  .progress-bar.radio { cursor: default; opacity: 0; pointer-events: none; }
+  .progress-bar.radio { cursor: default; opacity: var(--opacity-hidden); pointer-events: none; }
 
   .rail {
-    position: absolute; left: 0; width: 100%; top: 6px;
-    height: 2px; background: var(--c-border); transition: height 0.2s;
+    position: absolute; left: var(--space-0); width: 100%; top: var(--space-2xs);
+    height: var(--space-0_5); background: var(--c-border); transition: height var(--dur-fast);
   }
   .fill {
-    position: absolute; left: 0; top: 6px; height: 2px;
+    position: absolute; left: var(--space-0); top: var(--space-2xs); height: var(--space-0_5);
+    width: 100%; transform-origin: left center;
     background: var(--c-accent); pointer-events: none;
   }
-  .progress-bar:hover .rail, .progress-bar:hover .fill { height: 4px; top: 5px; }
+  .progress-bar:hover .rail, .progress-bar:hover .fill { height: var(--space-1); top: var(--space-5px); }
   .knob {
-    position: absolute; right: -6px; top: -4px;
-    width: 12px; height: 12px; border-radius: 50%;
-    background: var(--c-text-primary); transform: scale(0);
-    transition: transform 0.2s; box-shadow: 0 1px 3px var(--c-black-50);
+    position: absolute; top: 50%; left: var(--space-0);
+    width: var(--space-3); height: var(--space-3); border-radius: var(--radius-circle);
+    background: var(--c-text-primary); transform: translate(-50%, -50%) scale(0);
+    box-shadow: var(--shadow-xs-strong);
   }
-  .progress-bar:hover .knob { transform: scale(1); }
+  .progress-bar:hover .knob { transform: translate(-50%, -50%) scale(1); }
 
   .tooltip {
-    position: absolute; top: -28px;
+    position: absolute; top: calc(-1 * var(--space-28px));
     background: var(--c-surface-active); color: var(--c-text-primary);
-    font-size: 11px; font-weight: bold; padding: 3px 6px;
-    border-radius: 4px; transform: translateX(-50%);
-    pointer-events: none; box-shadow: 0 2px 5px var(--c-shadow-card);
+    font-size: var(--text-xs); font-weight: var(--weight-bold); padding: var(--space-3px) var(--space-2);
+    border-radius: var(--radius-sm); transform: translateX(-50%);
+    pointer-events: none; box-shadow: var(--shadow-sm);
   }
 
   .grid {
     display: grid; grid-template-columns: 1fr max-content 1fr;
-    height: 100%; padding: 0 32px; align-items: center;
-    gap: 20px; position: relative; z-index: 105;
+    height: 100%; padding: var(--space-0) var(--space-8); align-items: center;
+    gap: var(--space-5); position: relative; z-index: 105;
   }
 
-  .info { display: flex; align-items: center; gap: 16px; overflow: hidden; }
+  .info { display: flex; align-items: center; gap: var(--space-4); overflow: hidden; }
   .art {
-    width: 64px; height: 64px; border-radius: 4px;
+    width: var(--thumb-lg); height: var(--thumb-lg); border-radius: var(--radius-sm);
     background: var(--c-bg-placeholder); overflow: hidden;
     flex-shrink: 0; position: relative;
   }
@@ -252,41 +268,41 @@
     width: 100%; height: 100%; display: flex; align-items: center; justify-content: center;
     color: var(--c-icon-faint);
   }
-  .icon-fallback :global(svg) { width: 24px; height: 24px; opacity: 0.5; }
+  .icon-fallback :global(svg) { width: var(--icon-size-lg); height: var(--icon-size-lg); opacity: var(--opacity-faint); }
 
   .meta { display: flex; flex-direction: column; justify-content: center; overflow: hidden; }
-  .title-row { display: flex; align-items: center; gap: 6px; margin-bottom: 2px; }
-  .title { font-size: 15px; font-weight: 500; color: var(--c-text-primary); }
-  .artist-row { display: flex; align-items: center; gap: 6px; }
-  .artist { font-size: 13px; color: var(--c-text-secondary); }
+  .title-row { display: flex; align-items: center; gap: var(--space-2); margin-bottom: var(--space-0_5); }
+  .title { font-size: var(--text-lg); font-weight: var(--weight-medium); color: var(--c-text-primary); }
+  .artist-row { display: flex; align-items: center; gap: var(--space-2); }
+  .artist { font-size: var(--text-base); color: var(--c-text-secondary); }
 
   .tiny-dots {
-    width: 28px; height: 28px; min-width: 28px; padding: 0;
-    border-radius: 50%; color: var(--c-text-secondary);
+    width: var(--circle-btn-sm); height: var(--circle-btn-sm); min-width: var(--circle-btn-sm); padding: var(--space-0);
+    border-radius: var(--radius-circle); color: var(--c-text-secondary);
     background: transparent; border: none; cursor: pointer;
-    display: flex; align-items: center; justify-content: center; opacity: 0.7;
+    display: flex; align-items: center; justify-content: center; opacity: var(--opacity-dim);
   }
-  .tiny-dots:hover { color: var(--c-text-primary); background: var(--c-white-10); opacity: 1; }
+  .tiny-dots:hover { color: var(--c-text-primary); background: var(--c-white-10); opacity: var(--opacity-visible); }
 
-  .controls { display: flex; align-items: center; gap: 20px; }
+  .controls { display: flex; align-items: center; gap: var(--space-5); }
 
   .play-btn {
-    width: 48px; height: 48px; border-radius: 50%;
+    width: var(--circle-play-md); height: var(--circle-play-md); border-radius: var(--radius-circle);
     background: var(--c-text-primary); color: var(--c-text-inverse);
-    box-shadow: 0 4px 12px var(--c-shadow-card);
-    transition: transform 0.1s; border: none;
+    box-shadow: var(--shadow-md);
+    transition: transform var(--dur-instant); border: none;
   }
   .play-btn:hover { transform: scale(1.05); }
   .play-btn:active { transform: scale(0.95); }
-  .play-btn :global(svg) { width: 24px; height: 24px; }
+  .play-btn :global(svg) { width: var(--icon-size-lg); height: var(--icon-size-lg); }
 
-  .volume { display: flex; align-items: center; justify-content: flex-end; gap: 12px; }
+  .volume { display: flex; align-items: center; justify-content: flex-end; gap: var(--space-3); }
 
   @media (max-width: 768px) {
     .desktop { display: none !important; }
-    .grid { grid-template-columns: 1fr max-content; padding: 0 16px; }
-    .play-btn { width: 40px; height: 40px; }
-    .art { width: 48px; height: 48px; }
+    .grid { grid-template-columns: 1fr max-content; padding: var(--space-0) var(--space-4); }
+    .play-btn { width: var(--control-h-lg); height: var(--control-h-lg); }
+    .art { width: var(--thumb-md); height: var(--thumb-md); }
     .tiny-dots { display: none; }
     .meta-tag { display: none; }
   }

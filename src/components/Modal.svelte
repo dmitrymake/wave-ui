@@ -143,9 +143,9 @@
   }
 
   .shake-error {
-    animation: shake 0.3s ease-in-out;
-    border-color: #ff4444 !important;
-    box-shadow: 0 0 0 1px rgba(255, 68, 68, 0.3);
+    animation: shake var(--dur-base) ease-in-out;
+    border-color: var(--c-error) !important;
+    box-shadow: var(--shadow-error-ring);
   }
 
   .backdrop {
@@ -157,64 +157,64 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    padding: 20px;
+    padding: var(--space-5);
   }
 
   .modal-card {
     background: var(--c-bg-card);
     width: 100%;
     max-width: 320px;
-    border-radius: 12px;
-    box-shadow: 0 10px 40px var(--c-black-70);
-    border: 1px solid var(--c-border);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-xl);
+    border: var(--border-default);
     overflow: hidden;
     display: flex;
     flex-direction: column;
   }
 
   .modal-header {
-    height: 50px;
+    height: var(--control-h-2xl);
     background: var(--c-white-10);
-    border-bottom: 1px solid var(--c-border);
+    border-bottom: var(--border-default);
     display: flex;
     align-items: center;
-    padding: 0 20px;
+    padding: var(--space-0) var(--space-5);
     flex-shrink: 0;
   }
 
   .modal-title {
-    font-size: 14px;
-    font-weight: 600;
+    font-size: var(--text-base);
+    font-weight: var(--weight-semibold);
     color: var(--c-text-primary);
   }
 
   .modal-body {
-    padding: 24px 20px;
+    padding: var(--space-6) var(--space-5);
     color: var(--c-text-secondary);
   }
 
   .modal-message {
-    margin: 0;
-    font-size: 14px;
-    line-height: 1.5;
+    margin: var(--space-0);
+    font-size: var(--text-base);
+    line-height: var(--leading-normal);
     color: var(--c-text-primary);
   }
 
   .input-wrapper {
-    margin-top: 16px;
+    margin-top: var(--space-4);
   }
 
   .modal-input {
     width: 100%;
     background: var(--c-surface-input);
-    border: 1px solid var(--c-border);
+    border: var(--border-default);
     color: var(--c-text-primary);
-    padding: 10px 12px;
-    border-radius: 8px;
-    font-size: 14px;
+    padding: var(--space-3) var(--space-3);
+    border-radius: var(--radius-md);
+    font-size: var(--text-base);
     outline: none;
     box-sizing: border-box;
-    transition: border-color 0.2s;
+    transition: border-color var(--dur-fast);
   }
 
   .modal-input:focus {
@@ -224,23 +224,23 @@
   .select-list {
     display: flex;
     flex-direction: column;
-    gap: 8px;
-    margin-top: 10px;
+    gap: var(--space-2);
+    margin-top: var(--space-3);
   }
 
   .select-item {
     background: var(--c-surface-hover);
-    border: 1px solid transparent;
+    border: var(--border-width-thin) solid transparent;
     color: var(--c-text-primary);
-    padding: 12px;
-    border-radius: 8px;
+    padding: var(--space-3);
+    border-radius: var(--radius-md);
     text-align: left;
-    font-size: 14px;
+    font-size: var(--text-base);
     cursor: pointer;
     display: flex;
     justify-content: space-between;
     align-items: center;
-    transition: all 0.2s;
+    transition: all var(--trans-fast);
   }
 
   .select-item:hover {
@@ -251,27 +251,27 @@
     border-color: var(--c-accent);
     background: var(--c-surface-active);
     color: var(--c-accent);
-    font-weight: 600;
+    font-weight: var(--weight-semibold);
   }
 
   .check {
-    font-weight: bold;
+    font-weight: var(--weight-bold);
   }
 
   .modal-actions {
     display: flex;
-    border-top: 1px solid var(--c-border);
+    border-top: var(--border-default);
   }
 
   .btn {
     flex: 1;
     background: transparent;
     border: none;
-    padding: 16px;
-    font-size: 14px;
-    font-weight: 600;
+    padding: var(--space-4);
+    font-size: var(--text-base);
+    font-weight: var(--weight-semibold);
     cursor: pointer;
-    transition: background 0.1s;
+    transition: background var(--dur-instant);
   }
 
   .btn:active {
@@ -280,7 +280,7 @@
 
   .btn.cancel {
     color: var(--c-text-muted);
-    border-right: 1px solid var(--c-border);
+    border-right: var(--border-default);
   }
 
   .btn.confirm {

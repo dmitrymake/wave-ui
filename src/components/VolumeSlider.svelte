@@ -1,6 +1,7 @@
 <!-- SPDX-License-Identifier: MIT -->
 <!-- Copyright (c) 2025 dmitrymake -->
 <script lang="ts">
+  import { onDestroy } from "svelte";
   import { setVolume } from "../lib/playerActions";
   import { status } from "../lib/store.js";
   import { ICONS } from "../lib/icons";
@@ -52,6 +53,10 @@
     window.removeEventListener("touchmove", onVolMove);
     window.removeEventListener("touchend", onVolEnd);
   }
+
+  // If the component is unmounted mid-drag, the window listeners added in
+  // handleVolStart would otherwise leak. Clear drag state and detach them.
+  onDestroy(onVolEnd);
 </script>
 
 <div class="volume-row" class:compact onclick={(e) => e.stopPropagation()} onkeydown={(e) => e.stopPropagation()} role="presentation">
@@ -88,9 +93,9 @@
   .volume-row {
     display: flex;
     align-items: center;
-    gap: 12px;
+    gap: var(--space-3);
     opacity: 0.9;
-    padding: 0 4px;
+    padding: var(--space-0) var(--space-1);
   }
   .compact {
     justify-content: flex-end;
@@ -100,25 +105,25 @@
     background: transparent;
     border: none;
     color: var(--c-text-secondary);
-    padding: 8px;
+    padding: var(--icon-btn-pad);
     cursor: pointer;
     display: flex;
     align-items: center;
     justify-content: center;
-    border-radius: 50%;
-    transition: color 0.2s, background 0.2s;
+    border-radius: var(--radius-circle);
+    transition: color var(--dur-fast), background var(--dur-fast);
   }
   .vol-btn:hover {
     color: var(--c-text-primary);
     background: var(--c-white-10);
   }
-  .vol-btn :global(svg) { width: 24px; height: 24px; }
-  .compact .vol-btn { padding: 4px; width: 32px; height: 32px; }
-  .compact .vol-btn :global(svg) { width: 20px; height: 20px; }
+  .vol-btn :global(svg) { width: var(--icon-size-lg); height: var(--icon-size-lg); }
+  .compact .vol-btn { padding: var(--space-1); width: var(--control-h-sm); height: var(--control-h-sm); }
+  .compact .vol-btn :global(svg) { width: var(--icon-size-md); height: var(--icon-size-md); }
 
   .volume-hit-area {
     flex: 1;
-    height: 40px;
+    height: var(--control-h-lg);
     display: flex;
     align-items: center;
     cursor: pointer;
@@ -129,14 +134,14 @@
   .compact .volume-hit-area {
     width: 150px;
     flex: none;
-    height: 48px;
+    height: var(--control-h-xl);
   }
 
   .common-track {
     width: 100%;
-    height: 4px;
+    height: var(--space-1);
     background: var(--c-white-20);
-    border-radius: 2px;
+    border-radius: var(--radius-xs);
     position: relative;
   }
   .compact .common-track {
@@ -146,7 +151,7 @@
   .common-fill {
     height: 100%;
     background: var(--c-text-primary);
-    border-radius: 2px;
+    border-radius: var(--radius-xs);
     position: absolute;
     left: 0;
     top: 0;
@@ -157,20 +162,20 @@
     position: absolute;
     top: 50%;
     transform: translateX(-50%);
-    margin-top: -7px;
+    margin-top: calc(-1 * var(--space-7px));
     width: 14px;
     height: 14px;
-    background: #fff;
-    border-radius: 50%;
-    box-shadow: 0 2px 4px var(--c-black-50);
+    background: var(--c-text-primary);
+    border-radius: var(--radius-circle);
+    box-shadow: var(--shadow-sm-strong);
     pointer-events: none;
   }
 
   .vol-icon-static {
     color: var(--c-text-secondary);
-    opacity: 0.5;
+    opacity: var(--opacity-faint);
     display: flex;
     align-items: center;
   }
-  .vol-icon-static :global(svg) { width: 20px; height: 20px; }
+  .vol-icon-static :global(svg) { width: var(--icon-size-md); height: var(--icon-size-md); }
 </style>

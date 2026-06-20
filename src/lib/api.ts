@@ -7,6 +7,8 @@ import SyncWorker from "./workers/sync.worker.js?worker";
 import { MSG } from "./messages";
 import { logger } from "./logger";
 import { isRemoteUrl } from "./utils";
+import { fetchWithTimeout } from "./http";
+import { bumpLibraryRevision } from "./db";
 import type { Station } from "./types.js";
 
 interface SyncWorkerMessage {
@@ -21,7 +23,6 @@ export const ApiActions = {
     if (get(isSyncingLibrary)) return;
 
     isSyncingLibrary.set(true);
-    const worker = new SyncWorker();
 
     let apiUrl = API_ENDPOINTS.SYNC;
     if (!isRemoteUrl(apiUrl)) {
@@ -32,19 +33,33 @@ export const ApiActions = {
       }
     }
 
-    worker.postMessage({
-      type: "START_SYNC",
-      payload: {
-        url: apiUrl,
-      },
-    });
+    let worker: Worker | undefined;
+    let watchdog: ReturnType<typeof setTimeout> | undefined;
 
-    const watchdog = setTimeout(() => {
-      logger.error("[API] Sync worker timed out");
+    try {
+      worker = new SyncWorker();
+
+      watchdog = setTimeout(() => {
+        logger.error("[API] Sync worker timed out");
+        showToast(MSG.SYNC_FAILED, "error");
+        isSyncingLibrary.set(false);
+        worker?.terminate();
+      }, PLAYER_CONFIG.SYNC_WORKER_TIMEOUT);
+
+      worker.postMessage({
+        type: "START_SYNC",
+        payload: {
+          url: apiUrl,
+        },
+      });
+    } catch (e) {
+      if (watchdog) clearTimeout(watchdog);
+      logger.error("[API] Failed to start sync worker:", e);
       showToast(MSG.SYNC_FAILED, "error");
       isSyncingLibrary.set(false);
-      worker.terminate();
-    }, PLAYER_CONFIG.SYNC_WORKER_TIMEOUT);
+      worker?.terminate();
+      return;
+    }
 
     worker.onmessage = (e: MessageEvent<SyncWorkerMessage>): void => {
       const { type, status, count, message } = e.data;
@@ -61,9 +76,10 @@ export const ApiActions = {
 
       if (type === "DONE") {
         clearTimeout(watchdog);
+        bumpLibraryRevision();
         showToast(MSG.libraryUpdated(count ?? 0), "success");
         isSyncingLibrary.set(false);
-        worker.terminate();
+        worker?.terminate();
       }
 
       if (type === "ERROR") {
@@ -71,7 +87,7 @@ export const ApiActions = {
         logger.error("[API] Sync Error:", message);
         showToast(MSG.syncFailed(message ?? ""), "error");
         isSyncingLibrary.set(false);
-        worker.terminate();
+        worker?.terminate();
       }
     };
 
@@ -80,7 +96,7 @@ export const ApiActions = {
       logger.error("[API] Worker crash:", err);
       showToast(MSG.SYNC_WORKER_CRASHED, "error");
       isSyncingLibrary.set(false);
-      worker.terminate();
+      worker?.terminate();
     };
   },
 
@@ -90,7 +106,7 @@ export const ApiActions = {
     isLoadingRadio.set(true);
     try {
       const isDev = import.meta.env.DEV;
-      const res = await fetch(API_ENDPOINTS.STATIONS(isDev));
+      const res = await fetchWithTimeout(API_ENDPOINTS.STATIONS(isDev));
 
       if (!res.ok) throw new Error("Network error");
 
@@ -133,7 +149,7 @@ export const ApiActions = {
       formData.append("time", time);
       formData.append("playlist", playlistName);
 
-      const res = await fetch(API_ENDPOINTS.SYNC, {
+      const res = await fetchWithTimeout(API_ENDPOINTS.SYNC, {
         method: "POST",
         body: formData,
       });
@@ -151,7 +167,7 @@ export const ApiActions = {
 
   async getServerTime(): Promise<string | null> {
     try {
-      const res = await fetch(`${API_ENDPOINTS.SYNC}?action=get_time`);
+      const res = await fetchWithTimeout(`${API_ENDPOINTS.SYNC}?action=get_time`);
       if (res.ok) {
         const data = await res.json();
         return data.time ?? null;

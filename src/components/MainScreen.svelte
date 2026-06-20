@@ -50,7 +50,7 @@
 </script>
 
 <div class="app-container">
-  <div class="app-layout">
+  <div class="app-layout" class:player-open={$isFullPlayerOpen}>
     {#if isOffline}
       <div class="offline-banner" role="status" transition:fly={{ y: -40, duration: 300 }}>
         <span class="offline-dot"></span>
@@ -150,8 +150,6 @@
     height: 100dvh;
     background: var(--c-bg-app);
     overflow: hidden;
-
-    --mini-player-height: 90px;
   }
 
   .app-layout {
@@ -160,11 +158,46 @@
     min-height: 0;
     position: relative;
     z-index: 1;
+    /* Depth: recede behind the now-playing sheet (Apple Music container transform).
+       Transform auto-promotes to a layer during the animation — no standing will-change. */
+    transform-origin: center center;
+    transition: transform var(--dur-base) var(--ease-emphasized);
+  }
+  /* Dim via a composited opacity overlay instead of an animated filter:brightness
+     (which re-rasterized the entire app subtree every frame on open AND close).
+     #000 @ 0.5 over the dark app reads identically to brightness(0.5). */
+  .app-layout::after {
+    content: "";
+    position: absolute;
+    inset: var(--space-0);
+    background: #000;
+    opacity: var(--opacity-hidden);
+    pointer-events: none;
+    z-index: calc(var(--z-modal) + 1);
+    transition: opacity var(--dur-base) var(--ease-emphasized);
+  }
+  .app-layout.player-open {
+    transform: scale(0.92);
+  }
+  .app-layout.player-open::after {
+    opacity: var(--opacity-faint);
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .app-layout,
+    .app-layout::after {
+      transition: none;
+    }
+    .app-layout.player-open {
+      transform: none;
+    }
+    .app-layout.player-open::after {
+      opacity: var(--opacity-hidden);
+    }
   }
 
   .toast-container {
     position: fixed;
-    top: 20px;
+    top: var(--space-5);
     left: 50%;
     transform: translateX(-50%);
     z-index: var(--z-toast);
@@ -173,38 +206,38 @@
   .toast-body {
     background: var(--c-bg-toast);
     color: var(--c-text-primary);
-    padding: 12px 24px;
-    border-radius: 30px;
-    box-shadow: 0 4px 15px var(--c-shadow-popover);
-    font-weight: 600;
-    font-size: 14px;
+    padding: var(--space-3) var(--space-6);
+    border-radius: var(--radius-full);
+    box-shadow: var(--shadow-md-popover);
+    font-weight: var(--weight-semibold);
+    font-size: var(--text-base);
   }
 
   /* Unobtrusive offline indicator: a slim pill anchored under the header, themed via
      CSS variables so both palettes render it correctly. Sits just below toasts. */
   .offline-banner {
     position: fixed;
-    top: 12px;
+    top: var(--space-3);
     left: 50%;
     transform: translateX(-50%);
     z-index: calc(var(--z-toast) - 1);
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: var(--space-2);
     background: var(--c-error);
     color: var(--c-text-inverse);
-    padding: 7px 16px;
+    padding: var(--space-7px) var(--space-4);
     border-radius: var(--radius-full);
-    box-shadow: 0 4px 15px var(--c-shadow-popover);
-    font-weight: 600;
-    font-size: 13px;
+    box-shadow: var(--shadow-md-popover);
+    font-weight: var(--weight-semibold);
+    font-size: var(--text-base);
     pointer-events: none;
   }
 
   .offline-dot {
-    width: 8px;
-    height: 8px;
-    border-radius: 50%;
+    width: var(--space-2);
+    height: var(--space-2);
+    border-radius: var(--radius-circle);
     background: var(--c-text-inverse);
     opacity: 0.85;
     animation: offline-pulse 1.4s ease-in-out infinite;
@@ -222,17 +255,17 @@
     background: var(--c-bg-main);
     min-width: 0;
     height: 100%;
-    transition: flex 0.3s ease;
+    transition: flex var(--dur-base) var(--ease-default);
   }
 
   .top-bar {
     height: var(--header-height);
     display: flex;
     align-items: center;
-    padding: 0 32px;
+    padding: var(--space-0) var(--space-4);
     background: var(--c-bg-glass);
-    border-bottom: 1px solid var(--c-border-dim);
-    gap: 15px;
+    border-bottom: var(--border-default-dim);
+    gap: var(--space-4);
     flex-shrink: 0;
   }
 
@@ -240,7 +273,7 @@
     flex: 1;
     overflow-x: hidden;
     position: relative;
-    transition: padding-bottom 0.3s ease;
+    transition: padding-bottom var(--dur-base) var(--ease-default);
   }
 
   .view-wrapper {
@@ -256,22 +289,22 @@
     cursor: pointer;
   }
   .hamburger-btn :global(svg) {
-    width: 24px;
-    height: 24px;
+    width: var(--icon-size-lg);
+    height: var(--icon-size-lg);
   }
 
   .back-btn {
     background: none;
     border: none;
     color: var(--c-accent);
-    font-size: 16px;
-    font-weight: 600;
+    font-size: var(--text-lg);
+    font-weight: var(--weight-semibold);
     cursor: pointer;
     display: flex;
     align-items: center;
-    gap: 6px;
-    padding: 0;
-    line-height: 1;
+    gap: var(--space-2);
+    padding: var(--space-0);
+    line-height: var(--leading-none);
   }
 
   .icon-inline {
@@ -280,29 +313,29 @@
   }
 
   .back-btn :global(svg) {
-    width: 20px;
-    height: 20px;
+    width: var(--icon-size-md);
+    height: var(--icon-size-md);
     display: block;
   }
 
   .view-title {
-    font-size: 20px;
-    font-weight: 700;
+    font-size: var(--text-2xl);
+    font-weight: var(--weight-bold);
     color: var(--c-text-primary);
   }
 
   .docked-player-container {
     display: none;
-    width: 280px;
+    width: var(--dock-w);
     flex-shrink: 0;
     background: var(--c-bg-main);
-    border-left: 1px solid var(--c-border);
+    border-left: var(--border-default);
     z-index: 5;
   }
 
   .full-player-modal {
     position: fixed;
-    inset: 0;
+    inset: var(--space-0);
     z-index: var(--z-modal);
   }
 
@@ -311,7 +344,7 @@
       display: block;
     }
     .top-bar {
-      padding: 0 16px;
+      padding: var(--space-0) var(--space-4);
     }
   }
 
@@ -325,7 +358,7 @@
     }
 
     .scroll-container {
-      padding-bottom: 0 !important;
+      padding-bottom: var(--space-0) !important;
     }
 
     .docked-player-container {

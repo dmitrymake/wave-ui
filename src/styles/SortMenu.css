@@ -2,7 +2,7 @@
 /* Copyright (c) 2025 dmitrymake */
 .sort-wrapper {
   position: relative;
-  margin-left: 8px;
+  margin-left: var(--space-2);
   height: 100%;
   display: flex;
   align-items: center;
@@ -11,16 +11,16 @@
 .sort-trigger {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: var(--space-2);
   background: transparent;
   border: none;
   color: var(--c-text-secondary);
-  padding: 0 8px;
-  font-size: 13px;
-  font-weight: 600;
+  padding: var(--space-0) var(--space-2);
+  font-size: var(--text-base);
+  font-weight: var(--weight-semibold);
   height: 100%;
   cursor: pointer;
-  transition: color 0.2s;
+  transition: color var(--dur-fast);
 }
 
 .sort-trigger:hover {
@@ -31,17 +31,17 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  opacity: 0.7;
+  opacity: var(--opacity-dim);
   flex-shrink: 0; 
 }
 .sort-trigger-icon :global(svg) {
-  width: 16px;
-  height: 16px;
+  width: var(--icon-size-xs);
+  height: var(--icon-size-xs);
 }
 
 .sort-backdrop {
   position: fixed;
-  inset: 0;
+  inset: var(--space-0);
   z-index: var(--z-menu);
   background: transparent;
   cursor: default;
@@ -51,18 +51,18 @@
   position: absolute;
   top: 100%;
   right: 0;
-  margin-top: 8px;
+  margin-top: var(--space-2);
   min-width: 160px;
 
   background: var(--c-bg-card);
-  border: 1px solid var(--c-border);
-  border-radius: 12px;
-  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.7);
-  
+  border: var(--border-default);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-xl);
+
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  padding: 6px 0;
+  padding: var(--space-2) var(--space-0);
   z-index: calc(var(--z-menu) + 1);
 }
 
@@ -71,16 +71,16 @@
   align-items: center;
   justify-content: flex-start;
   width: 100%;
-  padding: 12px 14px;
+  padding: var(--space-3) var(--space-14px);
   
   background: transparent;
   border: none;
   
   color: var(--c-text-secondary);
-  font-size: 14px;
+  font-size: var(--text-base);
   text-align: left;
   cursor: pointer;
-  transition: background 0.1s, color 0.1s;
+  transition: background var(--dur-instant), color var(--dur-instant);
 }
 
 .sort-item:hover {
@@ -90,6 +90,6 @@
 
 .sort-item.selected {
   color: var(--c-text-primary);
-  font-weight: 500; 
+  font-weight: var(--weight-medium); 
   background: rgba(255, 255, 255, 0.05); 
 }

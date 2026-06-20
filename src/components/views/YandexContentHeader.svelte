@@ -4,6 +4,7 @@
   import { ICONS } from "../../lib/icons";
   import ImageLoader from "../ImageLoader.svelte";
   import Skeleton from "../Skeleton.svelte";
+  import Button from "../ui/Button.svelte";
   import type { Writable } from "svelte/store";
   import type { YandexAlbum, YandexArtist, YandexHeaderData } from "../../lib/types/yandex";
 
@@ -53,17 +54,17 @@
         <Skeleton
           width="100px"
           height="14px"
-          style="margin-bottom:6px"
+          style="margin-bottom:var(--space-2)"
         />
         <Skeleton
           width="80%"
           height="40px"
-          style="margin-bottom:8px"
+          style="margin-bottom:var(--space-2)"
         />
         <Skeleton
           width="60%"
           height="20px"
-          style="margin-bottom:16px"
+          style="margin-bottom:var(--space-4)"
         />
         <div class="header-actions">
           <Skeleton width="100px" height="36px" radius="18px" />
@@ -76,7 +77,7 @@
       <div
         class="header-art"
         style={headerData.kind === "favorites"
-          ? "background: linear-gradient(135deg, #fa2d48, #c01c33);"
+          ? "background: var(--grad-favorites);"
           : ""}
       >
         {#if headerData.kind === "favorites"}
@@ -113,33 +114,25 @@
           {/if}
         </div>
         <div class="header-actions">
-          <button
-            class="btn-primary"
+          <Button
+            variant="primary"
             onclick={playAll}
-            disabled={isLoading || tracksCount === 0}
-            >Play All</button
+            disabled={isLoading || tracksCount === 0}>Play All</Button
           >
           {#if viewMode === "artist_details"}
-            <button
-              class="btn-secondary"
-              onclick={() => playVibe("artist")}
-            >
+            <Button variant="secondary" onclick={() => playVibe("artist")}>
               <span class="icon-inline">{@html ICONS.RADIO}</span> Artist
               Vibe
-            </button>
+            </Button>
           {:else if viewMode === "album_details"}
-            <button
-              class="btn-secondary"
-              onclick={() => playVibe("album")}
-            >
+            <Button variant="secondary" onclick={() => playVibe("album")}>
               <span class="icon-inline">{@html ICONS.RADIO}</span> Vibe
-            </button>
+            </Button>
           {:else}
-            <button
-              class="btn-secondary"
+            <Button
+              variant="secondary"
               onclick={addAllToQueue}
-              disabled={isLoading || tracksCount === 0}
-              >To Queue</button
+              disabled={isLoading || tracksCount === 0}>To Queue</Button
             >
           {/if}
         </div>
@@ -149,7 +142,7 @@
 {/if}
 
 {#if viewMode === "artist_details" && $albumsStore.length > 0}
-  <h3 class="header-label" style="margin-top: 20px;">Albums</h3>
+  <h3 class="header-label" style="margin-top: var(--space-5);">Albums</h3>
   <div
     class="music-grid horizontal section-mb"
     onwheel={handleHorizontalScroll}
@@ -190,21 +183,21 @@
   }
 
   .header-sub-text {
-    font-size: 20px;
+    font-size: var(--text-2xl);
     color: var(--c-white-60);
-    margin: 0;
+    margin: var(--space-0);
     overflow: hidden;
     text-overflow: ellipsis;
-    font-weight: 400;
+    font-weight: var(--weight-regular);
   }
 
   .icon-inline {
     display: inline-flex;
     align-items: center;
-    margin-right: 6px;
+    margin-right: var(--space-2);
   }
   .icon-inline :global(svg) {
-    width: 18px;
-    height: 18px;
+    width: var(--icon-size-sm);
+    height: var(--icon-size-sm);
   }
 </style>

@@ -43,33 +43,33 @@
 
 <style>
   .section {
-    margin-bottom: 32px;
+    margin-bottom: var(--space-8);
   }
 
   .section-header {
     display: flex;
     align-items: center;
-    gap: 10px;
-    font-size: 18px;
-    font-weight: 700;
+    gap: var(--space-2);
+    font-size: var(--text-xl);
+    font-weight: var(--weight-bold);
     color: var(--c-text-primary);
-    margin-bottom: 12px;
-    padding-left: 4px;
+    margin-bottom: var(--space-3);
+    padding-left: var(--space-1);
   }
 
   .card {
     background: var(--c-bg-card);
-    border: 1px solid var(--c-border);
-    border-radius: 12px;
-    padding: 16px;
+    border: var(--border-default);
+    border-radius: var(--radius-lg);
+    padding: var(--space-4);
     display: flex;
     flex-direction: column;
-    gap: 10px;
+    gap: var(--space-3);
   }
 
   .card.clickable {
     cursor: pointer;
-    transition: background 0.2s;
+    transition: background var(--dur-fast);
   }
   .card.clickable:active {
     background: var(--c-surface-hover);
@@ -78,7 +78,7 @@
   .row {
     display: flex;
     align-items: center;
-    gap: 12px;
+    gap: var(--space-3);
   }
   .row.space-between {
     justify-content: space-between;
@@ -87,17 +87,17 @@
   .row-gap {
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: var(--space-2);
   }
 
   .value {
     color: var(--c-text-secondary);
-    font-size: 14px;
+    font-size: var(--text-base);
   }
 
   .chevron {
-    width: 16px;
-    height: 16px;
+    width: var(--icon-size-xs);
+    height: var(--icon-size-xs);
     color: var(--c-text-muted);
     display: flex;
   }

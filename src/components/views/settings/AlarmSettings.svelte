@@ -13,6 +13,7 @@
   import { MSG } from "../../../lib/messages";
   import { ApiActions } from "../../../lib/api";
   import { ICONS } from "../../../lib/icons";
+  import Toggle from "../../ui/Toggle.svelte";
 
   let serverTime = $state("--:--");
   let timeInterval: ReturnType<typeof setInterval> | undefined;
@@ -41,11 +42,6 @@
       showToast(MSG.SETTINGS_FAILED_ALARM_SYNC, "error");
     }
   }
-
-  function toggleAlarm() {
-    isAlarmEnabled.update((v) => !v);
-    handleSaveAlarm();
-  }
 </script>
 
 <div class="section">
@@ -61,17 +57,12 @@
     <div class="separator"></div>
 
     <div class="row space-between">
-      <label for="toggle-alarm">Enable Alarm</label>
-      <button
-        id="toggle-alarm"
-        class="toggle-btn"
-        class:active={$isAlarmEnabled}
-        onclick={toggleAlarm}
-        aria-pressed={$isAlarmEnabled}
-        aria-label="Enable Alarm"
-      >
-        <div class="toggle-circle"></div>
-      </button>
+      <span class="label-text">Enable Alarm</span>
+      <Toggle
+        bind:checked={$isAlarmEnabled}
+        ariaLabel="Enable Alarm"
+        onchange={handleSaveAlarm}
+      />
     </div>
 
     {#if $isAlarmEnabled}
@@ -110,34 +101,34 @@
 
 <style>
   .section {
-    margin-bottom: 32px;
+    margin-bottom: var(--space-8);
   }
 
   .section-header {
     display: flex;
     align-items: center;
-    gap: 10px;
-    font-size: 18px;
-    font-weight: 700;
+    gap: var(--space-2);
+    font-size: var(--text-xl);
+    font-weight: var(--weight-bold);
     color: var(--c-text-primary);
-    margin-bottom: 12px;
-    padding-left: 4px;
+    margin-bottom: var(--space-3);
+    padding-left: var(--space-1);
   }
 
   .card {
     background: var(--c-bg-card);
-    border: 1px solid var(--c-border);
-    border-radius: 12px;
-    padding: 16px;
+    border: var(--border-default);
+    border-radius: var(--radius-lg);
+    padding: var(--space-4);
     display: flex;
     flex-direction: column;
-    gap: 10px;
+    gap: var(--space-3);
   }
 
   .row {
     display: flex;
     align-items: center;
-    gap: 12px;
+    gap: var(--space-3);
   }
   .row.space-between {
     justify-content: space-between;
@@ -146,72 +137,37 @@
 
   label,
   .label-text {
-    font-size: 14px;
+    font-size: var(--text-base);
     color: var(--c-text-secondary);
-    font-weight: 600;
+    font-weight: var(--weight-semibold);
   }
 
   input[type="time"] {
     background: var(--c-surface-input);
-    border: 1px solid var(--c-border);
+    border: var(--border-default);
     color: var(--c-text-primary);
-    padding: 6px 10px;
-    border-radius: 8px;
-    font-size: 16px;
+    padding: var(--space-2) var(--space-3);
+    border-radius: var(--radius-md);
+    font-size: var(--text-lg);
     font-family: inherit;
     outline: none;
   }
 
   .mono-badge {
-    font-family: monospace;
+    font-family: var(--font-mono);
     background: var(--c-accent);
     color: var(--c-text-primary);
-    padding: 4px 8px;
-    border-radius: 6px;
-    font-size: 14px;
-    font-weight: bold;
+    padding: var(--space-1) var(--space-2);
+    border-radius: var(--radius-sm);
+    font-size: var(--text-base);
+    font-weight: var(--weight-bold);
   }
 
   .separator {
-    height: 1px;
+    height: var(--space-px);
     background: var(--c-border);
-    opacity: 0.5;
-    margin: 4px 0;
-  }
-
-  .toggle-btn {
-    width: 44px;
-    height: 24px;
-    background: var(--c-surface-input);
-    border-radius: 12px;
-    border: 1px solid var(--c-border);
-    position: relative;
-    cursor: pointer;
-    transition:
-      background 0.2s,
-      border-color 0.2s;
-    padding: 0;
-  }
-
-  .toggle-btn.active {
-    background: var(--c-accent);
-    border-color: var(--c-accent);
-  }
-
-  .toggle-circle {
-    width: 20px;
-    height: 20px;
-    background: white;
-    border-radius: 50%;
-    position: absolute;
-    top: 1px;
-    left: 1px;
-    transition: transform 0.2s cubic-bezier(0.2, 0.8, 0.2, 1);
-    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
-  }
-
-  .toggle-btn.active .toggle-circle {
-    transform: translateX(20px);
+    opacity: var(--opacity-faint);
+    margin: var(--space-1) var(--space-0);
   }
 
   .select-wrapper {
@@ -222,11 +178,11 @@
   select {
     appearance: none;
     background: var(--c-surface-input);
-    border: 1px solid var(--c-border);
+    border: var(--border-default);
     color: var(--c-text-primary);
-    padding: 6px 30px 6px 12px;
-    border-radius: 8px;
-    font-size: 14px;
+    padding: var(--space-2) var(--space-8) var(--space-2) var(--space-3);
+    border-radius: var(--radius-md);
+    font-size: var(--text-base);
     outline: none;
     width: 100%;
     text-overflow: ellipsis;
@@ -234,12 +190,12 @@
 
   .select-arrow {
     position: absolute;
-    right: 8px;
+    right: var(--space-2);
     top: 50%;
     transform: translateY(-50%);
     pointer-events: none;
-    width: 16px;
-    height: 16px;
+    width: var(--icon-size-xs);
+    height: var(--icon-size-xs);
     color: var(--c-text-muted);
   }
   .select-arrow :global(svg) {

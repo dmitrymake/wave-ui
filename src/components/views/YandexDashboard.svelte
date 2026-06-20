@@ -101,7 +101,7 @@
           <div
             class="card-img-container"
             style={isFav
-              ? "background: linear-gradient(135deg, #fa2d48, #c01c33);"
+              ? "background: var(--grad-favorites);"
               : ""}
           >
             {#if isFav}
@@ -132,7 +132,10 @@
 <style>
 
   .card-img-container.is-vibe {
-    background: linear-gradient(135deg, #ffcc00, #ff3333);
+    background: var(--grad-vibe);
+  }
+  .card-img-container.is-vibe .icon-wrap {
+    color: var(--c-text-inverse);
   }
   .card-title.center {
     text-align: center;
@@ -145,11 +148,11 @@
     0%,
     100% {
       transform: scale(1);
-      opacity: 1;
+      opacity: var(--opacity-visible);
     }
     50% {
       transform: scale(1.1);
-      opacity: 0.8;
+      opacity: var(--opacity-strong);
     }
   }
 

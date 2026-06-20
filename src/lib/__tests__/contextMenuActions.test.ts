@@ -5,7 +5,7 @@ import type { Track } from "../types";
 import type { TrackSource } from "../sources/trackSource";
 
 // The MPD client is unused by these tests (the streaming path stays in-memory and
-// the local path is asserted via the mocked LibraryActions spy), but mpd/library
+// the local path is asserted via the mocked LibraryActions spy), but playback/library
 // transitively imports it — stub it so nothing tries to open a socket.
 vi.mock("../mpd/client", () => ({
   mpdClient: { send: vi.fn().mockResolvedValue(""), get isConnected() { return true; } },
@@ -14,7 +14,7 @@ vi.mock("../mpd/client", () => ({
 // Stub LibraryActions so the "local track" branch is observable without exercising
 // the real MPD Favorites playlist round-trip.
 const toggleFavoriteSpy = vi.fn().mockResolvedValue(undefined);
-vi.mock("../mpd/library", () => ({
+vi.mock("../playback/library", () => ({
   LibraryActions: {
     toggleFavorite: (...a: unknown[]) => toggleFavoriteSpy(...a),
   },

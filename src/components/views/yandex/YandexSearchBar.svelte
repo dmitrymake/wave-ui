@@ -11,9 +11,16 @@
   `value` is $bindable so two-way binding matches the original `bind:value`:
   the parent sets it programmatically (e.g. cleared on mode change) and the input
   reflects user typing back up immediately.
+
+  Chrome is the shared Input primitive in `search` mode (leading magnifier +
+  trailing clear). Compact `sm` size keeps the original list-search geometry
+  (radius-md 8px, pad 8px/12px, font 15px, icon 20px). The primitive's clear sets
+  value="" (propagated via bind) and calls `onclear`; the parent's onClear then
+  also runs its history.back(), so the original clear flow is preserved.
 -->
 <script lang="ts">
   import { ICONS } from "../../../lib/icons";
+  import Input from "../../ui/Input.svelte";
 
   let {
     value = $bindable(""),
@@ -27,54 +34,25 @@
 </script>
 
 <div class="content-padded no-bottom-pad">
-  <div class="search-input-container">
-    <span class="search-icon">{@html ICONS.SEARCH}</span>
-    <input
-      type="text"
-      placeholder="Search Yandex Music..."
+  <div class="search-margin">
+    <Input
+      search
+      size="sm"
       bind:value
+      placeholder="Search Yandex Music..."
+      ariaLabel="Search Yandex Music"
       {oninput}
-    />
-    {#if value}
-      <button class="clear-btn" onclick={() => onClear?.()}>
-        {@html ICONS.CLOSE}
-      </button>
-    {/if}
+      onclear={() => onClear?.()}
+    >
+      {#snippet icon()}
+        {@html ICONS.SEARCH}
+      {/snippet}
+    </Input>
   </div>
 </div>
 
 <style>
-  .search-input-container {
-    display: flex;
-    align-items: center;
-    background: var(--c-surface-input);
-    border: 1px solid var(--c-border);
-    border-radius: 8px;
-    padding: 8px 12px;
-    margin-bottom: 10px;
-    gap: 10px;
-  }
-  input {
-    flex: 1;
-    background: transparent;
-    border: none;
-    color: var(--c-text-primary);
-    outline: none;
-    font-size: 15px;
-  }
-  .search-icon,
-  .clear-btn {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    color: var(--c-text-muted);
-    width: 20px;
-    height: 20px;
-  }
-  .clear-btn {
-    background: none;
-    border: none;
-    padding: 0;
-    cursor: pointer;
+  .search-margin {
+    margin-bottom: var(--space-3); /* legacy .search-input-container */
   }
 </style>

@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512" role="img" aria-label="Wave">
+  <!-- ANY / apple-touch master: full-bleed wave (not mask-constrained). -->
+  <rect width="512" height="512" fill="#121212"/>
+  <path d="M72 256 C 133 104, 195 104, 256 256 S 379 408, 440 256"
+        fill="none" stroke="#fa2d48" stroke-width="44" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

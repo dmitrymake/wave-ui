@@ -1,5 +1,10 @@
 <?php
 
+// SECURITY (trusted LAN): these endpoints trust moOde's local network. Admin-style
+// actions (e.g. set_alarm, and the OAuth token forwarded via yandex_proxy) are NOT
+// authenticated. Deployment recommendation: bind nginx to localhost / the trusted LAN
+// only — that hardening lives in the nginx/deploy config, not in this PHP.
+
 ini_set('display_errors', 0);
 error_reporting(E_ALL);
 
@@ -161,8 +166,10 @@ try {
             $auth_token = $_SERVER['REDIRECT_HTTP_AUTHORIZATION'];
         }
         
-        if (!$auth_token && isset($_GET['token'])) {
-            $raw_token = $_GET['token'];
+        // Token fallback only via POST body — never via GET ?token= (leaks into
+        // access logs / Referer). The Authorization header above remains primary.
+        if (!$auth_token && isset($_POST['token'])) {
+            $raw_token = $_POST['token'];
             if (strpos($raw_token, 'OAuth') === 0) {
                 $auth_token = $raw_token;
             } else {

@@ -24,7 +24,11 @@ async function startSync(): Promise<void> {
   try {
     self.postMessage({ type: "PROGRESS", status: "connecting" });
 
-    const response: Response = await fetch(apiUrl);
+    // Hard deadline so a half-open connection can't hang the worker until the
+    // main-thread 120s watchdog; AbortSignal.timeout is available in workers.
+    const response: Response = await fetch(apiUrl, {
+      signal: AbortSignal.timeout(60_000),
+    });
 
     if (!response.ok) {
       const errText: string = await response.text();

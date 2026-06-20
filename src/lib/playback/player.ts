@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2025 dmitrymake
 import { get } from "svelte/store";
-import { mpdClient } from "./client";
-import { MpdParser } from "./parser";
-import { escapeArg, escapePath } from "./escape";
+import { mpdClient } from "../mpd/client";
+import { MpdParser } from "../mpd/parser";
+import { escapeArg, escapePath } from "../mpd/escape";
 import {
   status,
   currentSong,
@@ -242,7 +242,19 @@ function updateStores(serverStatus: MpdStatus, serverSong: CurrentSong): void {
   const streamsHaveElapsed = !!source?.streamsHaveElapsed;
 
   resolveStationName(serverSong, oldSong, get(stations), streamsHaveElapsed);
-  currentSong.set(serverSong);
+  // serverSong is a fresh object every 1s poll, so an unconditional set re-runs
+  // isPlayingFile across every list row each second even when the track is unchanged.
+  // Optimistic paths set currentSong explicitly, so skipping a no-op poll is safe.
+  if (
+    !oldSong ||
+    oldSong.file !== serverSong.file ||
+    oldSong.id !== serverSong.id ||
+    oldSong.title !== serverSong.title ||
+    oldSong.artist !== serverSong.artist ||
+    oldSong.stationName !== serverSong.stationName
+  ) {
+    currentSong.set(serverSong);
+  }
 
   const isRadio = !!isRemoteUrl(serverSong.file);
   reconcileStatus(serverStatus, serverSong, oldSong, isRadio, streamsHaveElapsed);

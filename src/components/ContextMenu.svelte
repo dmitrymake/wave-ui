@@ -9,13 +9,13 @@
     playlists,
     ignoreNextPopState,
   } from "../lib/store";
-  import { yandexFavorites } from "../lib/stores/yandex";
   import { ICONS } from "../lib/icons";
   import * as actions from "../lib/contextMenuActions";
   import { calculateMenuPosition } from "../lib/menuPositioner";
   import { isRemoteUrl } from "../lib/utils";
-  import { isTrackLiked } from "../lib/playerHelpers";
+  import { isTrackLiked, sourceLikesVersion } from "../lib/playerHelpers";
   import { resolveSourceForTrack } from "../lib/sources/trackSource";
+  import { FAVORITES_PLAYLIST } from "../lib/constants";
 
   let innerWidth = $state(0);
   let innerHeight = $state(0);
@@ -66,7 +66,12 @@
     view = "main";
   }
 
-  let isLiked = $derived(isTrackLiked($contextMenu.track, $favorites, $yandexFavorites));
+  // $sourceLikesVersion is read only as a generic reactivity trigger so this re-runs
+  // when a streaming source's likes change; isTrackLiked resolves the owning source.
+  let isLiked = $derived.by(() => {
+    void $sourceLikesVersion;
+    return isTrackLiked($contextMenu.track, $favorites);
+  });
   let isRadio = $derived(
     $contextMenu.track &&
     isRemoteUrl($contextMenu.track.file));
@@ -138,14 +143,14 @@
       <div class="menu-items scroll-y">
         {#if view === "playlists"}
           {#each $playlists as pl}
-            {#if pl.name !== "Favorites"}
+            {#if pl.name !== FAVORITES_PLAYLIST}
               <button class="menu-row" onclick={() => actions.addToPlaylist($contextMenu.track, pl.name)}>
                 <span class="icon">{@html ICONS.PLAYLISTS}</span>
                 <span>{pl.name}</span>
               </button>
             {/if}
           {/each}
-          {#if $playlists.filter((p) => p.name !== "Favorites").length === 0}
+          {#if $playlists.filter((p) => p.name !== FAVORITES_PLAYLIST).length === 0}
             <div class="empty-msg">No custom playlists</div>
           {/if}
         {:else if isPlaylistCard}
@@ -248,27 +253,27 @@
     background: var(--c-bg-card);
     width: 220px;
     max-height: 400px;
-    border-radius: 12px;
-    box-shadow: 0 10px 40px var(--c-black-70);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-xl);
     display: flex;
     flex-direction: column;
     overflow: hidden;
-    border: 1px solid var(--c-border);
+    border: var(--border-default);
     z-index: var(--z-context-menu);
   }
 
   .menu-header {
-    padding: 0;
-    height: 50px;
+    padding: var(--space-0);
+    height: var(--control-h-2xl);
     background: var(--c-white-10);
-    border-bottom: 1px solid var(--c-border);
+    border-bottom: var(--border-default);
     display: flex;
     align-items: center;
     flex-shrink: 0;
   }
 
   .track-info {
-    padding: 0 14px;
+    padding: var(--space-0) var(--space-14px);
     overflow: hidden;
     width: 100%;
     display: flex;
@@ -278,43 +283,43 @@
   }
 
   .title {
-    font-size: 13px;
-    font-weight: 700;
+    font-size: var(--text-base);
+    font-weight: var(--weight-bold);
     color: var(--c-text-primary);
-    margin-bottom: 2px;
+    margin-bottom: var(--space-0_5);
   }
 
   .artist {
-    font-size: 12px;
+    font-size: var(--text-sm);
     color: var(--c-text-secondary);
   }
 
   .header-title {
-    font-size: 14px;
-    font-weight: 600;
+    font-size: var(--text-base);
+    font-weight: var(--weight-semibold);
     color: var(--c-text-primary);
-    padding-right: 14px;
+    padding-right: var(--space-14px);
   }
 
   .back-btn-area {
     background: none;
     border: none;
     color: var(--c-text-primary);
-    width: 48px;
+    width: var(--control-h-xl);
     height: 100%;
-    padding: 0;
+    padding: var(--space-0);
     cursor: pointer;
     display: flex;
     align-items: center;
     justify-content: center;
-    margin-right: 4px;
+    margin-right: var(--space-1);
   }
   .back-btn-area:active {
     background: var(--c-white-10);
   }
   .back-icon {
-    width: 20px;
-    height: 20px;
+    width: var(--icon-size-md);
+    height: var(--icon-size-md);
     display: block;
   }
   .back-icon :global(svg) {
@@ -323,7 +328,7 @@
   }
 
   .menu-items {
-    padding: 6px 0;
+    padding: var(--space-1) var(--space-0);
     display: flex;
     flex-direction: column;
     overflow-y: auto;
@@ -332,14 +337,14 @@
   .menu-row {
     display: flex;
     align-items: center;
-    padding: 12px 14px;
+    padding: var(--space-3) var(--space-14px);
     background: transparent;
     border: none;
     color: var(--c-text-primary);
-    font-size: 14px;
+    font-size: var(--text-base);
     text-align: left;
     cursor: pointer;
-    transition: background 0.1s;
+    transition: background var(--dur-instant);
     width: 100%;
   }
 
@@ -349,9 +354,9 @@
   }
 
   .icon {
-    width: 20px;
-    height: 20px;
-    margin-right: 14px;
+    width: var(--icon-size-md);
+    height: var(--icon-size-md);
+    margin-right: var(--space-14px);
     color: var(--c-text-secondary);
     display: flex;
     align-items: center;
@@ -366,16 +371,16 @@
   }
 
   .sep {
-    height: 1px;
+    height: var(--border-width-thin);
     background: var(--c-border);
-    margin: 6px 16px;
-    opacity: 0.3;
+    margin: var(--space-1) var(--space-4);
+    opacity: var(--opacity-ghost);
   }
 
   .empty-msg {
-    padding: 16px;
+    padding: var(--space-4);
     text-align: center;
     color: var(--c-text-muted);
-    font-size: 13px;
+    font-size: var(--text-base);
   }
 </style>

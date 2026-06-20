@@ -1,15 +1,16 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2025 dmitrymake
 import { writable } from "svelte/store";
+import { FAVORITES_PLAYLIST } from "../constants";
 
 
 let savedAlarmTime = "08:00";
 let savedAlarmEnabled = false;
-let savedAlarmPlaylist = "Favorites";
+let savedAlarmPlaylist = FAVORITES_PLAYLIST;
 try {
   savedAlarmTime = localStorage.getItem("alarmTime") || "08:00";
   savedAlarmEnabled = localStorage.getItem("alarmEnabled") === "true";
-  savedAlarmPlaylist = localStorage.getItem("alarmPlaylist") || "Favorites";
+  savedAlarmPlaylist = localStorage.getItem("alarmPlaylist") || FAVORITES_PLAYLIST;
 } catch {}
 
 export const alarmTime = writable<string>(savedAlarmTime);

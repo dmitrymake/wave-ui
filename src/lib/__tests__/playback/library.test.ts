@@ -50,7 +50,7 @@ vi.mock("../../workers/sync.worker.js?worker", () => ({
   })),
 }));
 
-import { LibraryActions } from "../../mpd/library.js";
+import { LibraryActions } from "../../playback/library.js";
 import { MpdParser } from "../../mpd/parser";
 import { playlists, favorites, showToast } from "../../store";
 import { get } from "svelte/store";

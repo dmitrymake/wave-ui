@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2025 dmitrymake
 import { get, derived } from "svelte/store";
-import { PlayerActions } from "../mpd/player";
+import { PlayerActions } from "../playback/player";
 import {
   status,
   currentSong,
@@ -14,6 +14,7 @@ import { yandexContext, yandexFavorites, yandexState } from "../stores/yandex";
 import { YandexApi, YANDEX_ENDPOINT } from "../yandex";
 import { YandexService } from "../yandexService";
 import { getYandexIdFromUrl } from "./yandexUri";
+import { fetchWithTimeout } from "../http";
 import { ICONS } from "../icons";
 import { MSG } from "../messages";
 import { logger } from "../logger";
@@ -59,7 +60,7 @@ function trimStreamCache(
 
 async function getYandexMeta(url: string): Promise<Record<string, unknown> | null> {
   try {
-    const res = await fetch(
+    const res = await fetchWithTimeout(
       YANDEX_ENDPOINT.URL + "?action=get_meta&url=" + encodeURIComponent(url),
     );
     if (res.ok) return await res.json();
@@ -74,7 +75,7 @@ async function batchGetYandexMeta(
 ): Promise<Record<string, Record<string, unknown> | null>> {
   if (!urls.length) return {};
   try {
-    const res = await fetch(YANDEX_ENDPOINT.URL + "?action=batch_get_meta", {
+    const res = await fetchWithTimeout(YANDEX_ENDPOINT.URL + "?action=batch_get_meta", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ urls }),
@@ -84,6 +85,68 @@ async function batchGetYandexMeta(
     logger.warn("[Yandex] Failed to batch-fetch meta:", e);
   }
   return {};
+}
+
+// Build the cache entry from raw Yandex meta (same field order/defaults as the
+// previous inline literals in fetchMetaBatch and fetchMetaForTrack). The return
+// type stays inferred so `id` is `string` (from `String(...)`), matching the old
+// inline literals — annotating it as YandexTrack would widen id to string|number
+// and break the queue row's `string | undefined` id type.
+function buildYandexCacheEntry(url: string, meta: Record<string, unknown>) {
+  return {
+    id: String(meta.id ?? ""),
+    title: String(meta.title ?? ""),
+    artist: String(meta.artist ?? ""),
+    album: meta.album as string | undefined,
+    image: meta.image as string | undefined,
+    time: meta.time as number | undefined,
+    isYandex: true as const,
+    file: url,
+  };
+}
+
+// Shape of a Yandex stream-cache entry as produced by buildYandexCacheEntry.
+type YandexCacheEntry = ReturnType<typeof buildYandexCacheEntry>;
+
+// Store the entry in the stream cache under both its url and (if present) its id,
+// then trim. Identical to the prior inline yandexContext.update in both callers.
+function cacheYandexMeta(
+  url: string,
+  meta: Record<string, unknown>,
+  cacheEntry: YandexCacheEntry,
+): void {
+  yandexContext.update((ctx) => {
+    const newCache = { ...ctx.streamCache };
+    newCache[url] = cacheEntry;
+    if (meta.id) newCache[String(meta.id)] = cacheEntry;
+    return { ...ctx, streamCache: trimStreamCache(newCache) };
+  });
+}
+
+// Patch any queue rows matching `url` with the cached Yandex meta. `withId`
+// controls whether the row's id is overwritten: the batch path set it
+// (`id: cacheEntry.id || t.id`); the single-track path did not. Field order and
+// truthy fallbacks otherwise match both prior inline queue.update calls exactly.
+function applyYandexMetaToQueue(
+  url: string,
+  cacheEntry: YandexCacheEntry,
+  withId: boolean,
+): void {
+  queue.update((q) =>
+    q.map((t) => {
+      if (t.file !== url) return t;
+      const patched = {
+        ...t,
+        title: cacheEntry.title || t.title,
+        artist: cacheEntry.artist || t.artist,
+        album: cacheEntry.album || t.album,
+        image: cacheEntry.image,
+        service: "yandex",
+        time: cacheEntry.time || t.time,
+      };
+      return withId ? { ...patched, id: cacheEntry.id || t.id } : patched;
+    }),
+  );
 }
 
 async function fetchMetaBatch(urls: string[]): Promise<void> {
@@ -100,37 +163,9 @@ async function fetchMetaBatch(urls: string[]): Promise<void> {
   for (const url of Object.keys(results)) {
     const meta = results[url];
     if (!meta) continue;
-    const cacheEntry = {
-      id: String(meta.id ?? ""),
-      title: String(meta.title ?? ""),
-      artist: String(meta.artist ?? ""),
-      album: meta.album as string | undefined,
-      image: meta.image as string | undefined,
-      time: meta.time as number | undefined,
-      isYandex: true as const,
-      file: url,
-    };
-    yandexContext.update((ctx) => {
-      const newCache = { ...ctx.streamCache };
-      newCache[url] = cacheEntry;
-      if (meta.id) newCache[String(meta.id)] = cacheEntry;
-      return { ...ctx, streamCache: trimStreamCache(newCache) };
-    });
-    queue.update((q) =>
-      q.map((t) => {
-        if (t.file !== url) return t;
-        return {
-          ...t,
-          title: cacheEntry.title || t.title,
-          artist: cacheEntry.artist || t.artist,
-          album: cacheEntry.album || t.album,
-          image: cacheEntry.image,
-          service: "yandex",
-          time: cacheEntry.time || t.time,
-          id: cacheEntry.id || t.id,
-        };
-      }),
-    );
+    const cacheEntry = buildYandexCacheEntry(url, meta);
+    cacheYandexMeta(url, meta, cacheEntry);
+    applyYandexMetaToQueue(url, cacheEntry, true);
   }
 
   const song: CurrentSong = get(currentSong);
@@ -166,24 +201,8 @@ async function fetchMetaForTrack(url: string): Promise<void> {
 
   const meta = await getYandexMeta(url);
   if (meta) {
-    const cacheEntry = {
-      id: String(meta.id ?? ""),
-      title: String(meta.title ?? ""),
-      artist: String(meta.artist ?? ""),
-      album: meta.album as string | undefined,
-      image: meta.image as string | undefined,
-      time: meta.time as number | undefined,
-      isYandex: true as const,
-      file: url,
-    };
-    yandexContext.update((ctx) => {
-      const newCache = { ...ctx.streamCache };
-      newCache[url] = cacheEntry;
-      if (meta.id) {
-        newCache[String(meta.id)] = cacheEntry;
-      }
-      return { ...ctx, streamCache: trimStreamCache(newCache) };
-    });
+    const cacheEntry = buildYandexCacheEntry(url, meta);
+    cacheYandexMeta(url, meta, cacheEntry);
 
     const song: CurrentSong = get(currentSong);
     if (song.file === url) {
@@ -204,21 +223,7 @@ async function fetchMetaForTrack(url: string): Promise<void> {
       });
     }
 
-    queue.update((q) =>
-      q.map((t) => {
-        if (t.file === url)
-          return {
-            ...t,
-            title: cacheEntry.title || t.title,
-            artist: cacheEntry.artist || t.artist,
-            album: cacheEntry.album || t.album,
-            image: cacheEntry.image,
-            service: "yandex",
-            time: cacheEntry.time || t.time,
-          };
-        return t;
-      }),
-    );
+    applyYandexMetaToQueue(url, cacheEntry, false);
   }
 }
 
@@ -407,7 +412,15 @@ export const yandexSource: TrackSource = {
     const id: string = uri.split(":")[1];
 
     const newId: number = await appendYandexTrack(id);
-    if (isNaN(newId)) return true;
+    // The daemon failed to append the track (queue did not grow), so there is
+    // nothing to move/play. The URI is still "handled" by this source (return true,
+    // so dispatch does not fall through to other sources), but previously the
+    // failure was swallowed silently and left the UI stuck on "Loading…" — surface
+    // a toast so the user actually sees that playback did not start.
+    if (isNaN(newId)) {
+      showToast(MSG.PLAY_FAILED_TO_PLAY, "error");
+      return true;
+    }
 
     // Move/play BY ID (moveid/playid). The old code moved playlistlength-1 read from
     // a separate status, so a concurrent queue change made len-1 the wrong track.

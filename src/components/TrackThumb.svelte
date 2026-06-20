@@ -23,7 +23,7 @@
   );
 </script>
 
-<ImageLoader src={imgUrl} {alt} radius="4px" onError={() => (imgError = true)}>
+<ImageLoader src={imgUrl} {alt} radius="var(--radius-sm)" onError={() => (imgError = true)}>
   {#snippet fallback()}
     <div class="icon-ph" in:fade>
       {@html isRadio ? ICONS.RADIO : ICONS.ALBUMS}
@@ -41,7 +41,7 @@
     justify-content: center;
   }
   .icon-ph :global(svg) {
-    width: 20px;
-    height: 20px;
+    width: var(--icon-size-md);
+    height: var(--icon-size-md);
   }
 </style>

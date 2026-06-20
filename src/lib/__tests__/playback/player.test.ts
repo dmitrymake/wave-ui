@@ -102,7 +102,7 @@ vi.mock("../../yandex", () => ({
 
 // Registering the Yandex source lets resolveSource() route Yandex tracks in tests.
 import "../../sources/yandexSource";
-import { PlayerActions } from "../../mpd/player.js";
+import { PlayerActions } from "../../playback/player.js";
 import { status, currentSong, queue, isQueueLocked } from "../../store";
 import type { MpdStatus, Track } from "../../types";
 

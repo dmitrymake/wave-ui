@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2025 dmitrymake
 import { API_ENDPOINTS } from "./constants";
-import { isRemoteUrl, normalizeForMatch } from "./utils";
+import { isRemoteUrl, normalizeForMatch } from "./strings";
 import type { Station } from "./types";
 
 // Radio/Station-specific helpers, split out of the generic utils grab-bag so the

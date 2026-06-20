@@ -6,9 +6,7 @@
  */
 
 import arrowsShuffle2 from "./svg/arrows-shuffle-2.svg?raw";
-import brandDeezer from "./svg/brand-deezer.svg?raw";
 import chevronCompactDown from "./svg/chevron-compact-down.svg?raw";
-import chevronCompactLeft from "./svg/chevron-compact-left.svg?raw";
 import chevronLeft from "./svg/chevron-left.svg?raw";
 import disc from "./svg/disc.svg?raw";
 import gripHorizontal from "./svg/grip-horizontal.svg?raw";
@@ -17,7 +15,6 @@ import heartFilled from "./svg/heart-filled.svg?raw";
 import menu2 from "./svg/menu-2.svg?raw";
 import music from "./svg/music.svg?raw";
 import playerPause from "./svg/player-pause.svg?raw";
-import playerPlayEmpty from "./svg/player-play-empty.svg?raw";
 import playerPlayFilled from "./svg/player-play-filled.svg?raw";
 import playerSkipBack from "./svg/player-skip-back.svg?raw";
 import playerSkipForward from "./svg/player-skip-forward.svg?raw";
@@ -45,13 +42,11 @@ import brandYandex from "./svg/yandex.svg?raw";
 export const ICONS: Record<string, string> = {
   ARTISTS: music,
   ALBUMS: disc,
-  GENRES: music,
   PLAYLISTS: playlist,
   RADIO: radio,
   SEARCH: search,
 
   PLAY: playerPlayFilled,
-  PLAY_OUTLINE: playerPlayEmpty,
   PAUSE: playerPause,
   PREVIOUS: playerSkipBack,
   NEXT: playerSkipForward,
@@ -71,11 +66,9 @@ export const ICONS: Record<string, string> = {
   CLOSE: x,
   MENU: menu2,
   BACK: chevronLeft,
-  BACK_COMPACT: chevronCompactLeft,
   CHEVRON_DOWN: chevronCompactDown,
   DRAG_HANDLE: gripHorizontal,
   REMOVE: trash,
-  DEEZER: brandDeezer,
   SAVE: deviceFloppy,
   EDIT: filePencil,
   ADD: plus,

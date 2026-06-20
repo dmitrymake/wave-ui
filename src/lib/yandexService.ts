@@ -4,6 +4,8 @@ import { get } from "svelte/store";
 import { showToast } from "./store";
 import { yandexAuthStatus, yandexFavorites, yandexState } from "./stores/yandex";
 import { YandexApi, YANDEX_ENDPOINT } from "./yandex";
+import { fetchWithTimeout } from "./http";
+import { HTTP_CONFIG } from "./constants";
 import { MSG } from "./messages";
 import { logger } from "./logger";
 import type { YandexStatusResponse } from "./types/yandex";
@@ -23,7 +25,7 @@ export const YandexService = {
 
   async saveYandexToken(token: string): Promise<boolean> {
     try {
-      const res = await fetch(YANDEX_ENDPOINT.URL + "?action=save_token", {
+      const res = await fetchWithTimeout(YANDEX_ENDPOINT.URL + "?action=save_token", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ token }),
@@ -47,14 +49,18 @@ export const YandexService = {
   },
 
   async getYandexDebugDump(): Promise<Record<string, unknown>> {
-    const res = await fetch(YANDEX_ENDPOINT.URL + "?action=debug_dump");
+    const res = await fetchWithTimeout(YANDEX_ENDPOINT.URL + "?action=debug_dump");
     if (!res.ok) throw new Error("debug_dump request failed");
     return await res.json();
   },
 
   async refreshYandexDaemonState(): Promise<void> {
     try {
-      const res = await fetch(YANDEX_ENDPOINT.URL + "?action=get_state");
+      const res = await fetchWithTimeout(
+        YANDEX_ENDPOINT.URL + "?action=get_state",
+        {},
+        HTTP_CONFIG.DAEMON_POLL_TIMEOUT,
+      );
       if (res.ok) {
         const data = await res.json();
         yandexState.set(data);
@@ -66,7 +72,11 @@ export const YandexService = {
 
   async stopYandexDaemon(): Promise<void> {
     try {
-      await fetch(YANDEX_ENDPOINT.URL + "?action=stop_daemon");
+      await fetchWithTimeout(
+        YANDEX_ENDPOINT.URL + "?action=stop_daemon",
+        {},
+        HTTP_CONFIG.DAEMON_POLL_TIMEOUT,
+      );
       showToast(MSG.QUEUE_DAEMON_STOPPED, "info");
       await YandexService.refreshYandexDaemonState();
     } catch (e) {

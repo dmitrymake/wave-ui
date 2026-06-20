@@ -4,8 +4,7 @@
   import type { Track } from "../lib/types";
   import { ICONS } from "../lib/icons";
   import { favorites } from "../lib/store.js";
-  import { yandexFavorites } from "../lib/stores/yandex";
-  import { isTrackLiked, toggleLike } from "../lib/playerHelpers";
+  import { isTrackLiked, toggleLike, sourceLikesVersion } from "../lib/playerHelpers";
 
   interface Props {
     track: Track;
@@ -15,7 +14,15 @@
 
   let { track, compact = false, class: className = "" }: Props = $props();
 
-  let liked = $derived(isTrackLiked(track, $favorites, $yandexFavorites));
+  // Like state is resolved source-agnostically by playerHelpers.isTrackLiked (it picks
+  // the owning TrackSource and reads its live favourites). $favorites and the generic
+  // $sourceLikesVersion bump are referenced only as reactivity triggers so this derived
+  // re-runs when the local favourites or any streaming source's likes change — no
+  // concrete streaming store is named in this generic component.
+  let liked = $derived.by(() => {
+    void $sourceLikesVersion;
+    return isTrackLiked(track, $favorites);
+  });
 
   async function handleClick(e: MouseEvent) {
     e.stopPropagation();
@@ -37,14 +44,28 @@
 
 <style>
   .like-btn {
-    padding: 10px;
+    padding: var(--icon-btn-pad-lg);
     color: var(--c-text-secondary);
-    transition: color 0.2s;
+    transition: color var(--dur-fast);
   }
-  .like-btn:active { opacity: 0.7; }
+  .like-btn:active { opacity: var(--opacity-dim); }
   .like-btn.liked { color: var(--c-heart); }
-  .like-btn :global(svg) { width: 24px; height: 24px; }
+  .like-btn :global(svg) { width: var(--icon-size-lg); height: var(--icon-size-lg); }
+  .like-btn.liked :global(svg) {
+    animation: like-pop var(--dur-base) var(--ease-emphasized);
+  }
 
-  .compact { padding: 6px; }
-  .compact :global(svg) { width: 20px; height: 20px; }
+  .compact { padding: var(--icon-btn-pad-sm); }
+  .compact :global(svg) { width: var(--icon-size-md); height: var(--icon-size-md); }
+
+  @keyframes like-pop {
+    0%, 100% { transform: scale(1); }
+    50% { transform: scale(1.2); }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .like-btn.liked :global(svg) {
+      animation: none;
+    }
+  }
 </style>

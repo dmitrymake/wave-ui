@@ -36,6 +36,15 @@ interface AlbumEntry {
   year: number;
 }
 
+// Canonical form for a track's `file` key. mapRawTrack stores every record under
+// `file.normalize("NFC").trim()`, so reads MUST normalize identically or a Unicode
+// form / stray-whitespace difference between the MPD queue path and the cached key
+// silently misses the cache. getFilesMap uses this for BOTH the IndexedDB lookup and
+// the key it returns results under, keeping write/read normalization symmetric.
+function normalizeFileKey(file: string): string {
+  return file.normalize("NFC").trim();
+}
+
 let dbPromise: Promise<IDBDatabase> | null = null;
 
 export const db = {
@@ -87,6 +96,14 @@ export const db = {
         // the resync lands so a mounted view refetches (and surfaces a retry if it does
         // not). A brand-new store is already empty, so we only clear when upgrading an
         // existing one.
+        //
+        // RISK: this clear is unconditional and destructive — it wipes the cached library
+        // before any resync runs. If the backend is unreachable right after the upgrade,
+        // the user is briefly left with an empty library until connectivity returns. This
+        // is an accepted trade-off: leaving stale pre-albumKey records in place would
+        // collapse same-named albums by different artists, and the resync above keeps the
+        // empty state transient and self-healing (it repopulates and bumps the revision)
+        // rather than a permanent data loss.
         if (preExisting) {
           store.clear();
         }
@@ -177,11 +194,14 @@ export const db = {
       const store: IDBObjectStore = tx.objectStore(DATABASE.STORE_NAME);
       const resultMap = new Map<string, DbTrack>();
       files.forEach((rawFile) => {
-        const searchKey: string = rawFile.normalize("NFC").trim();
+        // Same normalizer for the lookup key AND the returned-map key, so callers that
+        // re-normalize their queue path the same way (NFC) hit instead of missing on a
+        // raw vs normalized key mismatch.
+        const searchKey: string = normalizeFileKey(rawFile);
         const req: IDBRequest<DbTrack | undefined> = store.get(searchKey);
         req.onsuccess = (e: Event) => {
           const found = (e.target as IDBRequest<DbTrack | undefined>).result;
-          if (found) resultMap.set(rawFile, found);
+          if (found) resultMap.set(searchKey, found);
         };
       });
       // Gate completion on the transaction, not a per-request counter: tx.oncomplete

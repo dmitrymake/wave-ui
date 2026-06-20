@@ -1,10 +1,26 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2025 dmitrymake
+import { derived, type Readable } from "svelte/store";
 import { ICONS } from "./icons";
-import { LibraryActions } from "./mpd/library";
+import { LibraryActions } from "./playback/library";
 import { resolveSourceForTrack } from "./sources/trackSource";
+import { yandexFavorites } from "./stores/yandex";
 import { isRemoteUrl, formatClock } from "./utils";
 import type { Track, MpdStatus } from "./types";
+
+/**
+ * Generic reactivity trigger for streaming-source like state. Generic UI (LikeButton,
+ * ContextMenu) subscribes to this so a like derived re-runs when any source's
+ * favourites change, without naming a concrete service. The owning TrackSource still
+ * computes the actual liked flag in {@link isTrackLiked}; this store only re-emits the
+ * live favourites set as an opaque reactivity bump. Keeping the concrete streaming
+ * favourites store behind this source-aware boundary is what removes the Yandex leak
+ * from shared components.
+ */
+export const sourceLikesVersion: Readable<Set<string>> = derived(
+  yandexFavorites,
+  (favs) => favs,
+);
 
 // Thin alias kept for the player components; the clock format itself lives in utils.
 export function formatTime(seconds: number | null): string {
@@ -65,9 +81,10 @@ export async function toggleLike(track: Track): Promise<void> {
   }
 }
 
-// `yandexFavs` is passed so callers' reactive derivations re-run when streaming
-// favourites change; the owning source reads the live set when computing isLiked.
-export function isTrackLiked(track: Track | null, favorites: Set<string>, _yandexFavs: Set<string>): boolean {
+// The owning source reads its live favourites set when computing isLiked, so callers
+// only need to pass the local `favorites`. For reactivity on streaming-source likes,
+// subscribe to {@link sourceLikesVersion} alongside this call.
+export function isTrackLiked(track: Track | null, favorites: Set<string>): boolean {
   if (!track) return false;
   const source = resolveSourceForTrack(track);
   if (source?.isLiked) return source.isLiked(track);

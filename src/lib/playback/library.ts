@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2025 dmitrymake
 import { get } from "svelte/store";
-import { mpdClient } from "./client";
-import { MpdParser } from "./parser";
-import { escapeArg, escapePath } from "./escape";
+import { mpdClient } from "../mpd/client";
+import { MpdParser } from "../mpd/parser";
+import { escapeArg, escapePath } from "../mpd/escape";
 import {
   isLoadingPlaylists,
   playlists,
@@ -18,13 +18,8 @@ import { generateUid, isRemoteUrl } from "../utils";
 import { MSG } from "../messages";
 import { logger } from "../logger";
 import { getGradient, assignColorVar } from "../playlistColor";
+import { FAVORITES_PLAYLIST } from "../constants";
 import type { Track, Playlist } from "../types";
-
-// Re-exported for backward compatibility: the colour helpers used to live here
-// before being centralised in playlistColor.ts. Keeps any import path stable.
-export { getGradient, assignColorVar } from "../playlistColor";
-
-const FAV_PLAYLIST: string = "Favorites";
 
 let _favActionQueue: Promise<void> = Promise.resolve();
 
@@ -238,7 +233,7 @@ export const LibraryActions = {
 
   async loadFavorites(): Promise<void> {
     try {
-      const text: string = await mpdClient.send(`listplaylistinfo "${FAV_PLAYLIST}"`);
+      const text: string = await mpdClient.send(`listplaylistinfo "${FAVORITES_PLAYLIST}"`);
       const tracks: Track[] = MpdParser.parseTracks(text);
 
       const favSet = new Set<string>();
@@ -293,7 +288,7 @@ export const LibraryActions = {
 
     _favActionQueue = _favActionQueue.then(async () => {
       try {
-        const text: string = await mpdClient.send(`listplaylistinfo "${FAV_PLAYLIST}"`);
+        const text: string = await mpdClient.send(`listplaylistinfo "${FAVORITES_PLAYLIST}"`);
         const tracks: Track[] = MpdParser.parseTracks(text);
 
         let matchIndices: number[] = [];
@@ -316,7 +311,7 @@ export const LibraryActions = {
           if (matchIndices.length > 0) {
             matchIndices.sort((a, b) => b - a);
             for (const idx of matchIndices) {
-              await mpdClient.send(`playlistdelete "${FAV_PLAYLIST}" ${idx}`);
+              await mpdClient.send(`playlistdelete "${FAVORITES_PLAYLIST}" ${idx}`);
             }
             showToast(MSG.FAV_REMOVED, "info");
           }
@@ -324,10 +319,10 @@ export const LibraryActions = {
           if (matchIndices.length > 0) {
             logger.log("[Fav] Track already exists. Skipping.");
           } else {
-            await mpdClient.send(`playlistadd "${FAV_PLAYLIST}" "${safeFile}"`);
+            await mpdClient.send(`playlistadd "${FAVORITES_PLAYLIST}" "${safeFile}"`);
             if (tracks.length > 0) {
               await mpdClient.send(
-                `playlistmove "${FAV_PLAYLIST}" ${tracks.length} 0`,
+                `playlistmove "${FAVORITES_PLAYLIST}" ${tracks.length} 0`,
               );
             }
             showToast(MSG.FAV_ADDED, "success");

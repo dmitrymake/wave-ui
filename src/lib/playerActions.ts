@@ -5,9 +5,9 @@
 // import their playback/queue/playlist actions from here instead of reaching
 // into lib/mpd directly, so the raw protocol (escaping, command strings, the
 // websocket client) stays encapsulated behind a typed action surface.
-import { PlayerActions } from "./mpd/player";
-import { LibraryActions } from "./mpd/library";
-import { nav, playStation, playTrackOptimistic } from "./mpd";
+import { PlayerActions } from "./playback/player";
+import { LibraryActions } from "./playback/library";
+import { nav, playStation, playTrackOptimistic } from "./playback";
 
 // Transport-level playback controls.
 export const togglePlay = PlayerActions.togglePlay.bind(PlayerActions);

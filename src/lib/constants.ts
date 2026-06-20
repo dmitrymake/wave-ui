@@ -16,6 +16,11 @@ const getBaseUrl = (): string => {
   return "";
 };
 
+// Canonical name of the special "Favorites" playlist. This is both the MPD
+// playlist identifier (listplaylistinfo / playlistadd / playlistdelete) and the
+// UI label, so the value must stay exactly "Favorites".
+export const FAVORITES_PLAYLIST = "Favorites";
+
 export const DATABASE = {
   NAME: "MoodePlayerDB",
   STORE_NAME: "music",
@@ -56,4 +61,13 @@ export const PLAYER_CONFIG = {
   RECONNECT_DELAY: 3000,
   WATCHDOG_TIMEOUT: 5000,
   SYNC_WORKER_TIMEOUT: 120_000,
+} as const;
+
+// HTTP request timeouts (ms). REST/PHP calls can hang indefinitely on a
+// half-open TCP connection without a client-side deadline; fetchWithTimeout
+// (lib/http.ts) aborts past these. DAEMON_POLL is shorter than the 5s daemon
+// poll interval so overlapping requests cannot pile up.
+export const HTTP_CONFIG = {
+  DEFAULT_TIMEOUT: 12_000,
+  DAEMON_POLL_TIMEOUT: 4_000,
 } as const;

@@ -2,11 +2,11 @@
 // Copyright (c) 2025 dmitrymake
 //
 // Single source of truth for playlist-cover colours and gradients.
-// These are UI concerns (CSS background strings), kept out of mpd/library so
-// the MPD layer stays protocol-only. mpd/library re-exports getGradient /
+// These are UI concerns (CSS background strings), kept out of playback/library so
+// the MPD layer stays protocol-only. playback/library re-exports getGradient /
 // assignColorVar for backward compatibility.
 
-const FAV_PLAYLIST_NAME = "Favorites";
+import { FAVORITES_PLAYLIST } from "./constants";
 
 // The special-case Favorites swatch (default theme). Defined once here instead
 // of being inlined as magic numbers across the three playlist views.
@@ -29,7 +29,7 @@ function hashName(name: string): number {
  * red swatch; every other name is hashed to a deterministic dual-stop gradient.
  */
 export function getGradient(name: string): string {
-  if (name === FAV_PLAYLIST_NAME) {
+  if (name === FAVORITES_PLAYLIST) {
     return FAV_GRADIENT;
   }
   const hue: number = Math.abs(hashName(name) % 360);
@@ -41,7 +41,7 @@ export function getGradient(name: string): string {
  * Favorites maps to the heart colour; others cycle through --c-pl-0..5.
  */
 export function assignColorVar(name: string): string {
-  if (name === FAV_PLAYLIST_NAME) return FAV_COLOR_VAR;
+  if (name === FAVORITES_PLAYLIST) return FAV_COLOR_VAR;
   const index: number = Math.abs(hashName(name) % 6);
   return `var(--c-pl-${index})`;
 }
@@ -50,7 +50,7 @@ export function assignColorVar(name: string): string {
 // once. Returns the full `style` string, or null when the playlist is not
 // Favorites and the caller should fall through to its own colour handling.
 function favoriteCoverStyle(name: string | undefined, theme: string): string | null {
-  if (name !== FAV_PLAYLIST_NAME) return null;
+  if (name !== FAVORITES_PLAYLIST) return null;
   if (theme === "gruvbox") {
     return `background: linear-gradient(135deg, ${FAV_COLOR_VAR}, transparent); background-color: ${FAV_COLOR_VAR};`;
   }

@@ -46,23 +46,23 @@
     align-items: center;
     background: transparent;
     border: none;
-    padding: 0;
+    padding: var(--space-0);
     cursor: pointer;
     flex-shrink: 0;
   }
   .num {
-    font-size: 14px;
+    font-size: var(--text-base);
     color: var(--c-text-muted);
     font-variant-numeric: tabular-nums;
   }
   .num.active {
     color: var(--c-accent);
-    font-weight: 700;
+    font-weight: var(--weight-bold);
   }
 
   .icon-small {
-    width: 16px;
-    height: 16px;
+    width: var(--icon-size-xs);
+    height: var(--icon-size-xs);
     display: flex;
     fill: var(--c-text-primary);
   }
@@ -80,7 +80,7 @@
     width: 3px;
     background: var(--c-accent);
     margin: 0 1px;
-    border-radius: 1px;
+    border-radius: var(--radius-xs);
   }
   .b1 { animation: eq 0.6s infinite ease-in-out; }
   .b2 { animation: eq 0.6s infinite ease-in-out 0.2s; }

@@ -242,12 +242,12 @@
     display: flex;
     align-items: center;
     width: 100%;
-    height: 64px;
-    padding: 0 16px;
+    height: var(--row-h);
+    padding: var(--space-0) var(--space-4);
     box-sizing: border-box;
     border-radius: var(--radius-md);
-    border-bottom: 1px solid var(--c-border-dim);
-    transition: background 0.2s;
+    border-bottom: var(--border-default-dim);
+    transition: background var(--dur-fast);
     cursor: default;
     user-select: none;
     background: transparent;
@@ -282,8 +282,8 @@
   .left {
     display: flex;
     align-items: center;
-    gap: 12px;
-    margin-right: 16px;
+    gap: var(--space-3);
+    margin-right: var(--space-4);
     width: 80px;
     min-width: 80px;
     flex-shrink: 0;
@@ -301,17 +301,17 @@
   .drag-handle:active { cursor: grabbing; color: var(--c-text-primary); }
 
   .icon-small {
-    width: 16px;
-    height: 16px;
+    width: var(--icon-size-xs);
+    height: var(--icon-size-xs);
     display: flex;
     fill: var(--c-text-primary);
   }
   .icon-small :global(svg) { width: 100%; height: 100%; }
 
   .thumb {
-    width: 40px;
-    height: 40px;
-    border-radius: 4px;
+    width: var(--thumb-sm);
+    height: var(--thumb-sm);
+    border-radius: var(--radius-sm);
     background: var(--c-bg-placeholder);
     flex-shrink: 0;
     overflow: hidden;
@@ -327,20 +327,20 @@
   .title-row {
     display: flex;
     align-items: center;
-    gap: 8px;
-    margin-bottom: 2px;
+    gap: var(--space-2);
+    margin-bottom: var(--space-0_5);
     min-width: 0;
   }
   .title {
-    font-size: 15px;
-    font-weight: 500;
+    font-size: var(--text-lg);
+    font-weight: var(--weight-medium);
     color: var(--c-text-primary);
-    line-height: 1.2;
+    line-height: var(--leading-snug);
   }
   .active .title { color: var(--c-accent); }
 
   .artist {
-    font-size: 13px;
+    font-size: var(--text-base);
     color: var(--c-text-secondary);
     width: fit-content;
     max-width: 100%;
@@ -355,29 +355,29 @@
     margin-left: auto;
     display: flex;
     align-items: center;
-    gap: 10px;
+    gap: var(--space-2);
   }
-  .small { padding: 5px; }
-  .small :global(svg) { width: 18px; height: 18px; }
+  .small { padding: var(--space-5px); }
+  .small :global(svg) { width: var(--icon-size-sm); height: var(--icon-size-sm); }
   .remove { color: var(--c-text-muted); }
   .remove:hover { color: var(--c-accent); }
   .dur {
-    font-size: 13px;
+    font-size: var(--text-base);
     color: var(--c-text-muted);
     font-variant-numeric: tabular-nums;
     width: 28px;
     text-align: right;
   }
-  .context-menu-btn { opacity: 0.6; transition: opacity 0.2s; }
-  .context-menu-btn:hover { opacity: 1; color: var(--c-text-primary); }
+  .context-menu-btn { opacity: var(--opacity-muted); transition: opacity var(--dur-fast); }
+  .context-menu-btn:hover { opacity: var(--opacity-visible); color: var(--c-text-primary); }
 
   .brand-icon-inline {
-    width: 16px;
-    height: 16px;
+    width: var(--icon-size-xs);
+    height: var(--icon-size-xs);
     display: flex;
     align-items: center;
-    margin-right: 4px;
-    opacity: 0.8;
+    margin-right: var(--space-1);
+    opacity: var(--opacity-strong);
   }
   .brand-icon-inline :global(svg) { width: 100%; height: 100%; }
 </style>

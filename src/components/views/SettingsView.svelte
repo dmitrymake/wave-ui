@@ -33,8 +33,8 @@
 
 <style>
   .header-title.big {
-    font-size: 32px;
-    margin-bottom: 24px;
-    padding-left: 4px;
+    font-size: var(--text-5xl);
+    margin-bottom: var(--space-6);
+    padding-left: var(--space-1);
   }
 </style>

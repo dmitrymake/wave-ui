@@ -4,6 +4,7 @@
   import { ICONS } from "../../lib/icons";
   import { longpress } from "../../lib/actions";
   import { getPlaylistCoverStyle } from "../../lib/playlistColor";
+  import { FAVORITES_PLAYLIST } from "../../lib/constants";
   import type { Playlist } from "../../lib/types";
 
   let { playlists = [], currentTheme = "", onOpenPlaylist, onContextMenu, onNewPlaylist }: {
@@ -32,7 +33,7 @@
   </div>
 
   {#each playlists as playlist (playlist.name)}
-    {@const isFav = playlist.name === "Favorites"}
+    {@const isFav = playlist.name === FAVORITES_PLAYLIST}
     <div
       class="music-card"
       role="button"
@@ -78,11 +79,11 @@
 
   .playlists-grid-override {
     grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)) !important;
-    gap: 24px !important;
+    gap: var(--space-6) !important;
   }
 
   .dashed-cover {
-    border: 2px dashed var(--c-border);
+    border: var(--border-width-thick) dashed var(--c-border);
     background: transparent !important;
   }
 
@@ -101,45 +102,45 @@
 
   .card-menu-btn {
     position: absolute;
-    top: 8px;
-    right: 8px;
+    top: var(--space-2);
+    right: var(--space-2);
     background: var(--c-black-20);
     border: none;
-    border-radius: 50%;
-    width: 28px;
-    height: 28px;
+    border-radius: var(--radius-circle);
+    width: var(--circle-btn-sm);
+    height: var(--circle-btn-sm);
     display: flex;
     align-items: center;
     justify-content: center;
-    color: #fff;
-    opacity: 0;
+    color: var(--c-text-primary);
+    opacity: var(--opacity-hidden);
     transition:
-      opacity 0.2s,
-      background 0.2s;
-    z-index: 10;
+      opacity var(--dur-fast),
+      background var(--dur-fast);
+    z-index: var(--z-overlay-local);
     cursor: pointer;
   }
   .music-card:hover .card-menu-btn {
-    opacity: 1;
+    opacity: var(--opacity-visible);
   }
   .card-menu-btn:hover {
     background: var(--c-black-50);
   }
   .card-menu-btn :global(svg) {
-    width: 16px;
-    height: 16px;
+    width: var(--icon-size-xs);
+    height: var(--icon-size-xs);
   }
 
   @media (hover: none) {
     .card-menu-btn {
-      opacity: 1;
+      opacity: var(--opacity-visible);
       background: transparent;
     }
   }
   @media (max-width: 768px) {
     .playlists-grid-override {
       grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)) !important;
-      gap: 16px !important;
+      gap: var(--space-4) !important;
     }
   }
 </style>

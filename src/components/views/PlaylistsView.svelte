@@ -32,6 +32,7 @@
   } from "../../lib/playerActions";
   import { searchPlaylists } from "../../lib/playlistSearch";
   import { getPlaylistCoverStyle } from "../../lib/playlistColor";
+  import { FAVORITES_PLAYLIST } from "../../lib/constants";
   import { formatTotalDuration } from "../../lib/utils";
   import { ICONS } from "../../lib/icons";
   import TrackRow from "../TrackRow.svelte";
@@ -41,6 +42,7 @@
   import PlaylistGrid from "./PlaylistGrid.svelte";
   import PlaylistSearchResults from "./PlaylistSearchResults.svelte";
   import type { Track, Playlist } from "../../lib/types";
+  import Button from "../ui/Button.svelte";
 
   let isEditMode = $state(false);
   let pressedPlayAll = $state(false);
@@ -207,7 +209,7 @@
   }
 
   function handlePlaylistContext(e: Event, playlist: Playlist) {
-    if (playlist.name === "Favorites") return;
+    if (playlist.name === FAVORITES_PLAYLIST) return;
     e.stopPropagation();
     e.preventDefault();
     openContextMenu(e as EventWithDetail, null, { type: "playlist-card", playlist: playlist });
@@ -269,7 +271,7 @@
     movePlaylistTrack((currentView.data as { name: string }).name, fromIndex, toIndex);
   }
 
-  let isFavPlaylist = $derived(currentView?.data?.name === "Favorites");
+  let isFavPlaylist = $derived(currentView?.data?.name === FAVORITES_PLAYLIST);
 
   // Reads only the optional name/colour fields off a playlist-card descriptor, so
   // the loosely-typed NavigationEntry.data assigns with a single narrowing cast
@@ -353,20 +355,20 @@
               </div>
 
               <div class="header-actions">
-                <button
-                  class="btn-primary"
+                <Button
+                  variant="primary"
                   onclick={handlePlayAll}
                   disabled={pressedPlayAll}
                 >
                   {pressedPlayAll ? "Playing..." : "Play All"}
-                </button>
-                <button
-                  class="btn-secondary"
+                </Button>
+                <Button
+                  variant="secondary"
                   onclick={handleAddToQueue}
                   disabled={pressedAddToQueue}
                 >
                   {pressedAddToQueue ? "Added" : "To Queue"}
-                </button>
+                </Button>
                 <button
                   class="btn-action"
                   class:active={isEditMode}
@@ -401,13 +403,13 @@
         {#each Array(8) as _}
           <div class="music-card skeleton-card">
             <div class="card-img-container">
-              <Skeleton width="100%" height="100%" radius="8px" />
+              <Skeleton width="100%" height="100%" radius="var(--radius-md)" />
             </div>
-            <div style="margin-bottom: 4px;">
-              <Skeleton width="60%" height="15px" radius="4px" />
+            <div style="margin-bottom: var(--space-1);">
+              <Skeleton width="60%" height="15px" radius="var(--radius-sm)" />
             </div>
             <div>
-              <Skeleton width="40%" height="13px" radius="4px" style="opacity: 0.6" />
+              <Skeleton width="40%" height="13px" radius="var(--radius-sm)" style="opacity: var(--opacity-muted)" />
             </div>
           </div>
         {/each}
@@ -447,7 +449,7 @@
   .header-icon-wrap {
     width: 64px;
     height: 64px;
-    color: #fff;
+    color: var(--c-text-primary);
   }
   .header-icon-wrap :global(svg) {
     width: 100%;
@@ -458,10 +460,10 @@
     display: flex;
     align-items: center;
     background: var(--c-surface-input);
-    border: 1px solid var(--c-border);
-    border-radius: 8px;
-    padding: 8px 12px;
-    margin-bottom: 20px;
+    border: var(--border-default);
+    border-radius: var(--radius-md);
+    padding: var(--space-2) var(--space-3);
+    margin-bottom: var(--space-5);
     width: 100%;
     box-sizing: border-box;
   }
@@ -470,22 +472,22 @@
     align-items: center;
     justify-content: center;
     color: var(--c-text-muted);
-    margin-right: 10px;
+    margin-right: var(--space-2);
     flex-shrink: 0;
   }
   .search-icon :global(svg) {
-    width: 18px;
-    height: 18px;
+    width: var(--icon-size-sm);
+    height: var(--icon-size-sm);
   }
   input {
     flex: 1;
     background: transparent;
     border: none;
     color: var(--c-text-primary);
-    font-size: 15px;
+    font-size: var(--text-lg);
     outline: none;
     min-width: 0;
-    padding: 0;
+    padding: var(--space-0);
   }
   input::placeholder {
     color: var(--c-text-muted);
@@ -495,28 +497,28 @@
     background: transparent;
     border: none;
     color: var(--c-text-muted);
-    width: 24px;
+    width: var(--switch-h);
     height: 100%;
     display: flex;
     align-items: center;
     justify-content: center;
     cursor: pointer;
-    padding: 0;
-    margin-right: 4px;
+    padding: var(--space-0);
+    margin-right: var(--space-1);
   }
   .clear-icon-btn :global(svg) {
-    width: 16px;
-    height: 16px;
+    width: var(--icon-size-xs);
+    height: var(--icon-size-xs);
   }
 
   .spinner {
-    width: 16px;
-    height: 16px;
-    border: 2px solid var(--c-border);
+    width: var(--icon-size-xs);
+    height: var(--icon-size-xs);
+    border: var(--border-width-thick) solid var(--c-border);
     border-top-color: var(--c-accent);
-    border-radius: 50%;
-    animation: spin 0.6s linear infinite;
-    margin-left: 8px;
+    border-radius: var(--radius-circle);
+    animation: spin 0.6s var(--ease-linear) infinite;
+    margin-left: var(--space-2);
     flex-shrink: 0;
   }
   @keyframes spin {
@@ -527,13 +529,13 @@
 
   .playlists-grid-override {
     grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)) !important;
-    gap: 24px !important;
+    gap: var(--space-6) !important;
   }
 
   .music-card.skeleton-card .card-img-container {
     aspect-ratio: 1;
     background: transparent;
-    margin-bottom: 0;
+    margin-bottom: var(--space-0);
   }
   .music-card.skeleton-card:hover {
     background: transparent;
@@ -542,7 +544,7 @@
   @media (max-width: 768px) {
     .playlists-grid-override {
       grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)) !important;
-      gap: 16px !important;
+      gap: var(--space-4) !important;
     }
   }
 </style>

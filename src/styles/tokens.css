@@ -1,0 +1,295 @@
+/* SPDX-License-Identifier: MIT */
+/* Copyright (c) 2025 dmitrymake */
+
+/* =============================================================================
+   Wave UI — DESIGN TOKENS (static, theme-invariant)
+   -----------------------------------------------------------------------------
+   Single static layer for every NON-color design value: spacing, typography,
+   radius, shadow geometry, z-index, motion, control/icon sizing, opacity, etc.
+
+   RULES OF THE ROAD
+   - COLORS LIVE IN theme.ts (injected per-theme onto :root by ui.ts). They are
+     intentionally NOT defined here.
+   - Composite tokens (--border-*, --shadow-*) carry INVARIANT geometry but
+     reference per-theme color tokens via var(). They live here and resolve
+     against the active theme at runtime.
+   - This file must be imported BEFORE shared.css / MusicViews.css so tokens are
+     defined before any shared class consumes them.
+   - PARITY: every value below maps 1:1 to a raw value currently in the codebase
+     (see token comments). Off-scale values (3/5/6/7/10/14/15/30/50px, etc.) are
+     tokenized AS-IS to preserve visual parity; they carry a CANDIDATE note for
+     later rationalization (Claude Design phase), and are NOT changed here.
+   - The ONE deliberate exception is --radius-xl (see RADIUS section): the
+     theme-invariant axis was split (default 20 / gruvbox 16); unified to 20.
+   ========================================================================== */
+
+:root {
+  /* ===========================================================================
+     1. SPACING — base 4px scale (--space-1 = 4px). Off-scale aliases keep
+        byte-parity with existing literals. Negative offsets via
+        calc(-1 * var(--space-*)); 'auto' stays literal (keyword, not a value).
+     ======================================================================== */
+
+  /* --- on-scale (multiples of 4px base) --- */
+  --space-0: 0;       /* zero padding/margin/inset/gap (~53 occ) */
+  --space-0_5: 2px;   /* 0.5x — micro spacing for badges/indicators */
+  --space-1: 4px;     /* 1x — very common */
+  --space-2: 8px;     /* 2x — gap:8px x14 */
+  --space-3: 12px;    /* 3x — gap:12px x11, margin-bottom:12px x8 */
+  --space-4: 16px;    /* 4x — canonical container inset; padding:0 16px x10 */
+  --space-5: 20px;    /* 5x — gap:20px x6 */
+  --space-6: 24px;    /* 6x — margin-bottom:24px x5 */
+  --space-8: 32px;    /* 8x — settings section spacing x5 */
+  --space-10: 40px;   /* 10x — empty-state padding x3; neg inset via calc */
+
+  /* --- off-scale (retained micro-steps; precision-tuned, kept on purpose) --- */
+  --space-px: 1px;    /* hairline / subpixel nudge (VolumeSlider) */
+  --space-2xs: 6px;   /* MiniPlayer progress-bar offsets / PlayModeButton dot — precision */
+  --space-3px: 3px;   /* tiny dots / tooltip vpad — precision */
+  --space-5px: 5px;   /* MiniPlayer progress hover offset — precision */
+  --space-7px: 7px;   /* VolumeSlider thumb centering (parity) */
+  --space-14px: 14px; /* MiniPlayer progress hit-area + menu rows */
+  --space-28px: 28px; /* 7x base; SideMenu / MiniPlayer fold handle */
+
+  /* ===========================================================================
+     2. TYPOGRAPHY — font sizes (T-shirt scale, 1:1 with existing px sizes).
+        !important sites keep `var(--text-*) !important`.
+     ======================================================================== */
+  --text-2xs: 10px;     /* micro-caption: caps/badges ONLY, never body */
+  --text-xs: 11px;      /* caption: MiniPlayer artist, hints, .meta-tag */
+  --text-sm: 12px;      /* small caption/meta */
+  --text-base: 14px;    /* PRIMARY body (also absorbs old 13px dense body) */
+  --text-lg: 16px;      /* label/subtitle/titles (also absorbs old 15px); iOS-zoom-safe input */
+  --text-xl: 18px;      /* title: settings/section headers */
+  --text-2xl: 20px;     /* title-lg: page headers */
+  --text-3xl: 24px;     /* display-sm: FullPlayer title */
+  --text-4xl: 28px;     /* display — OFF-SCALE candidate (single, 24<->32) */
+  --text-5xl: 32px;     /* display: SettingsView header */
+  --text-6xl: 40px;     /* display-xl: hero numbers */
+  --text-7xl: 48px;     /* display-2xl: hero */
+  --text-8xl: 60px;     /* display-3xl: empty-state icon — OFF-SCALE candidate */
+
+  /* ===========================================================================
+     3. LINE HEIGHT (leading)
+     ======================================================================== */
+  --leading-none: 1;          /* icons / single-line numbers */
+  --leading-snug: 1.15;       /* tight multiline: TrackRow (was 1.2) */
+  --leading-normal: 1.4;      /* readable body (was 1.5) */
+  --leading-relaxed: 1.6;     /* airy body / long-form */
+
+  /* ===========================================================================
+     4. LETTER SPACING (tracking)
+     ======================================================================== */
+  --tracking-wide: 0.5px;  /* uppercase pills/badges */
+  --tracking-wider: 1px;   /* 10px uppercase micro-badges (RadioView) */
+
+  /* ===========================================================================
+     5. FONT WEIGHT — 'bold' normalized to 700 (visually identical)
+     ======================================================================== */
+  --weight-regular: 400;   /* normal body default */
+  --weight-medium: 500;    /* track titles, sort-item.selected */
+  --weight-semibold: 600;  /* most common accent weight (18x) */
+  --weight-bold: 700;      /* 700 x11 + 'bold' x4 -> 700 */
+
+  /* ===========================================================================
+     6. FONT FAMILY — the two body stacks unified; system font resolves first
+        so the Helvetica/Arial fallback-tail difference is visually inert.
+        `font-family: inherit` (buttons/inputs) stays literal (behavioral).
+     ======================================================================== */
+  --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  --font-mono: ui-monospace, "SF Mono", "Cascadia Code", "JetBrains Mono", "Roboto Mono", "DejaVu Sans Mono", monospace; /* technical/numeric: version, time, codes (Pi-aware stack) */
+
+  /* ===========================================================================
+     7. RADIUS — theme-invariant. Existing sm/md/lg/full preserved.
+        --radius-xl UNIFIED to 20px: was split (default 20 / gruvbox 16); radius
+        is an invariant axis, so gruvbox 16->20 is an accepted minor visual
+        change (cards/modals slightly rounder), explicitly flagged.
+     ======================================================================== */
+  --radius-xs: 2px;          /* tiny rails/scrollbar/progress (2px x7); 1px/3px snap here */
+  --radius-sm: 4px;          /* EXISTS — migrate raw 4px x6 */
+  --radius-md: 8px;          /* EXISTS — migrate raw 8px x12 */
+  --radius-lg: 12px;         /* EXISTS — migrate raw 12px x12 */
+  --radius-xl: 16px;         /* cards/modals/artwork — calmer (was 20; gruvbox returns to historical 16) */
+  --radius-full: 9999px;     /* EXISTS — pill/capsule (distinct from circle) */
+  --radius-circle: 50%;      /* MOST common radius (18x): circular avatars/buttons/knobs */
+  --radius-pill: var(--radius-full); /* semantic alias for fully-rounded pill controls;
+                                        decouples pill rounding from --radius-xl.
+                                        Set to 20px if strict byte-parity of the
+                                        20px pill literal is required. */
+
+  /* ===========================================================================
+     8. BORDER WIDTH
+     ======================================================================== */
+  --border-width-thin: 1px;  /* dominant border width (39x) */
+  --border-width-thick: 2px; /* emphasized / dropzone borders (5x) */
+
+  /* ===========================================================================
+     9. BORDER (composite) — invariant geometry + per-theme color (var()).
+        Color tokens live in theme.ts; these resolve at runtime per theme.
+     ======================================================================== */
+  --border-default: var(--border-width-thin) solid var(--c-border);
+  --border-default-dim: var(--border-width-thin) solid var(--c-border-dim);
+  --border-dashed: var(--border-width-thick) dashed var(--c-border-dashed);
+
+  /* ===========================================================================
+     10. SHADOW (composite) — invariant geometry + per-theme color (var()).
+         -strong variants keep --c-black-* parity where a darker color is used;
+         -header / -popover kept separate because the color diverges per theme
+         (do NOT merge — would change gruvbox).
+     ======================================================================== */
+  --shadow-xs: 0 1px 3px var(--c-shadow-card);
+  --shadow-xs-strong: 0 1px 3px var(--c-black-50);   /* for --c-black-50 byte-parity */
+  --shadow-sm: 0 2px 4px var(--c-shadow-card);
+  --shadow-sm-strong: 0 2px 4px var(--c-black-50);   /* for --c-black-50 byte-parity */
+  --shadow-md: 0 4px 12px var(--c-shadow-card);
+  --shadow-md-popover: 0 4px 15px var(--c-shadow-popover); /* MainScreen popover — CANDIDATE: merge md */
+  --shadow-lg: 0 8px 24px var(--c-shadow-card);
+  --shadow-xl: 0 10px 40px var(--c-black-70);        /* menu/modal/context */
+  --shadow-xl-header: 0 10px 40px var(--c-shadow-header); /* theme-divergent color — kept separate */
+  --shadow-2xl: 0 20px 50px var(--c-shadow-phantom); /* deepest (drag phantom). NOTE: main.css
+                                                        global rgba(0,0,0,0.5) matches gruvbox
+                                                        phantom but not default (0.7); if it must
+                                                        stay 0.5 use --c-shadow-popover. */
+  --shadow-glow: 0 0 10px var(--c-shadow-glow-accent); /* accent glow (RadioView active) */
+  --shadow-focus-ring: 0 0 0 3px var(--c-accent);      /* focus ring (MusicViews) */
+  --shadow-error-ring: 0 0 0 1px var(--c-error-ring);  /* modal error ring (--c-error-ring
+                                                          defined per-theme in theme.ts) */
+
+  /* ===========================================================================
+     10b. GRADIENTS (composite) — invariant geometry + per-theme color via var().
+          Replace the hardcoded Yandex tile gradients (favorites/vibe). */
+  --grad-favorites: linear-gradient(135deg, var(--c-accent), color-mix(in srgb, var(--c-accent) 65%, #000));
+  --grad-vibe: linear-gradient(135deg, var(--c-warn), var(--c-error));
+
+  /* ===========================================================================
+     11. Z-INDEX — global bands + a small local scale. Full set defined here
+         (shared.css :root was missing sidebar/menu/context-menu).
+     ======================================================================== */
+  --z-bg: -1;             /* background blur/overlay layers (main.css); -2 via separate context */
+  --z-base: 1;            /* base local stacking */
+  --z-above: 2;           /* small local step (intra-component) */
+  --z-content: 3;         /* local content layers 3-5 collapse here */
+  --z-overlay-local: 10;  /* local overlay (RadioView/PlaylistGrid) */
+  --z-miniplayer: 100;    /* MiniPlayer internal stack (base; 101/105/110 via offsets) */
+  --z-sidebar: 999;       /* was theme.ts-only — added here */
+  --z-dock: 1000;
+  --z-modal: 2000;
+  --z-toast: 3000;
+  --z-menu: 9000;         /* was theme.ts-only — added here */
+  --z-drag-item: 9999;
+  --z-context-menu: 10001; /* was theme.ts-only — added here */
+
+  /* ===========================================================================
+     12. TRANSITIONS (composite shorthand). Kept for compatibility; prefer the
+         decomposed --dur-* / --ease-* below for per-property transitions.
+     ======================================================================== */
+  --trans-fast: 0.2s ease;                            /* enforce: ~21 raw 0.2s sites */
+  --trans-smooth: 0.3s cubic-bezier(0.2, 0.8, 0.2, 1); /* enforce: 6 hardcoded matches */
+
+  /* ===========================================================================
+     13. DURATION (decomposed) — compose with --ease-* per property.
+     ======================================================================== */
+  --dur-instant: 0.1s;  /* press-feedback micro-interactions (7x) */
+  --dur-fast: 0.2s;     /* counterpart to --trans-fast */
+  --dur-base: 0.3s;     /* counterpart to --trans-smooth */
+  --dur-slow: 0.4s;     /* drawer/width anims (SideMenu); 0.5s snaps here */
+  --dur-slow-2: 0.25s;  /* one-off — CANDIDATE: snap to --dur-fast/base */
+
+  /* ===========================================================================
+     14. EASING
+     ======================================================================== */
+  --ease-default: ease;
+  --ease-emphasized: cubic-bezier(0.2, 0.8, 0.2, 1);    /* standard decelerate (matches --trans-smooth) */
+  --ease-sharp: cubic-bezier(0.2, 0, 0, 1);             /* list/enter curve (BaseList/MusicViews) */
+  --ease-linear: linear;                                /* spin/progress/marquee */
+
+  /* ===========================================================================
+     15. CONTROL SIZE — interactive heights, paddings, circular diameters,
+         toggle switch parts. Removes the need for !important on svg sizing.
+     ======================================================================== */
+
+  /* control row heights */
+  --control-h-sm: 32px;  /* .btn-icon.small, compact vol-btn */
+  --control-h-md: 36px;  /* .btn-action mobile, .btn-primary.small */
+  --control-h-lg: 40px;  /* default/large control height */
+  --control-h-xl: 48px;  /* search input, MiniPlayer play, nav-item, back-btn-area */
+  --control-h-2xl: var(--control-h-xl); /* 48px (was 50) — ContextMenu/Modal header rows */
+
+  /* control horizontal paddings (aliases of spacing) */
+  --control-pad-x-sm: 16px; /* = --space-4 */
+  --control-pad-x-md: 20px; /* = --space-5 */
+
+  /* naked icon-button paddings */
+  --icon-btn-pad: 8px;     /* .btn-icon, .vol-btn (~40px target around 24px glyph) */
+  --icon-btn-pad-lg: var(--icon-btn-pad); /* 8px (was 10) — transport buttons (hit-area 40px > WCAG 2.5.8) */
+  --icon-btn-pad-sm: 6px;  /* compact (docked) icon-buttons */
+
+  /* toggle switch */
+  --switch-w: 44px;     /* .toggle-btn track width */
+  --switch-h: 24px;     /* .toggle-btn track height */
+  --switch-knob: 20px;  /* .toggle-circle; travel = w - knob - 2x1px inset */
+
+  /* circular icon buttons */
+  --circle-btn-sm: var(--circle-btn-md); /* 32px (was 28) — .tiny-dots, .card-menu-btn */
+  --circle-btn-md: 32px;  /* default small circular button */
+
+  /* circular play buttons */
+  --circle-play-sm: 44px; /* FullPlayer docked play-btn-large — CANDIDATE */
+  --circle-play-md: 48px; /* MiniPlayer .play-btn */
+  --circle-play-lg: 64px; /* FullPlayer .play-btn-large */
+
+  /* ===========================================================================
+     16. ICON SIZE (svg glyphs)
+     ======================================================================== */
+  --icon-size-xs: 16px; /* TrackRow .small, clear-icon-btn, sort-trigger-icon */
+  --icon-size-sm: 18px; /* .btn-action, .btn-icon.small, list search-icon */
+  --icon-size-md: 20px; /* compact transport, ContextMenu .icon, settings chevron */
+  --icon-size-lg: 24px; /* default transport/nav glyph (most common) */
+  --icon-size-xl: 28px; /* FullPlayer .play-btn-large glyph */
+
+  /* ===========================================================================
+     17. OPACITY — ramp; near values absorbed (see notes / candidates).
+     ======================================================================== */
+  --opacity-hidden: 0;    /* enter/exit hidden (10x) */
+  --opacity-ghost: 0.3;   /* faint bg/skeletons; 0.1/0.2/0.4 OFF-SCALE candidates */
+  --opacity-faint: 0.5;   /* disabled/dim (13x) */
+  --opacity-muted: 0.6;   /* secondary text/icons (9x); matches :disabled .6 */
+  --opacity-dim: 0.7;     /* muted (6x) */
+  --opacity-strong: 0.8;  /* near-opaque overlays; 0.85/0.9/0.95 OFF-SCALE candidates */
+  --opacity-visible: 1;   /* shown state (13x) */
+
+  /* ===========================================================================
+     18. LAYOUT — moved out of theme.ts (invariant in both themes).
+     ======================================================================== */
+  --header-height: 64px;
+  --mini-player-height: 90px;
+  --icon-stroke-width: 1.5px;
+
+  /* shell & list geometry (single source; values == current literals, 0px shift) */
+  --row-h: 64px;              /* TrackRow / BaseList skeleton row height */
+  --thumb-sm: 40px;          /* TrackRow / docked mini thumb */
+  --thumb-md: 48px;          /* MiniPlayer compact thumb */
+  --thumb-lg: 64px;          /* MiniPlayer thumb */
+  --sidebar-w: 250px;        /* SideMenu expanded */
+  --sidebar-w-collapsed: 80px; /* SideMenu collapsed */
+  --dock-w: 280px;           /* docked FullPlayer / sidebar drawer */
+
+  /* ===========================================================================
+     19. CONTROL TYPOGRAPHY (semantic aliases)
+     ======================================================================== */
+  --text-control: var(--text-base);     /* default control/label size (14px) */
+  --weight-control: var(--weight-bold); /* pill button weight (secondary controls: --weight-semibold) */
+
+  /* ===========================================================================
+     20. BREAKPOINTS — DOC-ONLY. CSS custom properties CANNOT be used inside
+         @media feature queries. These are the single documented source of
+         truth; mirror them in constants.ts (BREAKPOINTS) for matchMedia and
+         keep literal px in @media rules.
+           --bp-sm: 600px   (mobile / landscape-short)
+           --bp-md: 768px   (primary mobile breakpoint, 7 uses)
+           --bp-lg: 800px   (tablet one-off, MusicViews — CANDIDATE: fold into 768)
+     ======================================================================== */
+  --bp-sm: 600px;
+  --bp-md: 768px;
+  --bp-lg: 800px;
+}

@@ -39,28 +39,28 @@
   .mode-btn {
     position: relative;
     color: var(--c-text-secondary);
-    transition: color 0.2s;
-    padding: 10px;
+    transition: color var(--dur-fast);
+    padding: var(--icon-btn-pad-lg);
   }
   .mode-btn.active {
     color: var(--c-accent);
   }
-  .mode-btn:active { opacity: 0.7; }
-  .mode-btn :global(svg) { width: 24px; height: 24px; }
+  .mode-btn:active { opacity: var(--opacity-dim); }
+  .mode-btn :global(svg) { width: var(--icon-size-lg); height: var(--icon-size-lg); }
 
-  .compact { padding: 6px; opacity: 0.7; }
-  .compact.active { opacity: 1; }
-  .compact :global(svg) { width: 20px; height: 20px; }
+  .compact { padding: var(--icon-btn-pad-sm); opacity: var(--opacity-dim); }
+  .compact.active { opacity: var(--opacity-visible); }
+  .compact :global(svg) { width: var(--icon-size-md); height: var(--icon-size-md); }
 
   .dot {
     position: absolute;
-    bottom: 6px;
-    width: 4px;
-    height: 4px;
+    bottom: var(--space-2xs);
+    width: var(--space-1);
+    height: var(--space-1);
     background: var(--c-accent);
-    border-radius: 50%;
+    border-radius: var(--radius-circle);
     left: 50%;
     transform: translateX(-50%);
   }
-  .compact .dot { bottom: 2px; width: 3px; height: 3px; }
+  .compact .dot { bottom: var(--space-0_5); width: var(--space-3px); height: var(--space-3px); }
 </style>

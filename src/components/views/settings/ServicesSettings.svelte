@@ -5,6 +5,9 @@
   import { showToast } from "../../../lib/store";
   import { isYandexEnabled, yandexAuthStatus } from "../../../lib/stores/yandex";
   import { YandexService } from "../../../lib/yandexService";
+  import Toggle from "../../ui/Toggle.svelte";
+  import Input from "../../ui/Input.svelte";
+  import Button from "../../ui/Button.svelte";
 
   let inputToken = $state("");
   let isChecking = $state(false);
@@ -37,10 +40,6 @@
     if (diagOpen && !diagText) loadDiagnostics();
   }
 
-  function toggleYandex() {
-    isYandexEnabled.update((v) => !v);
-  }
-
   async function handleSaveToken() {
     if (!inputToken) return;
     isChecking = true;
@@ -58,17 +57,12 @@
   </div>
   <div class="card">
     <div class="row space-between">
-      <label for="toggle-yandex">Enable Yandex Music (Beta)</label>
-      <button
-        id="toggle-yandex"
-        class="toggle-btn"
-        class:active={$isYandexEnabled}
-        onclick={toggleYandex}
-        aria-pressed={$isYandexEnabled}
-        aria-label="Enable Yandex Music"
-      >
-        <div class="toggle-circle"></div>
-      </button>
+      <span class="label-text">Enable Yandex Music (Beta)</span>
+      <Toggle
+        checked={$isYandexEnabled}
+        ariaLabel="Enable Yandex Music"
+        onchange={(c) => isYandexEnabled.set(c)}
+      />
     </div>
 
     {#if $isYandexEnabled}
@@ -86,21 +80,22 @@
       <div class="separator" in:fade></div>
 
       <div class="row" in:fade>
-        <label for="yandex-token">OAuth Token</label>
+        <span class="label-text">OAuth Token</span>
         <div class="input-group">
-          <input
-            id="yandex-token"
+          <Input
             type="password"
             bind:value={inputToken}
             placeholder="Paste token here..."
+            ariaLabel="OAuth Token"
           />
-          <button
-            class="btn-primary small"
+          <Button
+            variant="primary"
+            size="sm"
             disabled={isChecking}
             onclick={handleSaveToken}
           >
             {isChecking ? "Checking..." : "Save"}
-          </button>
+          </Button>
         </div>
       </div>
 
@@ -110,9 +105,9 @@
         <div class="separator" in:fade></div>
         <div class="row space-between" in:fade>
           <span class="label-text">Diagnostics</span>
-          <button class="btn-primary small" onclick={toggleDiag}>
+          <Button variant="primary" size="sm" onclick={toggleDiag}>
             {diagOpen ? "Hide" : "Show"}
-          </button>
+          </Button>
         </div>
 
         {#if diagOpen}
@@ -122,12 +117,12 @@
             {:else}
               <pre class="diag-pre">{diagText}</pre>
               <div class="row-gap">
-                <button class="btn-primary small" onclick={loadDiagnostics}
-                  >Refresh</button
-                >
-                <button class="btn-primary small" onclick={copyDiagnostics}
-                  >Copy</button
-                >
+                <Button variant="primary" size="sm" onclick={loadDiagnostics}>
+                  Refresh
+                </Button>
+                <Button variant="primary" size="sm" onclick={copyDiagnostics}>
+                  Copy
+                </Button>
               </div>
             {/if}
           </div>
@@ -139,34 +134,34 @@
 
 <style>
   .section {
-    margin-bottom: 32px;
+    margin-bottom: var(--space-8);
   }
 
   .section-header {
     display: flex;
     align-items: center;
-    gap: 10px;
-    font-size: 18px;
-    font-weight: 700;
+    gap: var(--space-2);
+    font-size: var(--text-xl);
+    font-weight: var(--weight-bold);
     color: var(--c-text-primary);
-    margin-bottom: 12px;
-    padding-left: 4px;
+    margin-bottom: var(--space-3);
+    padding-left: var(--space-1);
   }
 
   .card {
     background: var(--c-bg-card);
-    border: 1px solid var(--c-border);
-    border-radius: 12px;
-    padding: 16px;
+    border: var(--border-default);
+    border-radius: var(--radius-lg);
+    padding: var(--space-4);
     display: flex;
     flex-direction: column;
-    gap: 10px;
+    gap: var(--space-3);
   }
 
   .row {
     display: flex;
     align-items: center;
-    gap: 12px;
+    gap: var(--space-3);
   }
   .row.space-between {
     justify-content: space-between;
@@ -175,101 +170,48 @@
   .row-gap {
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: var(--space-2);
   }
 
-  label,
   .label-text {
-    font-size: 14px;
+    font-size: var(--text-base);
     color: var(--c-text-secondary);
-    font-weight: 600;
+    font-weight: var(--weight-semibold);
   }
 
   .input-group {
     display: flex;
-    gap: 8px;
+    gap: var(--space-2);
     flex: 1;
-  }
-
-  input[type="password"] {
-    background: var(--c-surface-input);
-    border: 1px solid var(--c-border);
-    color: var(--c-text-primary);
-    padding: 8px 12px;
-    border-radius: 8px;
-    font-size: 14px;
-    outline: none;
-    flex: 1;
-  }
-
-  .btn-primary.small {
-    padding: 0 16px;
-    font-size: 13px;
-    height: 36px;
   }
 
   .hint {
-    font-size: 12px;
+    font-size: var(--text-sm);
     color: var(--c-text-muted);
-    margin: 4px 0 0;
+    margin: var(--space-1) 0 0;
   }
 
   .separator {
-    height: 1px;
+    height: var(--space-px);
     background: var(--c-border);
-    opacity: 0.5;
-    margin: 4px 0;
-  }
-
-  .toggle-btn {
-    width: 44px;
-    height: 24px;
-    background: var(--c-surface-input);
-    border-radius: 12px;
-    border: 1px solid var(--c-border);
-    position: relative;
-    cursor: pointer;
-    transition:
-      background 0.2s,
-      border-color 0.2s;
-    padding: 0;
-  }
-
-  .toggle-btn.active {
-    background: var(--c-accent);
-    border-color: var(--c-accent);
-  }
-
-  .toggle-circle {
-    width: 20px;
-    height: 20px;
-    background: white;
-    border-radius: 50%;
-    position: absolute;
-    top: 1px;
-    left: 1px;
-    transition: transform 0.2s cubic-bezier(0.2, 0.8, 0.2, 1);
-    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
-  }
-
-  .toggle-btn.active .toggle-circle {
-    transform: translateX(20px);
+    opacity: var(--opacity-faint);
+    margin: var(--space-1) 0;
   }
 
   .diag-box {
     display: flex;
     flex-direction: column;
-    gap: 8px;
-    margin-top: 4px;
+    gap: var(--space-2);
+    margin-top: var(--space-1);
   }
   .diag-pre {
     background: var(--c-surface-input);
-    border: 1px solid var(--c-border);
+    border: var(--border-default);
     color: var(--c-text-primary);
-    padding: 10px;
-    border-radius: 8px;
-    font-family: monospace;
-    font-size: 11px;
+    padding: var(--space-3);
+    border-radius: var(--radius-md);
+    font-family: var(--font-mono);
+    font-size: var(--text-xs);
     max-height: 320px;
     overflow: auto;
     white-space: pre-wrap;
@@ -278,17 +220,17 @@
   }
 
   .status-badge {
-    font-size: 12px;
-    padding: 4px 8px;
-    border-radius: 4px;
-    font-weight: bold;
+    font-size: var(--text-sm);
+    padding: var(--space-1) var(--space-2);
+    border-radius: var(--radius-sm);
+    font-weight: var(--weight-bold);
   }
   .connected {
-    background: rgba(46, 204, 113, 0.2);
-    color: #2ecc71;
+    background: color-mix(in srgb, var(--c-success) 18%, transparent);
+    color: var(--c-success);
   }
   .disconnected {
-    background: rgba(231, 76, 60, 0.2);
-    color: #e74c3c;
+    background: color-mix(in srgb, var(--c-error) 18%, transparent);
+    color: var(--c-error);
   }
 </style>

@@ -12,6 +12,7 @@
   } from "../lib/store";
   import { isYandexEnabled } from "../lib/stores/yandex";
   import { ApiActions } from "../lib/api";
+  import { FAVORITES_PLAYLIST } from "../lib/constants";
 
   let { isOpen = false, onClose }: { isOpen?: boolean; onClose?: () => void } = $props();
 
@@ -21,7 +22,7 @@
 
   const ALL_MENU_ITEMS = [
     { id: "queue", label: "Queue", icon: ICONS.MENU },
-    { id: "favorites", label: "Favorites", icon: ICONS.HEART },
+    { id: "favorites", label: FAVORITES_PLAYLIST, icon: ICONS.HEART },
     { id: "artists", label: "Artists", icon: ICONS.ARTISTS },
     { id: "albums", label: "Albums", icon: ICONS.ALBUMS },
     { id: "playlists", label: "Playlists", icon: ICONS.PLAYLISTS },
@@ -97,7 +98,7 @@
   style:transform={isOpen ? `translateX(${translateX}px)` : ""}
   style:transition={isSwiping
     ? "none"
-    : "width 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94), transform 0.3s ease"}
+    : "width var(--dur-slow) var(--ease-emphasized), transform var(--dur-base) var(--ease-default)"}
   ontouchstart={handleTouchStart}
   ontouchmove={handleTouchMove}
   ontouchend={handleTouchEnd}
@@ -197,20 +198,20 @@
 
 <style>
   .side-menu {
-    width: 250px;
+    width: var(--sidebar-w);
     height: 100%;
     background: var(--c-bg-sidebar);
-    border-right: 1px solid var(--c-border);
+    border-right: var(--border-width-thin) solid var(--c-border);
     display: flex;
     flex-direction: column;
     z-index: var(--z-modal);
     flex-shrink: 0;
     overflow: hidden;
-    transition: width 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+    transition: width var(--dur-slow) var(--ease-emphasized);
   }
 
   .side-menu.collapsed {
-    width: 80px;
+    width: var(--sidebar-w-collapsed);
   }
 
   .scroll-area {
@@ -227,7 +228,7 @@
     display: flex;
     align-items: center;
     flex-shrink: 0;
-    padding: 0 10px;
+    padding: var(--space-0) var(--space-3);
     position: relative;
   }
 
@@ -243,23 +244,23 @@
     background: transparent;
     border: none;
     color: var(--c-text-muted);
-    width: 40px;
-    height: 40px;
+    width: var(--control-h-lg);
+    height: var(--control-h-lg);
     cursor: pointer;
     display: flex;
     align-items: center;
     justify-content: center;
-    border-radius: 8px;
+    border-radius: var(--radius-md);
     flex-shrink: 0;
     transition:
-      color 0.2s,
-      background 0.2s;
+      color var(--dur-fast),
+      background var(--dur-fast);
     position: absolute;
-    left: 8px;
-    z-index: 10;
+    left: var(--space-2);
+    z-index: var(--z-overlay-local);
   }
   .collapsed .collapse-btn {
-    left: 10px;
+    left: var(--space-3);
   }
 
   .collapse-btn:hover {
@@ -268,12 +269,12 @@
   }
 
   .chevron {
-    width: 24px;
-    height: 24px;
+    width: var(--icon-size-lg);
+    height: var(--icon-size-lg);
     display: flex;
     align-items: center;
     justify-content: center;
-    transition: transform 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+    transition: transform var(--dur-slow) var(--ease-emphasized);
   }
   .chevron :global(svg) {
     width: 100%;
@@ -286,14 +287,14 @@
     align-items: center;
     justify-content: center;
     transition:
-      opacity 0.2s ease,
-      transform 0.2s ease;
-    opacity: 1;
+      opacity var(--trans-fast),
+      transform var(--trans-fast);
+    opacity: var(--opacity-visible);
     transform: translateX(0);
   }
   .logo-wrapper.hidden {
-    opacity: 0;
-    transform: translateX(-10px);
+    opacity: var(--opacity-hidden);
+    transform: translateX(calc(-1 * var(--space-3)));
     pointer-events: none;
   }
 
@@ -309,30 +310,30 @@
   .logo :global(svg) {
     height: 100%;
     width: auto;
-    fill: currentColor !important;
+    fill: currentColor;
   }
 
   .logo :global(svg path),
   .logo :global(svg rect),
   .logo :global(svg circle),
   .logo :global(svg polygon) {
-    fill: currentColor !important;
+    fill: currentColor;
     stroke: none;
   }
 
   .mobile-close {
     display: none;
     position: absolute;
-    right: 15px;
+    right: var(--space-4);
     color: var(--c-text-primary);
-    z-index: 5;
+    z-index: var(--z-content);
   }
 
   nav {
-    padding: 10px 0;
+    padding: var(--space-3) var(--space-0);
     display: flex;
     flex-direction: column;
-    gap: 4px;
+    gap: var(--space-1);
     flex: 1;
   }
 
@@ -340,24 +341,24 @@
     display: flex;
     align-items: center;
     width: auto;
-    height: 48px;
+    height: var(--control-h-xl);
     color: var(--c-text-muted);
-    font-size: 15px;
-    font-weight: 600;
+    font-size: var(--text-lg);
+    font-weight: var(--weight-semibold);
     background: transparent;
     border: none;
     cursor: pointer;
     white-space: nowrap;
     overflow: hidden;
 
-    border-radius: 12px;
-    margin: 2px 12px;
+    border-radius: var(--radius-lg);
+    margin: var(--space-0_5) var(--space-3);
 
-    padding: 0 16px;
+    padding: var(--space-0) var(--space-4);
 
     transition:
-      background 0.2s,
-      color 0.2s;
+      background var(--dur-fast),
+      color var(--dur-fast);
   }
   .nav-item:hover {
     background: var(--c-surface-hover);
@@ -369,36 +370,36 @@
   }
 
   .icon {
-    margin-right: 16px;
+    margin-right: var(--space-4);
     display: flex;
     flex-shrink: 0;
     justify-content: center;
     align-items: center;
-    width: 24px;
-    height: 24px;
+    width: var(--icon-size-lg);
+    height: var(--icon-size-lg);
   }
   .icon :global(svg) {
-    width: 24px;
-    height: 24px;
+    width: var(--icon-size-lg);
+    height: var(--icon-size-lg);
   }
 
   .label-text {
-    opacity: 1;
-    transition: opacity 0.2s ease;
+    opacity: var(--opacity-visible);
+    transition: opacity var(--trans-fast);
   }
   .label-text.hidden {
-    opacity: 0;
+    opacity: var(--opacity-hidden);
   }
 
   .sep {
-    height: 1px;
+    height: var(--border-width-thin);
     background: var(--c-border);
-    margin: 10px 28px;
+    margin: var(--space-3) var(--space-28px);
     flex-shrink: 0;
-    opacity: 0.5;
+    opacity: var(--opacity-faint);
   }
   .spin {
-    animation: rotate 2s linear infinite;
+    animation: rotate 2s var(--ease-linear) infinite;
   }
   @keyframes rotate {
     from {
@@ -410,27 +411,26 @@
   }
 
   .footer {
-    padding: 20px 0;
+    padding: var(--space-5) var(--space-0);
     text-align: center;
     margin-top: auto;
   }
   .footer-text {
-    font-size: 10px;
+    font-size: var(--text-xs);
     color: var(--c-text-muted);
-    opacity: 0.5;
-    transition: opacity 0.2s;
+    transition: opacity var(--dur-fast);
     white-space: nowrap;
   }
   .footer-text.hidden {
-    opacity: 0;
+    opacity: var(--opacity-hidden);
   }
 
   .custom-scrollbar::-webkit-scrollbar {
-    width: 4px;
+    width: var(--space-1);
   }
   .custom-scrollbar::-webkit-scrollbar-thumb {
     background: var(--c-border);
-    border-radius: 2px;
+    border-radius: var(--radius-xs);
   }
   .custom-scrollbar::-webkit-scrollbar-track {
     background: transparent;
@@ -439,12 +439,12 @@
   @media (max-width: 768px) and (orientation: portrait) {
     .side-menu {
       position: fixed;
-      left: 0;
-      top: 0;
+      left: var(--space-0);
+      top: var(--space-0);
       height: 100dvh;
-      width: 280px !important;
+      width: var(--dock-w) !important;
       transform: translateX(-100%);
-      transition: transform 0.3s ease;
+      transition: transform var(--dur-base) var(--ease-default);
     }
     .side-menu.mobile-open {
       transform: translateX(0);
@@ -454,7 +454,7 @@
     }
     .backdrop {
       position: fixed;
-      inset: 0;
+      inset: var(--space-0);
       background: var(--c-overlay-backdrop);
       z-index: var(--z-sidebar);
       backdrop-filter: blur(4px);
@@ -464,14 +464,14 @@
       display: none;
     }
     .logo-wrapper.hidden {
-      opacity: 1 !important;
+      opacity: var(--opacity-visible) !important;
       transform: none !important;
     }
     .label-text.hidden {
-      opacity: 1 !important;
+      opacity: var(--opacity-visible) !important;
     }
     .footer-text.hidden {
-      opacity: 0.5 !important;
+      opacity: var(--opacity-faint) !important;
     }
   }
 
@@ -480,17 +480,17 @@
       width: 200px;
     }
     .side-menu.collapsed {
-      width: 80px;
+      width: var(--sidebar-w-collapsed);
     }
     .nav-item {
-      padding: 0 12px;
-      padding-left: 16px;
+      padding: var(--space-0) var(--space-3);
+      padding-left: var(--space-4);
     }
     .header {
-      padding: 0 10px;
+      padding: var(--space-0) var(--space-3);
     }
     .collapse-btn {
-      left: 8px;
+      left: var(--space-2);
     }
   }
 </style>

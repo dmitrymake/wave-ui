@@ -1,7 +1,8 @@
 <!-- SPDX-License-Identifier: MIT -->
 <!-- Copyright (c) 2025 dmitrymake -->
 <script lang="ts">
-  import { fly } from "svelte/transition";
+  import { fade } from "svelte/transition";
+  import { sendArt, receiveArt, fadeVar, hold } from "../lib/transitions";
   import { seek, nav, togglePlay } from "../lib/playerActions";
   import { ICONS } from "../lib/icons";
   import {
@@ -14,6 +15,7 @@
   import { formatTime, isRadioStream, getQualityLabel } from "../lib/playerHelpers";
   import { createSeekController } from "../lib/seekDrag.svelte";
   import ImageLoader from "./ImageLoader.svelte";
+  import Marquee from "./Marquee.svelte";
   import VolumeSlider from "./VolumeSlider.svelte";
   import PlayModeButton from "./PlayModeButton.svelte";
   import LikeButton from "./LikeButton.svelte";
@@ -74,17 +76,21 @@
   let isSmooth = $derived(isPlaying && !isDraggingBar && !isRadio);
   let progressPct = $derived(seekCtl.fraction * 100);
   let qualityLabel = $derived(getQualityLabel($status));
-  let artworkRadius = $derived(isDocked ? "8px" : "var(--radius-xl)");
+  let artworkRadius = $derived(isDocked ? "var(--radius-md)" : "var(--radius-xl)");
 </script>
 
 <div
   class="full-player"
   class:is-docked={isDocked}
-  transition:fly={{ y: isDocked ? 0 : 800, duration: 300, opacity: 1 }}
-  style={!isDocked
-    ? `transform: translateY(${currentY}px); transition: ${isDraggingPlayer ? "none" : "transform 0.3s cubic-bezier(0.2, 0.8, 0.2, 1)"}`
-    : ""}
+  transition:hold|global={{ duration: isDocked ? 0 : 440 }}
 >
+  <div
+    class="full-player-sheet"
+    class:is-dragging={isDraggingPlayer}
+    style={!isDocked
+      ? `transform: translateY(${currentY}px); transition: ${isDraggingPlayer ? "none" : "transform var(--dur-base) var(--ease-emphasized)"}`
+      : ""}
+  >
   {#if !isDocked}
     <div
       class="drag-zone"
@@ -100,33 +106,51 @@
     </div>
   {/if}
 
-  <div class="bg-container">
+  <div class="bg-container" transition:fade|global={{ duration: 320 }}>
     <div class="bg-gradient-fallback"></div>
     <img class="bg-img" src={artSrc} alt="" loading="eager" />
     <div class="bg-overlay"></div>
   </div>
 
+  {#snippet cover()}
+    <ImageLoader src={artSrc} alt="Cover" radius={artworkRadius}>
+      {#snippet fallback()}
+        <div class="icon-fallback">
+          {@html isRadio ? ICONS.RADIO : ICONS.ALBUMS}
+        </div>
+      {/snippet}
+    </ImageLoader>
+  {/snippet}
+
   <div class="player-body">
-    <div class="art-container">
-      <div class="artwork" style="transform: scale({1 - currentY / 3000})">
-        <ImageLoader src={artSrc} alt="Cover" radius={artworkRadius}>
-          {#snippet fallback()}
-            <div class="icon-fallback">
-              {@html isRadio ? ICONS.RADIO : ICONS.ALBUMS}
-            </div>
-          {/snippet}
-        </ImageLoader>
-      </div>
+    <div
+      class="art-container"
+      style={!isDocked ? `transform: scale(${1 - currentY / 3000})` : ""}
+    >
+      {#if isDocked}
+        <div class="artwork">{@render cover()}</div>
+      {:else}
+        <!-- Hero: flies + scales between this and the mini-player thumbnail. -->
+        <div
+          class="artwork"
+          in:receiveArt|global={{ key: "np-art" }}
+          out:sendArt|global={{ key: "np-art" }}
+        >
+          {@render cover()}
+        </div>
+      {/if}
     </div>
 
-    <div class="controls-area" style="opacity: {1 - currentY / 400}">
+    <div class="controls-area" style="--drag-op: {1 - currentY / 400}" transition:fadeVar|global={{ duration: 300 }}>
       <div class="meta">
-        <h1 class="title text-ellipsis">
-          {$currentSong.title || "Not Playing"}
+        <h1 class="title">
+          <Marquee text={$currentSong.title || "Not Playing"} />
         </h1>
         <div class="artist-row">
-          <h2 class="artist text-ellipsis">
-            {$currentSong.stationName || $currentSong.artist || "Moode Audio"}
+          <h2 class="artist">
+            <Marquee
+              text={$currentSong.stationName || $currentSong.artist || "Moode Audio"}
+            />
           </h2>
           {#if qualityLabel}
             <span class="meta-tag quality">{qualityLabel}</span>
@@ -155,10 +179,12 @@
           <div class="common-track">
             <div
               class="common-fill"
-              style="width: {progressPct}%; transition: {isSmooth ? 'width 0.3s linear' : 'none'}"
-            >
-              <div class="common-knob"></div>
-            </div>
+              style="transform: scaleX({progressPct / 100}); transition: {isSmooth ? 'transform var(--dur-base) var(--ease-linear)' : 'none'}"
+            ></div>
+            <div
+              class="common-knob"
+              style="left: {progressPct}%; transition: {isSmooth ? 'left var(--dur-base) var(--ease-linear)' : 'none'}"
+            ></div>
           </div>
         </div>
         <div class="time-row">
@@ -192,14 +218,18 @@
       <VolumeSlider />
     </div>
   </div>
+  </div>
 </div>
 
 <style>
   .full-player {
     position: fixed;
-    inset: 0;
+    inset: var(--space-0);
     z-index: var(--z-modal);
-    background: var(--c-bg-app);
+    /* Transparent: during open/close the (fading) blurred backdrop lives in
+       .bg-container, so the scaled-down app behind shows through for depth, while the
+       artwork flies in as an opaque hero (see crossfade in lib/transitions). */
+    background: transparent;
     display: flex;
     flex-direction: column;
     touch-action: none;
@@ -207,76 +237,95 @@
   .full-player.is-docked {
     position: relative;
     inset: auto;
-    z-index: 1;
+    z-index: var(--z-base);
     width: 100%;
     height: 100%;
     background: transparent;
-    border-left: 1px solid var(--c-border);
+    border-left: var(--border-default);
     overflow: hidden;
+    will-change: auto;
+  }
+
+  /* Inner sheet — owns ONLY the drag transform (decoupled from the open/close
+     slide on .full-player so the two never clobber each other's transform). */
+  .full-player-sheet {
+    position: relative;
+    width: 100%;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    backface-visibility: hidden;
+  }
+  /* hint only while actively dragging (class toggles in markup); the open/close
+     slide auto-promotes during its own transform — no standing layer at idle. */
+  .full-player-sheet.is-dragging {
+    will-change: transform;
   }
 
   .bg-container {
     position: absolute;
-    top: 0; left: 0; width: 100%; height: 100%;
-    z-index: 1; overflow: hidden; pointer-events: none;
+    top: var(--space-0); left: var(--space-0); width: 100%; height: 100%;
+    z-index: var(--z-base); overflow: hidden; pointer-events: none;
   }
   .bg-gradient-fallback {
-    position: absolute; inset: 0;
-    background: linear-gradient(135deg, #121212 0%, #000000 100%);
-    z-index: 1;
+    position: absolute; inset: var(--space-0);
+    background: linear-gradient(135deg, var(--c-bg-main) 0%, var(--c-bg-app) 100%);
+    z-index: var(--z-base);
   }
   .bg-img {
-    position: absolute; top: 0; left: 0; width: 100%; height: 100%;
-    object-fit: cover; z-index: 2;
+    position: absolute; top: var(--space-0); left: var(--space-0); width: 100%; height: 100%;
+    object-fit: cover; z-index: var(--z-above);
     transform: scale(1.6);
-    filter: blur(50px) brightness(1.1) saturate(3) contrast(1.2);
-    opacity: 0.8; transition: opacity 0.5s ease-in;
+    /* radius/saturate trimmed hard: invisible under the 50-90% black overlay, far cheaper
+       gaussian on the Pi GPU (per-track / standing-docked rasterization cost). */
+    filter: blur(14px) brightness(1.1) saturate(1.5);
+    opacity: var(--opacity-strong); transition: opacity 0.5s ease-in;
   }
   .bg-overlay {
-    position: absolute; top: 0; left: 0; width: 100%; height: 100%;
-    z-index: 3;
-    background: linear-gradient(to bottom, var(--c-black-50) 0%, rgba(0, 0, 0, 0.95) 100%);
+    position: absolute; top: var(--space-0); left: var(--space-0); width: 100%; height: 100%;
+    z-index: var(--z-content);
+    background: linear-gradient(to bottom, var(--c-black-50) 0%, var(--c-black-90) 100%);
   }
-  .is-docked .bg-img { filter: blur(35px) brightness(1.2) saturate(3.5); opacity: 1; }
+  .is-docked .bg-img { filter: blur(12px) brightness(1.2) saturate(1.6); opacity: var(--opacity-visible); }
   .is-docked .bg-overlay { background: var(--c-black-70); }
 
   .player-body {
     flex: 1; display: flex; flex-direction: column;
-    padding: 0 24px 40px; max-width: 500px; width: 100%;
-    margin: 0 auto; box-sizing: border-box;
-    justify-content: center; gap: 30px;
+    padding: var(--space-0) var(--space-6) var(--space-10); max-width: 500px; width: 100%;
+    margin: var(--space-0) auto; box-sizing: border-box;
+    justify-content: center; gap: var(--space-8);
     position: relative; z-index: 4;
   }
   .is-docked .player-body {
-    padding: 10px 16px 16px; gap: 12px;
+    padding: var(--space-3) var(--space-4) var(--space-4); gap: var(--space-3);
     justify-content: flex-end; max-width: 100%;
   }
 
   .drag-zone {
-    height: 40vh; width: 100%; position: absolute; top: 0; z-index: 10;
+    height: 40vh; width: 100%; position: absolute; top: var(--space-0); z-index: var(--z-overlay-local);
     display: flex; justify-content: center; align-items: flex-start;
-    padding-top: 15px; cursor: pointer;
+    padding-top: var(--space-4); cursor: pointer;
   }
-  .drag-handle-icon { color: var(--c-white-30); transition: color 0.2s; width: 32px; height: 32px; }
+  .drag-handle-icon { color: var(--c-white-30); transition: color var(--dur-fast); width: 32px; height: 32px; }
   .drag-zone:active .drag-handle-icon { color: var(--c-white-60); }
   .drag-handle-icon :global(svg) { width: 100%; height: 100%; stroke-width: 3; }
 
   .art-container {
     display: flex; justify-content: center; align-items: center;
-    width: 100%; flex-grow: 0; margin-bottom: 10px; flex-shrink: 1; min-height: 0;
+    width: 100%; flex-grow: 0; flex-shrink: 1; min-height: 0;
   }
   .is-docked .art-container {
-    flex: 1 1 auto; margin-bottom: 0; height: 100%; max-height: 50vh; overflow: hidden;
+    flex: 1 1 auto; margin-bottom: var(--space-0); height: 100%; max-height: 50vh; overflow: hidden;
   }
   .artwork {
     width: 100%; max-width: 400px; aspect-ratio: 1;
     background: var(--c-bg-placeholder); border-radius: var(--radius-xl);
-    box-shadow: var(--c-shadow-popover); overflow: hidden; will-change: transform;
+    box-shadow: var(--shadow-lg); overflow: hidden;
     display: flex; align-items: center; justify-content: center;
   }
   .is-docked .artwork {
     height: 100%; width: auto; max-width: 100%;
-    border-radius: 8px; box-shadow: none; aspect-ratio: 1/1;
+    border-radius: var(--radius-md); box-shadow: none; aspect-ratio: 1/1;
   }
   .artwork :global(img) { width: 100%; height: 100%; object-fit: cover; }
 
@@ -284,68 +333,74 @@
     width: 100%; height: 100%; display: flex; align-items: center; justify-content: center;
     color: var(--c-icon-faint);
   }
-  .icon-fallback :global(svg) { width: 100px; height: 100px; opacity: 0.5; }
+  .icon-fallback :global(svg) { width: 100px; height: 100px; opacity: var(--opacity-faint); }
 
-  .controls-area { display: flex; flex-direction: column; gap: 20px; flex-shrink: 0; width: 100%; }
-  .is-docked .controls-area { gap: 8px; flex: 0 0 auto; }
+  .controls-area {
+    display: flex; flex-direction: column; gap: var(--space-5); flex-shrink: 0; width: 100%;
+    /* drag feedback (--drag-op) * open/close fade (--t-op), composed so neither clobbers the other */
+    opacity: calc(var(--drag-op, 1) * var(--t-op, 1));
+  }
+  .is-docked .controls-area { gap: var(--space-2); flex: 0 0 auto; }
 
-  .meta { text-align: left; margin-bottom: 10px; }
-  .is-docked .meta { text-align: center; margin-bottom: 4px; }
+  .meta { text-align: left; margin-bottom: var(--space-2); }
+  .is-docked .meta { text-align: center; margin-bottom: var(--space-1); }
 
-  .title { font-size: 24px; font-weight: 700; margin: 0 0 4px; color: var(--c-text-primary); }
-  .is-docked .title { font-size: 16px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .title { font-size: var(--text-3xl); font-weight: var(--weight-bold); margin: var(--space-0) var(--space-0) var(--space-1); color: var(--c-text-primary); }
+  .is-docked .title { font-size: var(--text-lg); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
-  .artist-row { display: flex; align-items: center; gap: 10px; width: 100%; }
+  .artist-row { display: flex; align-items: center; gap: var(--space-2); width: 100%; }
   .is-docked .artist-row { justify-content: center; }
-  .artist { font-size: 18px; color: var(--c-text-secondary); margin: 0; flex-shrink: 1; }
-  .is-docked .artist { font-size: 13px; }
+  .artist { font-size: var(--text-lg); color: var(--c-text-secondary); margin: var(--space-0); flex: 1 1 auto; min-width: 0; }
+  .is-docked .artist { font-size: var(--text-base); }
 
   .bar-hit-area {
-    height: 40px; display: flex; align-items: center; cursor: pointer;
+    height: var(--space-10); display: flex; align-items: center; cursor: pointer;
     touch-action: none; position: relative; width: 100%;
   }
-  .is-docked-bar { height: 24px; }
+  .is-docked-bar { height: var(--space-6); }
 
   .common-track {
-    width: 100%; height: 4px; background: var(--c-white-20); border-radius: 2px; position: relative;
+    width: 100%; height: var(--space-1); background: var(--c-white-20); border-radius: var(--radius-xs); position: relative;
   }
   .common-fill {
-    height: 100%; background: var(--c-text-primary); border-radius: 2px;
-    position: relative; left: 0; top: 0; pointer-events: none;
+    position: absolute; left: var(--space-0); top: var(--space-0);
+    width: 100%; height: 100%; transform-origin: left center;
+    background: var(--c-text-primary); border-radius: var(--radius-xs); pointer-events: none;
   }
   .common-knob {
-    position: absolute; top: 50%; margin-top: -7px; right: -7px;
-    width: 14px; height: 14px; background: #fff; border-radius: 50%;
-    box-shadow: 0 2px 4px var(--c-black-50); pointer-events: none;
+    position: absolute; top: 50%; left: var(--space-0);
+    transform: translate(-50%, -50%);
+    width: 14px; height: 14px; background: var(--c-text-primary); border-radius: var(--radius-circle);
+    box-shadow: var(--shadow-sm-strong); pointer-events: none;
   }
 
   .time-row {
-    display: flex; justify-content: space-between; margin-top: -12px;
-    font-size: 12px; color: var(--c-white-90); font-weight: 600; font-variant-numeric: tabular-nums;
+    display: flex; justify-content: space-between; margin-top: calc(-1 * var(--space-3));
+    font-size: var(--text-sm); color: var(--c-white-90); font-weight: var(--weight-semibold); font-variant-numeric: tabular-nums;
   }
-  .is-docked .time-row { margin-top: 0px; font-size: 10px; }
+  .is-docked .time-row { margin-top: var(--space-0); font-size: var(--text-2xs); }
 
   .buttons-row {
-    display: flex; justify-content: space-between; align-items: center; padding: 0 8px;
+    display: flex; justify-content: space-between; align-items: center; padding: var(--space-0) var(--space-2);
   }
-  .is-docked .buttons-row { gap: 0; }
+  .is-docked .buttons-row { gap: var(--space-0); }
 
-  .side-btn { padding: 10px; color: var(--c-text-secondary); transition: color 0.2s; }
-  .side-btn:active { opacity: 0.7; }
-  .side-btn :global(svg) { width: 24px; height: 24px; }
-  .is-docked .side-btn { padding: 6px; }
-  .is-docked .side-btn :global(svg) { width: 20px; height: 20px; }
+  .side-btn { padding: var(--icon-btn-pad-lg); color: var(--c-text-secondary); transition: color var(--dur-fast); }
+  .side-btn:active { opacity: var(--opacity-dim); }
+  .side-btn :global(svg) { width: var(--icon-size-lg); height: var(--icon-size-lg); }
+  .is-docked .side-btn { padding: var(--icon-btn-pad-sm); }
+  .is-docked .side-btn :global(svg) { width: var(--icon-size-md); height: var(--icon-size-md); }
 
   .play-btn-large {
-    width: 64px; height: 64px; border-radius: 50%;
+    width: var(--circle-play-lg); height: var(--circle-play-lg); border-radius: var(--radius-circle);
     background: var(--c-text-primary); color: var(--c-text-inverse);
-    box-shadow: var(--c-shadow-card); transition: transform 0.1s;
+    box-shadow: var(--shadow-sm); transition: transform var(--dur-instant);
     border: none; display: flex; align-items: center; justify-content: center; flex-shrink: 0;
   }
   .play-btn-large:active { transform: scale(0.95); }
-  .play-btn-large :global(svg) { width: 28px; height: 28px; fill: currentColor; }
-  .is-docked .play-btn-large { width: 44px; height: 44px; }
-  .is-docked .play-btn-large :global(svg) { width: 20px; height: 20px; }
+  .play-btn-large :global(svg) { width: var(--icon-size-xl); height: var(--icon-size-xl); fill: currentColor; }
+  .is-docked .play-btn-large { width: var(--circle-play-sm); height: var(--circle-play-sm); }
+  .is-docked .play-btn-large :global(svg) { width: var(--icon-size-md); height: var(--icon-size-md); }
 
-  .is-docked :global(.volume-row) { gap: 8px; }
+  .is-docked :global(.volume-row) { gap: var(--space-2); }
 </style>

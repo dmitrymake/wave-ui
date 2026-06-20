@@ -69,21 +69,21 @@
   }
   .skel {
     position: absolute;
-    inset: 0;
-    z-index: 2;
+    inset: var(--space-0);
+    z-index: var(--z-above);
   }
   img {
     width: 100%;
     height: 100%;
     object-fit: cover;
     display: block;
-    opacity: 0;
-    transition: opacity 0.3s ease-in;
+    opacity: var(--opacity-hidden);
+    transition: opacity var(--dur-base) ease-in;
     position: absolute;
-    inset: 0;
-    z-index: 1;
+    inset: var(--space-0);
+    z-index: var(--z-base);
   }
   img.vis {
-    opacity: 1;
+    opacity: var(--opacity-visible);
   }
 </style>

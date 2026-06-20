@@ -3,10 +3,9 @@
 // Radio/Station helpers now live in ./radio; re-exported here so existing import
 // paths (and their test mocks of "./utils") keep resolving unchanged.
 export { getStationImageUrl, findStationByStream, findStationByName } from "./radio";
-
-export function isRemoteUrl(url: string | null | undefined): boolean {
-  return !!url && (url.startsWith("http") || url.includes("://"));
-}
+// Generic string helpers live in ./strings (a leaf with no intra-lib imports) to
+// break the utils↔radio cycle; re-exported here so existing "./utils" paths resolve.
+export { isRemoteUrl, normalizeForMatch } from "./strings";
 
 export function generateUid(): string {
   return Date.now().toString(36) + Math.random().toString(36).slice(2);
@@ -30,8 +29,4 @@ export function formatTotalDuration(totalSeconds: number): string {
   const h = Math.floor(totalSeconds / 3600);
   const m = Math.floor((totalSeconds % 3600) / 60);
   return h > 0 ? `${h} hr ${m} min` : `${m} min`;
-}
-
-export function normalizeForMatch(str: string | null | undefined): string {
-  return (str || "").toString().toLowerCase().replace(/[^a-z0-9]/g, "");
 }

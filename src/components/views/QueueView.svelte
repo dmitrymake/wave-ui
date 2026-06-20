@@ -23,6 +23,7 @@
 
   import TrackRow from "../TrackRow.svelte";
   import BaseList from "./BaseList.svelte";
+  import Button from "../ui/Button.svelte";
 
   let isEditMode = $state(false);
   let headerTotalDuration = $state("");
@@ -164,38 +165,41 @@
 
             <div class="header-actions">
               {#if daemonState.active}
-                <button class="btn-primary" onclick={() => daemon?.stop()}>
+                <Button variant="primary" onclick={() => daemon?.stop()}>
                   Stop Stream
-                </button>
+                </Button>
               {:else}
-                <button
-                  class="btn-secondary"
+                <Button
+                  variant="secondary"
                   onclick={handleClearQueue}
                   title="Clear Queue"
                   disabled={$queue.length === 0}
                 >
                   Clear
-                </button>
+                </Button>
               {/if}
 
-              <button
-                class="btn-action"
+              <Button
+                variant="ghost"
+                icon
+                ariaLabel="Save Queue"
                 onclick={handleSaveQueue}
                 title="Save Queue"
                 disabled={$queue.length === 0}
               >
                 {@html ICONS.SAVE}
-              </button>
+              </Button>
 
-              <button
-                class="btn-action"
-                class:active={isEditMode}
+              <Button
+                variant={isEditMode ? "primary" : "ghost"}
+                icon
+                ariaLabel={isEditMode ? "Finish Editing" : "Edit Queue"}
                 onclick={toggleEditMode}
                 title={isEditMode ? "Finish Editing" : "Edit Queue"}
                 disabled={$queue.length === 0}
               >
                 {@html isEditMode ? ICONS.ACCEPT : ICONS.EDIT}
-              </button>
+              </Button>
             </div>
           </div>
         </div>
@@ -244,13 +248,13 @@
 
   @keyframes pulse-text {
     0% {
-      opacity: 1;
+      opacity: var(--opacity-visible);
     }
     50% {
-      opacity: 0.8;
+      opacity: var(--opacity-strong);
     }
     100% {
-      opacity: 1;
+      opacity: var(--opacity-visible);
     }
   }
 </style>

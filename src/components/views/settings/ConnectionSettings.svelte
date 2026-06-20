@@ -5,6 +5,8 @@
   import { CONFIG } from "../../../config";
   import { showToast } from "../../../lib/store";
   import { MSG } from "../../../lib/messages";
+  import Button from "../../ui/Button.svelte";
+  import Input from "../../ui/Input.svelte";
 
   let ipAddress = $state(CONFIG.MOODE_IP);
   let reloadTimer: ReturnType<typeof setTimeout> | undefined;
@@ -37,17 +39,16 @@
   </div>
   <div class="card">
     <div class="row">
-      <label for="ip">Moode Device IP</label>
+      <span class="row-label">Moode Device IP</span>
       <div class="input-group">
-        <input
-          id="ip"
+        <Input
           type="text"
           bind:value={ipAddress}
           placeholder="192.168.x.x"
+          size="sm"
+          ariaLabel="Moode Device IP"
         />
-        <button class="btn-primary small" onclick={saveConnection}
-          >Save</button
-        >
+        <Button variant="primary" size="sm" onclick={saveConnection}>Save</Button>
       </div>
     </div>
     <p class="hint">Current: {CONFIG.MOODE_IP}</p>
@@ -56,68 +57,51 @@
 
 <style>
   .section {
-    margin-bottom: 32px;
+    margin-bottom: var(--space-8);
   }
 
   .section-header {
     display: flex;
     align-items: center;
-    gap: 10px;
-    font-size: 18px;
-    font-weight: 700;
+    gap: var(--space-2);
+    font-size: var(--text-xl);
+    font-weight: var(--weight-bold);
     color: var(--c-text-primary);
-    margin-bottom: 12px;
-    padding-left: 4px;
+    margin-bottom: var(--space-3);
+    padding-left: var(--space-1);
   }
 
   .card {
     background: var(--c-bg-card);
-    border: 1px solid var(--c-border);
-    border-radius: 12px;
-    padding: 16px;
+    border: var(--border-default);
+    border-radius: var(--radius-lg);
+    padding: var(--space-4);
     display: flex;
     flex-direction: column;
-    gap: 10px;
+    gap: var(--space-3);
   }
 
   .row {
     display: flex;
     align-items: center;
-    gap: 12px;
+    gap: var(--space-3);
   }
 
-  label {
-    font-size: 14px;
+  .row-label {
+    font-size: var(--text-base);
     color: var(--c-text-secondary);
-    font-weight: 600;
+    font-weight: var(--weight-semibold);
   }
 
   .input-group {
     display: flex;
-    gap: 8px;
+    gap: var(--space-2);
     flex: 1;
-  }
-
-  input[type="text"] {
-    background: var(--c-surface-input);
-    border: 1px solid var(--c-border);
-    color: var(--c-text-primary);
-    padding: 8px 12px;
-    border-radius: 8px;
-    font-size: 14px;
-    outline: none;
-    flex: 1;
-  }
-
-  .btn-primary.small {
-    padding: 0 16px;
-    font-size: 13px;
-    height: 36px;
   }
 
   .hint {
-    font-size: 12px;
+    font-size: var(--text-sm);
     color: var(--c-text-muted);
-    margin: 4px 0 0;
+    margin: var(--space-1) 0 0;
   }
 </style>

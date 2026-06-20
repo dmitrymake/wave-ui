@@ -9,6 +9,8 @@ vi.mock("../constants", () => ({
     get SYNC() { return "/wave-api.php"; },
     STATIONS: () => "/wave-api.php?action=stations",
   },
+  // fetchWithTimeout (via api.ts and yandexService.ts) reads these.
+  HTTP_CONFIG: { DEFAULT_TIMEOUT: 12000, DAEMON_POLL_TIMEOUT: 4000 },
 }));
 
 vi.mock("../store", () => {

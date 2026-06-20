@@ -1,4 +1,9 @@
 <?php
+// SECURITY (trusted LAN): these endpoints trust moOde's local network. Admin-style
+// actions (e.g. save_token) are NOT authenticated. Deployment recommendation: bind
+// nginx to localhost / the trusted LAN only — that hardening lives in the nginx/deploy
+// config, not in this PHP.
+
 ini_set('display_errors', 0);
 set_time_limit(0);
 ignore_user_abort(true);
@@ -657,35 +662,10 @@ try {
             break;
 
         case 'debug_dump':
-            $state = getState();
-            $dumpCache = file_exists(META_CACHE_FILE) ? json_decode(file_get_contents(META_CACHE_FILE), true) : [];
-            $md5Keys = $idKeys = 0;
-            $uniqueIds = [];
-            foreach ($dumpCache as $k => $v) {
-                if (strlen($k) === 32 && ctype_xdigit($k)) $md5Keys++;
-                else $idKeys++;
-                if (isset($v['id'])) $uniqueIds[(string)$v['id']] = true;
-            }
-            $trackFiles = glob('/dev/shm/yandex_music/tracks/*.*') ?: [];
-
-            $uaFile = '/var/local/www/yandex_client_ua.dat';
-            $clientHeader = (file_exists($uaFile) && trim(file_get_contents($uaFile)))
-                ? trim(file_get_contents($uaFile))
-                : 'YandexMusicAndroid/24023621';
-
-            echo json_encode([
-                'state' => $state,
-                'meta_cache' => [
-                    'bytes' => file_exists(META_CACHE_FILE) ? filesize(META_CACHE_FILE) : 0,
-                    'entries' => count($dumpCache),
-                    'md5_keys' => $md5Keys,
-                    'id_keys' => $idKeys,
-                    'unique_tracks' => count($uniqueIds),
-                ],
-                'tracks_cached' => count($trackFiles),
-                'client_header' => $clientHeader,
-                'token_set' => !!getToken(),
-            ], JSON_UNESCAPED_UNICODE);
+            // Disabled: this diagnostic exposed internal state (token presence, cache
+            // stats, client UA) unauthenticated. Return 403 so callers fail gracefully.
+            http_response_code(403);
+            echo json_encode(['error' => 'debug_dump disabled']);
             break;
 
         default:

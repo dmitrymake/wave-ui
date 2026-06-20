@@ -168,8 +168,8 @@
                 style="opacity: 0.3"
               />
               <Skeleton
-                width="40px"
-                height="40px"
+                width="var(--thumb-sm)"
+                height="var(--thumb-sm)"
                 radius="4px"
                 style="margin-left: 12px;"
               />
@@ -236,15 +236,15 @@
 
 
   .skeletons-wrapper {
-    padding: 0 16px;
+    padding: var(--space-0) var(--space-4);
   }
 
   .skeleton-row {
     display: flex;
     align-items: center;
-    height: 64px;
-    padding: 0 16px;
-    border-bottom: 1px solid var(--c-border-dim);
+    height: var(--row-h);
+    padding: var(--space-0) var(--space-4);
+    border-bottom: var(--border-default-dim);
   }
 
   .sk-left {
@@ -266,8 +266,7 @@
   }
 
   .row-wrapper {
-    transition: transform 0.2s cubic-bezier(0.2, 0, 0, 1);
-    will-change: transform;
+    transition: transform var(--dur-fast) var(--ease-sharp);
   }
 
   .row-wrapper.no-transition {
@@ -276,7 +275,7 @@
 
   @media (max-width: 768px) {
     .skeletons-wrapper {
-      padding: 0 16px;
+      padding: var(--space-0) var(--space-4);
     }
   }
 </style>

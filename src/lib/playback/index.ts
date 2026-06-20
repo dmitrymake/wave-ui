@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2025 dmitrymake
 import { get } from "svelte/store";
-import { mpdClient } from "./client";
+import { mpdClient } from "../mpd/client";
 import { PlayerActions, startStatusPoller } from "./player";
 import { LibraryActions } from "./library";
 import { currentSong, stations, selectedStationName } from "../store";

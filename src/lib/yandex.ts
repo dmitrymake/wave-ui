@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2025 dmitrymake
 import { CONFIG } from "../config";
+import { fetchWithTimeout } from "./http";
 import type {
   YandexTrack,
   YandexPlaylist,
@@ -103,7 +104,7 @@ export const YandexApi: YandexApiType = {
       options.headers = { "Content-Type": "application/json" };
     }
 
-    const res = await fetch(url.toString(), options);
+    const res = await fetchWithTimeout(url.toString(), options);
     if (!res.ok) throw new YandexApiError(res.status);
     // res.json() is `any`; the caller's type parameter is the single point where we
     // assert the parsed payload's shape (the daemon's contract is external).

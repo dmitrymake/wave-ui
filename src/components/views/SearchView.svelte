@@ -167,7 +167,7 @@
                     <ImageLoader
                       src={getTrackThumbUrl(album, "md")}
                       alt={album.name}
-                      radius="8px"
+                      radius="var(--radius-md)"
                     >
                       {#snippet fallback()}
                         <div class="icon-fallback">💿</div>
@@ -223,32 +223,32 @@
     background: transparent;
     border: none;
     color: var(--c-text-muted);
-    width: 24px;
+    width: var(--switch-h);
     height: 100%;
     display: flex;
     align-items: center;
     justify-content: center;
     cursor: pointer;
-    padding: 0;
-    margin-right: 4px;
+    padding: var(--space-0);
+    margin-right: var(--space-1);
   }
   .clear-icon-btn :global(svg) {
-    width: 16px;
-    height: 16px;
+    width: var(--icon-size-xs);
+    height: var(--icon-size-xs);
   }
 
   .section-spacing {
-    margin-top: 10px;
+    margin-top: var(--space-3);
   }
 
   .section-mb {
-    margin-bottom: 24px;
+    margin-bottom: var(--space-6);
   }
 
   .empty-text {
     text-align: center;
     color: var(--c-text-secondary);
-    margin-top: 50px;
+    margin-top: var(--space-10);
   }
 
   .placeholder-state {
@@ -261,19 +261,19 @@
   }
 
   .placeholder-icon {
-    font-size: 60px;
-    margin-bottom: 20px;
+    font-size: var(--text-8xl);
+    margin-bottom: var(--space-5);
     color: var(--c-icon-faint);
   }
 
   .spinner {
-    width: 16px;
-    height: 16px;
-    border: 2px solid var(--c-border);
+    width: var(--icon-size-xs);
+    height: var(--icon-size-xs);
+    border: var(--border-width-thick) solid var(--c-border);
     border-top-color: var(--c-accent);
-    border-radius: 50%;
-    animation: spin 0.6s linear infinite;
-    margin-left: 8px;
+    border-radius: var(--radius-circle);
+    animation: spin 0.6s var(--ease-linear) infinite;
+    margin-left: var(--space-2);
     flex-shrink: 0;
   }
 

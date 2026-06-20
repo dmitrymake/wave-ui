@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2025 dmitrymake
-import { PlayerActions } from "./mpd/player";
-import { LibraryActions } from "./mpd/library";
+import { PlayerActions } from "./playback/player";
+import { LibraryActions } from "./playback/library";
 import { toggleLike as toggleLikeForTrack } from "./playerHelpers";
 import { resolveSource, resolveSourceForTrack } from "./sources/trackSource";
 import {
@@ -9,7 +9,9 @@ import {
   navigateTo,
   activePlaylistTracks,
   showModal,
+  showToast,
 } from "./store";
+import { MSG } from "./messages";
 import type { Track, ContextMenuContext } from "./types.js";
 
 export function playNext(track: Track | null): void {
@@ -46,24 +48,30 @@ export function goToArtist(track: Track | null): void {
 
 export async function removeFromPlaylist(context: ContextMenuContext): Promise<void> {
   const { playlistName, index } = context;
-  if (playlistName && index !== null && index !== undefined) {
-    let removed: Track | undefined;
-    activePlaylistTracks.update((tracks: Track[]) => {
-      const copy = [...tracks];
-      removed = copy.splice(index, 1)[0];
-      return copy;
-    });
-    const ok = await LibraryActions.removeFromPlaylist(playlistName, index);
-    if (!ok && removed) {
-      // Restore the optimistically-removed track so the view matches the server.
+  try {
+    if (playlistName && index !== null && index !== undefined) {
+      let removed: Track | undefined;
       activePlaylistTracks.update((tracks: Track[]) => {
         const copy = [...tracks];
-        copy.splice(index, 0, removed as Track);
+        removed = copy.splice(index, 1)[0];
         return copy;
       });
+      const ok = await LibraryActions.removeFromPlaylist(playlistName, index);
+      if (!ok && removed) {
+        // Restore the optimistically-removed track so the view matches the server.
+        activePlaylistTracks.update((tracks: Track[]) => {
+          const copy = [...tracks];
+          copy.splice(index, 0, removed as Track);
+          return copy;
+        });
+      }
     }
+  } catch {
+    // A rejected request would otherwise leave the menu open with no feedback.
+    showToast(MSG.PLAY_FAILED_REMOVE, "error");
+  } finally {
+    closeContextMenu();
   }
-  closeContextMenu();
 }
 
 export function removeFromQueue(context: ContextMenuContext): void {
@@ -119,21 +127,36 @@ export function playlistDelete(context: ContextMenuContext): void {
 }
 
 export async function radioByTrack(track: Track | null): Promise<void> {
-  if (track) {
-    await resolveSource(track.file)?.startRadioByTrack?.(track);
+  try {
+    if (track) {
+      await resolveSource(track.file)?.startRadioByTrack?.(track);
+    }
+  } catch {
+    showToast(MSG.RADIO_ERROR_STARTING, "error");
+  } finally {
+    closeContextMenu();
   }
-  closeContextMenu();
 }
 
 export async function radioByArtist(track: Track | null): Promise<void> {
-  if (track) {
-    await resolveSource(track.file)?.startRadioByArtist?.(track);
+  try {
+    if (track) {
+      await resolveSource(track.file)?.startRadioByArtist?.(track);
+    }
+  } catch {
+    showToast(MSG.RADIO_ERROR_STARTING, "error");
+  } finally {
+    closeContextMenu();
   }
-  closeContextMenu();
 }
 
 export async function addToPlaylist(track: Track | null, playlistName: string): Promise<void> {
   if (!track) return;
-  await LibraryActions.addToPlaylist(track, playlistName);
-  closeContextMenu();
+  try {
+    await LibraryActions.addToPlaylist(track, playlistName);
+  } catch {
+    showToast(MSG.PL_FAILED_ADD, "error");
+  } finally {
+    closeContextMenu();
+  }
 }

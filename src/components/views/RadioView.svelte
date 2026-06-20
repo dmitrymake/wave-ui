@@ -13,6 +13,7 @@
   import { ICONS } from "../../lib/icons";
   import ImageLoader from "../ImageLoader.svelte";
   import Skeleton from "../Skeleton.svelte";
+  import Input from "../ui/Input.svelte";
 
   let searchTerm = $state("");
 
@@ -31,15 +32,17 @@
 
 <div class="view-container scrollable" in:fade={{ duration: 200 }}>
   <div class="content-padded no-bottom-pad">
-    <div class="search-input-container">
-      <span class="search-icon">
-        {@html ICONS.SEARCH}
-      </span>
-      <input
-        type="text"
-        placeholder="Find station..."
+    <div class="search-wrap">
+      <Input
+        search
         bind:value={searchTerm}
-      />
+        placeholder="Find station..."
+        ariaLabel="Find station"
+      >
+        {#snippet icon()}
+          {@html ICONS.SEARCH}
+        {/snippet}
+      </Input>
     </div>
   </div>
 
@@ -49,13 +52,13 @@
         {#each Array(12) as _}
           <div class="music-card">
             <div class="card-img-container">
-              <Skeleton width="100%" height="100%" radius="8px" />
+              <Skeleton width="100%" height="100%" radius="var(--radius-md)" />
             </div>
-            <div style="margin-bottom: 4px;">
-              <Skeleton width="70%" height="15px" radius="4px" />
+            <div style="margin-bottom: var(--space-1);">
+              <Skeleton width="70%" height="15px" radius="var(--radius-sm)" />
             </div>
             <div>
-              <Skeleton width="40%" height="13px" radius="4px" style="opacity: 0.6" />
+              <Skeleton width="40%" height="13px" radius="var(--radius-sm)" style="opacity: var(--opacity-muted)" />
             </div>
           </div>
         {/each}
@@ -78,13 +81,13 @@
             onkeydown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); playStation(station); }}}
           >
             <div class="card-img-container">
-              <ImageLoader src={imgUrl ?? ""} alt={station.name} radius="8px">
+              <ImageLoader src={imgUrl ?? ""} alt={station.name} radius="var(--radius-md)">
                 {#snippet fallback()}
                   <div class="icon-fallback">📻</div>
                 {/snippet}
               </ImageLoader>
 
-              <div class="play-overlay" style={isActive ? "opacity: 1" : ""}>
+              <div class="play-overlay" style={isActive ? "opacity: var(--opacity-visible)" : ""}>
                 {#if isActive}
                   {#if $status.state === "play"}
                     <div class="status-badge playing">PLAYING</div>
@@ -123,70 +126,35 @@
 
 <style>
 
-  .search-input-container {
-    display: flex;
-    align-items: center;
-    background: var(--c-surface-input);
-    border: 1px solid var(--c-border);
-    border-radius: 8px;
-    padding: 8px 12px;
-    margin-bottom: 20px;
-    width: 100%;
-    box-sizing: border-box;
-  }
-
-  .search-icon {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    color: var(--c-text-muted);
-    margin-right: 10px;
-    flex-shrink: 0;
-  }
-  .search-icon :global(svg) {
-    width: 18px;
-    height: 18px;
-  }
-
-  input {
-    flex: 1;
-    background: transparent;
-    border: none;
-    color: var(--c-text-primary);
-    font-size: 15px;
-    outline: none;
-    min-width: 0;
-    padding: 0;
-  }
-  input::placeholder {
-    color: var(--c-text-muted);
+  .search-wrap {
+    margin-bottom: var(--space-5);
   }
 
   .status-badge {
-    font-size: 10px;
-    font-weight: 800;
-    padding: 6px 12px;
-    border-radius: 4px;
+    font-size: var(--text-2xs);
+    font-weight: var(--weight-bold);
+    padding: var(--space-1) var(--space-3);
+    border-radius: var(--radius-sm);
     color: var(--c-text-primary);
-    letter-spacing: 0.5px;
+    letter-spacing: var(--tracking-wide);
     z-index: 5;
   }
 
   .status-badge.playing {
     background: var(--c-accent);
-    box-shadow: 0 0 10px var(--c-shadow-glow-accent);
+    box-shadow: var(--shadow-glow);
   }
 
   .status-badge.paused {
     background: var(--c-bg-toast);
-    border: 1px solid var(--c-border);
+    border: var(--border-default);
     color: var(--c-text-secondary);
   }
 
   .empty-text {
     grid-column: 1/-1;
     text-align: center;
-    padding: 40px;
-    opacity: 0.5;
+    padding: var(--space-10);
+    opacity: var(--opacity-faint);
   }
 </style>

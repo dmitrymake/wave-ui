@@ -3,7 +3,9 @@
 <script lang="ts">
   import { ICONS } from "../../lib/icons";
   import TrackRow from "../TrackRow.svelte";
+  import IconButton from "../ui/IconButton.svelte";
   import { getPlaylistCoverStyle } from "../../lib/playlistColor";
+  import { FAVORITES_PLAYLIST } from "../../lib/constants";
   import type { Playlist, Track } from "../../lib/types";
 
   let { matchedPlaylists = [], searchResultsGrouped = [], isSearching = false, searchTerm = "", currentTheme = "", playingFile = "", isPlaying = false, onOpenPlaylist, onPlayFoundTracks, onQueueFoundTracks, onPlayTrack }: {
@@ -34,7 +36,7 @@
     onwheel={handleHorizontalScroll}
   >
     {#each matchedPlaylists as playlist (playlist.name)}
-      {@const isFav = playlist.name === "Favorites"}
+      {@const isFav = playlist.name === FAVORITES_PLAYLIST}
       <div class="music-card" role="button" tabindex="0" onclick={() => onOpenPlaylist?.(playlist)} onkeydown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onOpenPlaylist?.(playlist); }}}>
         <div
           class="card-img-container"
@@ -70,20 +72,22 @@
           <div class="group-count">{group.tracks.length}</div>
 
           <div class="group-actions">
-            <button
-              class="btn-icon small"
+            <IconButton
+              ariaLabel="Play matches"
               title="Play matches"
+              size="sm"
               onclick={(e) => { e.stopPropagation(); onPlayFoundTracks?.({ tracks: group.tracks, playlistName: group.playlist.name }); }}
             >
               {@html ICONS.PLAY}
-            </button>
-            <button
-              class="btn-icon small"
+            </IconButton>
+            <IconButton
+              ariaLabel="Add matches to Queue"
               title="Add matches to Queue"
+              size="sm"
               onclick={(e) => { e.stopPropagation(); onQueueFoundTracks?.({ tracks: group.tracks }); }}
             >
               {@html ICONS.ADD}
-            </button>
+            </IconButton>
           </div>
         </div>
 
@@ -106,7 +110,7 @@
 {#if !isSearching && matchedPlaylists.length === 0 && searchResultsGrouped.length === 0}
   <div class="empty-text">No matches found for "{searchTerm}"</div>
 {:else if isSearching && searchResultsGrouped.length === 0}
-  <div class="empty-text" style="opacity: 0.7">
+  <div class="empty-text" style="opacity: var(--opacity-dim)">
     Searching tracks in playlists...
   </div>
 {/if}
@@ -129,29 +133,29 @@
   .grouped-results {
     display: flex;
     flex-direction: column;
-    gap: 20px;
+    gap: var(--space-5);
   }
   .group-container {
     background: var(--c-bg-card);
-    border-radius: 12px;
+    border-radius: var(--radius-lg);
     overflow: hidden;
-    border: 1px solid var(--c-border-dim);
+    border: var(--border-default-dim);
   }
   .group-header {
     display: flex;
     align-items: center;
-    padding: 12px 16px;
+    padding: var(--space-3) var(--space-4);
     background: var(--c-surface-hover);
     cursor: pointer;
-    border-bottom: 1px solid var(--c-border-dim);
+    border-bottom: var(--border-default-dim);
   }
   .group-header:hover {
     background: var(--c-surface-active);
   }
   .group-icon {
-    width: 20px;
-    height: 20px;
-    margin-right: 12px;
+    width: var(--icon-size-md);
+    height: var(--icon-size-md);
+    margin-right: var(--space-3);
     color: var(--c-text-secondary);
   }
   .group-icon :global(svg) {
@@ -159,24 +163,24 @@
     height: 100%;
   }
   .group-title {
-    font-size: 15px;
-    font-weight: 600;
+    font-size: var(--text-lg);
+    font-weight: var(--weight-semibold);
     color: var(--c-text-primary);
     flex: 1;
   }
   .group-count {
     background: var(--c-surface-button);
-    padding: 2px 8px;
-    border-radius: 10px;
-    font-size: 12px;
+    padding: var(--space-0_5) var(--space-2);
+    border-radius: var(--radius-full);
+    font-size: var(--text-sm);
     color: var(--c-text-muted);
   }
   .group-actions {
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: var(--space-2);
     margin-left: auto;
-    padding-left: 12px;
+    padding-left: var(--space-3);
   }
   .group-tracks {
     display: flex;
@@ -186,20 +190,20 @@
   .empty-text {
     grid-column: 1/-1;
     text-align: center;
-    padding: 40px;
+    padding: var(--space-10);
     color: var(--c-text-secondary);
   }
 
   .section-mb {
-    margin-bottom: 24px;
+    margin-bottom: var(--space-6);
   }
   .section-spacing {
-    margin-top: 10px;
-    margin-bottom: 12px;
+    margin-top: var(--space-3);
+    margin-bottom: var(--space-3);
   }
   .header-label {
-    font-size: 18px;
-    font-weight: 700;
+    font-size: var(--text-xl);
+    font-weight: var(--weight-bold);
     color: var(--c-text-primary);
   }
 </style>

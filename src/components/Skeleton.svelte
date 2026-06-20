@@ -8,7 +8,7 @@
     style?: string;
   }
 
-  let { width = "100%", height = "20px", radius = "4px", style = "" }: Props = $props();
+  let { width = "100%", height = "20px", radius = "var(--radius-sm)", style = "" }: Props = $props();
 </script>
 
 <div
@@ -23,13 +23,13 @@
   }
   @keyframes pulse {
     0% {
-      opacity: 0.6;
+      opacity: var(--opacity-muted);
     }
     50% {
-      opacity: 0.3;
+      opacity: var(--opacity-ghost);
     }
     100% {
-      opacity: 0.6;
+      opacity: var(--opacity-muted);
     }
   }
 </style>

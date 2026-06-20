@@ -20,6 +20,9 @@
      ========================= */
   --c-accent: #fa2d48;
   --c-accent-hover: #ff4d65;
+  /* Primary-button fill/hover (default == accent; gruvbox overrides at runtime). */
+  --c-accent-btn: #fa2d48;
+  --c-accent-btn-hover: #ff4d65;
 
   /* =========================
      2. PALETTE: TEXT
@@ -43,6 +46,10 @@
 
   --c-heart: #ff4444;
   --c-error: #ff4444;
+  --c-error-ring: rgba(255, 68, 68, 0.3);
+  /* Semantic status triplet (default fallback; == previously hardcoded literals). */
+  --c-warn: #ffcc00;
+  --c-success: #2ecc71;
 
   /* =========================
      4. PALETTE: INTERACTIVE SURFACES
@@ -92,44 +99,21 @@
   --c-icon-idle: #9ca3af;
   --c-icon-hover: #ffffff;
   --c-icon-faint: var(--c-white-50); 
-  --icon-stroke-width: 1.5px;
-
-  /* =========================
-     8. DIMENSIONS & RADIUS
-     ========================= */
-  --header-height: 64px;
-  --mini-player-height: 90px;
-
-  --radius-sm: 4px;
-  --radius-md: 8px;
-  --radius-lg: 12px;
-  --radius-xl: 20px;
-  --radius-full: 9999px;
-
-  /* =========================
-     9. Z-INDEX LAYERS
-     ========================= */
-  --z-base: 1;
-  --z-dock: 1000;
-  --z-modal: 2000;
-  --z-toast: 3000;
-  --z-drag-item: 9999;
-
-  /* =========================
-     10. TRANSITIONS
-     ========================= */
-  --trans-fast: 0.2s ease;
-  --trans-smooth: 0.3s cubic-bezier(0.2, 0.8, 0.2, 1);
+  /* Theme-invariant tokens (icon stroke, dimensions, radius, z-index,
+     transitions) and the spacing/typography/control scales now live in
+     src/styles/tokens.css, imported BEFORE this file. This :root keeps
+     only the per-theme default COLOR tokens (overridden at runtime by
+     theme.ts for non-default themes). */
 }
 
 /* =========================
    GLOBAL RESETS
    ========================= */
 body {
-  margin: 0;
+  margin: var(--space-0);
   background: var(--c-bg-app);
   color: var(--c-text-primary);
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  font-family: var(--font-sans);
   overflow: hidden;
   -webkit-tap-highlight-color: transparent;
 }
@@ -138,7 +122,7 @@ button {
   cursor: pointer;
   border: none;
   background: none;
-  padding: 0;
+  padding: var(--space-0);
   color: inherit;
   font-family: inherit;
   touch-action: manipulation;
@@ -169,9 +153,12 @@ button {
   align-items: center;
   justify-content: center;
   color: var(--c-text-secondary);
-  border-radius: 50%;
-  padding: 8px;
-  transition: all var(--trans-fast);
+  border-radius: var(--radius-circle);
+  padding: var(--icon-btn-pad);
+  transition:
+    color var(--dur-fast) var(--ease-default),
+    background var(--dur-fast) var(--ease-default),
+    transform var(--dur-instant) var(--ease-default);
 }
 
 .btn-icon:hover {
@@ -189,15 +176,24 @@ button {
 }
 
 .btn-icon svg {
-  width: 24px;
-  height: 24px;
+  width: var(--icon-size-lg);
+  height: var(--icon-size-lg);
+}
+
+/* Keyboard focus ring for naked/raw interactive controls (WCAG 2.4.7).
+   Zero specificity (:where) so component rules can still override. The
+   transparent outline keeps a visible focus indicator under forced-colors. */
+:where(.btn-icon, .menu-row, .sort-item, .vol-btn, .side-btn, .play-btn-large):focus-visible {
+  outline: var(--border-width-thick) solid transparent;
+  outline-offset: var(--space-0_5);
+  box-shadow: var(--shadow-focus-ring);
 }
 
 /* 2. Range Inputs (Sliders) */
 input[type="range"] {
   width: 100%;
-  height: 4px;
-  border-radius: 2px;
+  height: var(--space-1);
+  border-radius: var(--radius-xs);
   background: var(--c-rail-bg);
   -webkit-appearance: none;
   outline: none;
@@ -208,10 +204,10 @@ input[type="range"]::-webkit-slider-thumb {
   -webkit-appearance: none;
   width: 12px;
   height: 12px;
-  border-radius: 50%;
+  border-radius: var(--radius-circle);
   background: var(--c-text-primary);
-  box-shadow: 0 1px 3px var(--c-black-50);
-  transition: transform 0.1s;
+  box-shadow: var(--shadow-xs);
+  transition: transform var(--dur-instant);
   border: none;
 }
 
@@ -227,12 +223,12 @@ input[type="range"]:hover::-webkit-slider-thumb {
 }
 
 .scroll-y::-webkit-scrollbar {
-  width: 6px;
+  width: var(--space-2);
 }
 
 .scroll-y::-webkit-scrollbar-thumb {
   background-color: var(--c-border);
-  border-radius: 3px;
+  border-radius: var(--radius-xs);
 }
 
 /* =========================================
@@ -246,30 +242,29 @@ input[type="range"]:hover::-webkit-slider-thumb {
 /* --- Header Actions Container --- */
 .header-actions {
   display: flex;
-  gap: 12px;
+  gap: var(--space-3);
   align-items: center;
 }
 
 .meta-badges {
   display: flex;
-  gap: 8px;
-  margin: 0px 0 6px;
+  gap: var(--space-2);
+  margin: var(--space-0) 0 var(--space-2);
 }
 
 .meta-tag {
-  font-size: 11px;
-  font-weight: 600;
+  font-size: var(--text-xs);
+  font-weight: var(--weight-semibold);
   color: var(--c-text-primary);
-  border: 1px solid transparent;
-  background: var(--c-surface-button); 
-  padding: 3px 6px;
+  border: var(--border-width-thin) solid transparent;
+  background: var(--c-surface-button);
+  padding: var(--space-1) var(--space-2);
   height: 18px;
   display: inline-flex;
   align-items: center;
   border-radius: var(--radius-sm);
   white-space: nowrap;
-  letter-spacing: 0.2px;
-  line-height: 1;
+  line-height: var(--leading-none);
 }
 
 .meta-tag.quality {
@@ -284,22 +279,22 @@ input[type="range"]:hover::-webkit-slider-thumb {
   .header-actions {
     justify-content: flex-start;
     flex-wrap: wrap;
-    gap: 8px;
+    gap: var(--space-2);
     width: 100%;
   }
   
   .btn-primary,
   .btn-secondary {
-    padding: 8px 16px;
-    font-size: 12px;
+    padding: var(--space-2) var(--space-4);
+    font-size: var(--text-sm);
   }
 
   .btn-action {
-    width: 32px;
+    width: var(--control-h-sm);
   }
 
   .btn-action :global(svg) {
-    width: 16px;
-    height: 16px;
+    width: var(--icon-size-xs);
+    height: var(--icon-size-xs);
   }
 }

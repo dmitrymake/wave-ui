@@ -53,7 +53,8 @@ describe("YandexService.refreshYandexDaemonState", () => {
 
     await YandexService.refreshYandexDaemonState();
 
-    expect(globalThis.fetch).toHaveBeenCalledWith("/wave-yandex-api.php?action=get_state");
+    const calls = (globalThis.fetch as ReturnType<typeof vi.fn>).mock.calls.map((c) => c[0]);
+    expect(calls).toContain("/wave-yandex-api.php?action=get_state");
     expect(get(yandexState)).toEqual(daemon);
   });
 

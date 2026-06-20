@@ -21,6 +21,7 @@
   import { ICONS } from "../../lib/icons";
   import ImageLoader from "../ImageLoader.svelte";
   import BaseList from "./BaseList.svelte";
+  import Button from "../ui/Button.svelte";
   import type { Track, NavigationEntry, LibraryItem } from "../../lib/types";
 
   let { activeCategory = "artists" }: { activeCategory?: string } = $props();
@@ -258,21 +259,21 @@
               </div>
 
               <div class="header-actions">
-                <button
-                  class="btn-primary"
+                <Button
+                  variant="primary"
                   onclick={handlePlayAll}
                   disabled={pressedPlayAll}
                 >
                   {pressedPlayAll ? "Playing..." : "Play All"}
-                </button>
+                </Button>
 
-                <button
-                  class="btn-secondary"
+                <Button
+                  variant="secondary"
                   onclick={handleAddToQueue}
                   disabled={pressedAddToQueue}
                 >
                   {pressedAddToQueue ? "Added" : "To Queue"}
-                </button>
+                </Button>
               </div>
             </div>
           </div>
@@ -343,7 +344,7 @@
               <div class="card-img-container">
                 <Skeleton width="100%" height="100%" radius="8px" />
               </div>
-              <div style="margin-top: 12px; margin-bottom: 4px;">
+              <div style="margin-top: var(--space-3); margin-bottom: var(--space-1);">
                 <Skeleton width="80%" height="15px" radius="4px" />
               </div>
               <div>
@@ -351,7 +352,7 @@
                   width="50%"
                   height="13px"
                   radius="4px"
-                  style="opacity: 0.6"
+                  style="opacity: var(--opacity-muted)"
                 />
               </div>
             </div>
@@ -428,7 +429,7 @@
   .music-card.skeleton-card .card-img-container {
     aspect-ratio: 1;
     background: transparent;
-    margin-bottom: 0;
+    margin-bottom: var(--space-0);
   }
   .music-card.skeleton-card:hover {
     background: transparent;
@@ -437,14 +438,14 @@
   .header-subtitle-row {
     display: flex;
     align-items: center;
-    gap: 10px;
-    margin: 0 0 6px 0;
+    gap: var(--space-2);
+    margin: var(--space-0) var(--space-0) var(--space-2) var(--space-0);
   }
 
   .header-sub-text {
-    font-size: 20px;
+    font-size: var(--text-2xl);
     color: var(--c-white-60);
-    margin: 0;
+    margin: var(--space-0);
     overflow: hidden;
     text-overflow: ellipsis;
   }
@@ -460,7 +461,7 @@
   .icon-fallback :global(svg) {
     width: 40px;
     height: 40px;
-    opacity: 0.5;
+    opacity: var(--opacity-faint);
   }
 
   .group-header {
@@ -473,7 +474,7 @@
   .empty-text {
     grid-column: 1/-1;
     text-align: center;
-    padding: 40px;
-    opacity: 0.5;
+    padding: var(--space-10);
+    opacity: var(--opacity-faint);
   }
 </style>

@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2025 dmitrymake
-import { LibraryActions } from "./mpd/library";
+import { LibraryActions } from "./playback/library";
 import { logger } from "./logger";
+import { FAVORITES_PLAYLIST } from "./constants";
 import type { Track, Playlist } from "./types";
 
 export interface PlaylistSearchGroup {
@@ -32,7 +33,7 @@ export async function searchPlaylists(
   );
 
   const groups: PlaylistSearchGroup[] = [];
-  const targets = playlists.filter((p) => p.name !== "Favorites");
+  const targets = playlists.filter((p) => p.name !== FAVORITES_PLAYLIST);
 
   for (const pl of targets) {
     if (signal.aborted) break;

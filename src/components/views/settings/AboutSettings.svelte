@@ -29,52 +29,52 @@
 
 <style>
   .section {
-    margin-bottom: 32px;
+    margin-bottom: var(--space-8);
   }
 
   .section-header {
     display: flex;
     align-items: center;
-    gap: 10px;
-    font-size: 18px;
-    font-weight: 700;
+    gap: var(--space-2);
+    font-size: var(--text-xl);
+    font-weight: var(--weight-bold);
     color: var(--c-text-primary);
-    margin-bottom: 12px;
-    padding-left: 4px;
+    margin-bottom: var(--space-3);
+    padding-left: var(--space-1);
   }
 
   .card {
     background: var(--c-bg-card);
-    border: 1px solid var(--c-border);
-    border-radius: 12px;
-    padding: 16px;
+    border: var(--border-default);
+    border-radius: var(--radius-lg);
+    padding: var(--space-4);
     display: flex;
     flex-direction: column;
-    gap: 10px;
+    gap: var(--space-3);
   }
 
   .info-row {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    padding: 4px 0;
-    font-size: 14px;
+    padding: var(--space-1) var(--space-0);
+    font-size: var(--text-base);
     color: var(--c-text-primary);
   }
   .mono {
-    font-family: monospace;
+    font-family: var(--font-mono);
     background: var(--c-surface-hover);
-    padding: 2px 6px;
-    border-radius: 4px;
+    padding: var(--space-0_5) var(--space-1);
+    border-radius: var(--radius-sm);
   }
   .mono.small {
-    font-size: 12px;
+    font-size: var(--text-sm);
   }
 
   .separator {
-    height: 1px;
+    height: var(--space-px);
     background: var(--c-border);
-    opacity: 0.5;
-    margin: 4px 0;
+    opacity: var(--opacity-faint);
+    margin: var(--space-1) var(--space-0);
   }
 </style>

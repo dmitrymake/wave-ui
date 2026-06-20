@@ -10,6 +10,7 @@ import {
   consumeRouteData,
 } from "./store";
 import { logger } from "./logger";
+import { FAVORITES_PLAYLIST } from "./constants";
 import {
   matchRouteByPrefix,
   matchRouteByView,
@@ -78,7 +79,7 @@ export const Router = {
       } else if (route === "playlist" && parts.length >= 2) {
         data = { name: parts[1], displayName: parts[1] };
       } else if (route === "favorites") {
-        data = { name: "Favorites" };
+        data = { name: FAVORITES_PLAYLIST };
       } else if (parts.length >= 2) {
         data = { name: parts[1], displayName: parts[1] };
       }
@@ -106,7 +107,7 @@ export const Router = {
       case route === "playlists":
       case route === "playlist":
       case viewName === "details":
-        if (data && data.name === "Favorites") activeMenuTab.set("favorites");
+        if (data && data.name === FAVORITES_PLAYLIST) activeMenuTab.set("favorites");
         else activeMenuTab.set("playlists");
 
         if (route === "playlists") {
@@ -205,7 +206,7 @@ export const Router = {
     } else if (view === "details") {
       const name = (data?.name || data) as string;
       newPath =
-        name === "Favorites"
+        name === FAVORITES_PLAYLIST
           ? "favorites"
           : `playlist/${encodeURIComponent(name)}`;
     } else if (view === "albums_by_artist") {

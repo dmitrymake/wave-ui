@@ -24,6 +24,11 @@ export const THEMES: Theme[] = [
       /* --- 1. ACCENTS --- */
       "--c-accent": "#fa2d48",
       "--c-accent-hover": "#ff4d65",
+      /* Primary-button fill/hover. default == accent (zero visual change);
+         split out so gruvbox can use a brighter orange that passes WCAG AA
+         with a dark label (see --c-text-inverse). */
+      "--c-accent-btn": "#fa2d48",
+      "--c-accent-btn-hover": "#ff4d65",
 
       /* --- 2. TEXT --- */
       "--c-text-primary": "#ffffff",
@@ -42,6 +47,11 @@ export const THEMES: Theme[] = [
 
       "--c-heart": "#ff4444",
       "--c-error": "#ff4444",
+      "--c-error-ring": "rgba(255, 68, 68, 0.3)",
+      /* Semantic status triplet — values == the literals previously hardcoded
+         in components, so default has ZERO visual change. */
+      "--c-warn": "#ffcc00",
+      "--c-success": "#2ecc71",
 
       /* --- 4. INTERACTIVE SURFACES --- */
       "--c-surface-hover": "rgba(255, 255, 255, 0.1)",
@@ -80,29 +90,9 @@ export const THEMES: Theme[] = [
       "--c-icon-idle": "#9ca3af",
       "--c-icon-hover": "#ffffff",
       "--c-icon-faint": "rgba(255, 255, 255, 0.5)",
-      "--icon-stroke-width": "1.5px",
-
-      /* --- 8. LAYOUT --- */
-      "--header-height": "64px",
-      "--mini-player-height": "90px",
-
-      "--radius-sm": "4px",
-      "--radius-md": "8px",
-      "--radius-lg": "12px",
-      "--radius-xl": "20px",
-      "--radius-full": "9999px",
-
-      "--z-base": "1",
-      "--z-dock": "1000",
-      "--z-modal": "2000",
-      "--z-toast": "3000",
-      "--z-drag-item": "9999",
-      "--z-sidebar": "999",
-      "--z-menu": "9000",
-      "--z-context-menu": "10001",
-
-      "--trans-fast": "0.2s ease",
-      "--trans-smooth": "0.3s cubic-bezier(0.2, 0.8, 0.2, 1)",
+      /* Theme-invariant tokens (icon stroke, layout, radius, z-index,
+         transitions) moved to src/styles/tokens.css — only per-theme COLOR
+         tokens remain here. */
 
       /* --- 9. PLAYLIST CARD PALETTE --- */
       "--c-pl-0": "#fa2d48",
@@ -134,11 +124,16 @@ export const THEMES: Theme[] = [
       /* --- 1. ACCENTS --- */
       "--c-accent": "#d65d0e",
       "--c-accent-hover": "#fe8019",
+      /* Primary-button fill uses bright orange so a dark label clears WCAG AA
+         (#fe8019 + #282828 = 5.84:1; #d65d0e + #282828 = only 3.81:1). */
+      "--c-accent-btn": "#fe8019",
+      "--c-accent-btn-hover": "#ffa04d",
 
       /* --- 2. TEXT --- */
       "--c-text-primary": "#fbf1c7",
       "--c-text-secondary": "#ebdbb2",
-      "--c-text-muted": "#928374",
+      /* fg4 (was #928374 = 4.02:1 on #282828 — failed AA-normal) -> #a89984 = 5.30:1 */
+      "--c-text-muted": "#a89984",
       "--c-text-inverse": "#282828",
 
       /* --- 3. BACKGROUNDS --- */
@@ -151,7 +146,12 @@ export const THEMES: Theme[] = [
       "--c-bg-toast": "#32302f",
 
       "--c-heart": "#fb4934",
-      "--c-error": "#cc241d",
+      /* was #cc241d = 2.69:1 on #282828 (fail). #fe5b4a = 4.78:1 (AA-normal). */
+      "--c-error": "#fe5b4a",
+      "--c-error-ring": "rgba(204, 36, 29, 0.3)",
+      /* Semantic status triplet — gruvbox-appropriate bright variants. */
+      "--c-warn": "#fabd2f",
+      "--c-success": "#b8bb26",
 
       /* --- 4. INTERACTIVE SURFACES --- */
       "--c-surface-hover": "#3c3836",
@@ -190,29 +190,10 @@ export const THEMES: Theme[] = [
       "--c-icon-idle": "#a89984",
       "--c-icon-hover": "#fbf1c7",
       "--c-icon-faint": "#504945",
-      "--icon-stroke-width": "1.5px",
-
-      /* --- 8. LAYOUT --- */
-      "--header-height": "64px",
-      "--mini-player-height": "90px",
-
-      "--radius-sm": "4px",
-      "--radius-md": "8px",
-      "--radius-lg": "12px",
-      "--radius-xl": "16px",
-      "--radius-full": "9999px",
-
-      "--z-base": "1",
-      "--z-dock": "1000",
-      "--z-modal": "2000",
-      "--z-toast": "3000",
-      "--z-drag-item": "9999",
-      "--z-sidebar": "999",
-      "--z-menu": "9000",
-      "--z-context-menu": "10001",
-
-      "--trans-fast": "0.2s ease",
-      "--trans-smooth": "0.3s cubic-bezier(0.2, 0.8, 0.2, 1)",
+      /* Theme-invariant tokens (icon stroke, layout, radius, z-index,
+         transitions) moved to src/styles/tokens.css — only per-theme COLOR
+         tokens remain here. gruvbox --radius-xl was 16px; unified to 20px in
+         tokens.css (accepted minor visual change). */
 
       /* --- 9. PLAYLIST CARD PALETTE --- */
       "--c-pl-0": "#cc241d",

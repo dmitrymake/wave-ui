@@ -254,7 +254,7 @@
         kind: "my_vibe",
         title: "My Vibe",
         isStation: true,
-        bgColor: "linear-gradient(135deg, #FFCC00, #FF3333)",
+        bgColor: "var(--grad-vibe)",
       };
 
       const moodStations = moodData?.stations ?? [];
@@ -660,19 +660,19 @@
   }
 
   .loading-footer {
-    padding: 20px;
+    padding: var(--space-5);
     display: flex;
     flex-direction: column;
     align-items: center;
   }
   .spinner {
-    margin: 0 auto;
-    border: 2px solid var(--c-border);
+    margin: var(--space-0) auto;
+    border: var(--border-width-thick) solid var(--c-border);
     border-top-color: var(--c-accent);
-    border-radius: 50%;
+    border-radius: var(--radius-circle);
     width: 20px;
     height: 20px;
-    animation: spin 1s linear infinite;
+    animation: spin 1s var(--ease-linear) infinite;
   }
   @keyframes spin {
     100% {

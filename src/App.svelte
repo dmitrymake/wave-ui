@@ -5,7 +5,7 @@
   import MainScreen from "./components/MainScreen.svelte";
   import ContextMenu from "./components/ContextMenu.svelte";
   import Modal from "./components/Modal.svelte";
-  import * as MPD from "./lib/mpd";
+  import * as MPD from "./lib/playback";
   import { ApiActions } from "./lib/api";
   import { YandexService } from "./lib/yandexService";
   import { db, bumpLibraryRevision } from "./lib/db";
@@ -19,6 +19,7 @@
   import { isYandexEnabled } from "./lib/stores/yandex";
   import { MSG } from "./lib/messages";
   import { logger } from "./lib/logger";
+  import "./styles/tokens.css";
   import "./styles/shared.css";
   import "./components/views/MusicViews.css";
   import { get } from "svelte/store";

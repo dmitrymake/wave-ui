@@ -233,7 +233,7 @@ describe("YandexView — NOT CONNECTED screen", () => {
 
     // The live views are gated behind the token: no search box, no dashboard
     // section labels, no track list.
-    expect(container.querySelector(".search-input-container")).toBeNull();
+    expect(container.querySelector('input[type="search"]')).toBeNull();
     expect(queryByText("Vibes")).toBeNull();
     expect(queryByText("Collection & Mixes")).toBeNull();
     expect(container.querySelector(".base-list-scroll-container")).toBeNull();
@@ -262,7 +262,7 @@ describe("YandexView — DASHBOARD mode", () => {
     expect(getByText("Road Trip")).toBeInTheDocument();
 
     // The search box is shown in dashboard mode too.
-    expect(container.querySelector(".search-input-container input")).not.toBeNull();
+    expect(container.querySelector('input[type="search"]')).not.toBeNull();
   });
 });
 
@@ -278,7 +278,7 @@ describe("YandexView — SEARCH mode", () => {
       // Drain the mount-time effects under fake timers.
       await vi.advanceTimersByTimeAsync(0);
 
-      const input = container.querySelector<HTMLInputElement>(".search-input-container input");
+      const input = container.querySelector<HTMLInputElement>('input[type="search"]');
       expect(input).not.toBeNull();
 
       // No search yet.
