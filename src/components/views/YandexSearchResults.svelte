@@ -22,13 +22,21 @@
   function openAlbum(album: YandexAlbum) {
     onOpenAlbum?.(album);
   }
+
+  /** Sub line of an artist card. The search response carries no genre or album
+      count, so the one line of context there is — the bio — falls back to the
+      role ("Artist") when Yandex sends none, which is what an artist card with
+      no sub row used to be. */
+  function artistSub(artist: YandexArtist): string {
+    return artist.description || "Artist";
+  }
 </script>
 
 {#if !isLoading}
   {#if searchResults.artists.length > 0}
-    <h3 class="header-label">Artists</h3>
+    <h3 class="header-label section-spacing">Artists</h3>
     <div
-      class="music-grid horizontal section-mb"
+      class="music-grid horizontal section-mb identity-grid"
       onwheel={handleHorizontalScroll}
     >
       {#each searchResults.artists as artist}
@@ -42,8 +50,15 @@
             <ImageLoader
               src={artist.image ?? ""}
               alt={artist.title}
-              radius="8px"
-            />
+              radius="var(--radius-md)"
+            >
+              {#snippet fallback()}
+                <div class="icon-fallback">{@html ICONS.ARTISTS}</div>
+              {/snippet}
+            </ImageLoader>
+          {/snippet}
+          {#snippet sub()}
+            <div class="card-sub">{artistSub(artist)}</div>
           {/snippet}
         </MediaCard>
       {/each}
@@ -61,14 +76,29 @@
             <ImageLoader
               src={album.image ?? ""}
               alt={album.title}
-              radius="8px"
-            />
+              radius="var(--radius-md)"
+            >
+              {#snippet fallback()}
+                <div class="icon-fallback">{@html ICONS.ALBUMS}</div>
+              {/snippet}
+            </ImageLoader>
           {/snippet}
           {#snippet sub()}
-            <div class="card-sub">{album.artist}</div>
+            <div class="card-sub text-ellipsis">{album.artist ?? "Album"}</div>
+            {#if album.year}
+              <div class="card-badge">{album.year}</div>
+            {/if}
           {/snippet}
         </MediaCard>
       {/each}
     </div>
   {/if}
 {/if}
+
+<style>
+  /* Artist cards centre their title, so the sub line centres with it.
+     :global() — MediaCard renders .card-sub-row. */
+  .identity-grid :global(.card-sub-row) {
+    justify-content: center;
+  }
+</style>

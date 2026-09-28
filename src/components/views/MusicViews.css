@@ -318,10 +318,13 @@
 }
 
 /* The glyph that stands in for artwork in a header (queue, playlist). Was
-   written out in both views, with a different colour in each. */
+   written out in both views, with a different colour in each.
+
+   Sized as a share of the art, not in pixels: a fixed 64px glyph filled the
+   whole 64px art on a phone and read as a giant hamburger rather than a cover. */
 .header-icon-wrap {
-  width: 64px;
-  height: 64px;
+  width: 40%;
+  height: 40%;
   color: var(--c-text-primary);
 }
 .header-icon-wrap svg {

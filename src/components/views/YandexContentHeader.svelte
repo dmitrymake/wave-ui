@@ -7,7 +7,7 @@
   import Skeleton from "../Skeleton.svelte";
   import Button from "../ui/Button.svelte";
   import type { Writable } from "svelte/store";
-  import type { YandexAlbum, YandexArtist, YandexHeaderData } from "../../lib/types/yandex";
+  import type { YandexAlbum, YandexArtist, YandexHeaderData, YandexPlaylist } from "../../lib/types/yandex";
 
   let { headerData = null, viewMode = "", isLoading = false, tracksCount = 0, albumsStore, onPlayAll, onAddAllToQueue, onPlayVibe, onOpenAlbum }: {
     headerData?: YandexHeaderData;
@@ -43,6 +43,33 @@
   function openAlbum(album: YandexAlbum) {
     onOpenAlbum?.(album);
   }
+
+  /** Count chips under the header title — the same `.meta-tag` role the
+      library and playlist headers use.
+
+      `tracksCount` is only trustworthy where Yandex hands the whole list over:
+      artist and album details load once and never paginate. A playlist does
+      paginate 50 at a time, so there the count comes from the nav entry
+      (trackCount) instead, and nothing is claimed when it is missing. */
+  const countBadges = $derived.by(() => {
+    const badges: string[] = [];
+    if (viewMode === "artist_details" || viewMode === "album_details") {
+      if (tracksCount > 0) badges.push(`${tracksCount} tracks`);
+      if (viewMode === "artist_details" && $albumsStore.length > 0) {
+        badges.push(`${$albumsStore.length} albums`);
+      }
+    } else {
+      const total = (headerData as YandexPlaylist | null)?.trackCount;
+      if (typeof total === "number" && total > 0) badges.push(`${total} tracks`);
+    }
+    return badges;
+  });
+
+  /** Release year of an album, which rides in on the nav entry (the album
+      objects the shelves and search results render both carry it). */
+  const headerYear = $derived(
+    viewMode === "album_details" ? (headerData as YandexAlbum | null)?.year : undefined
+  );
 </script>
 
 {#if viewMode !== "search" && headerData}
@@ -82,12 +109,14 @@
           : ""}
       >
         {#if headerData.kind === "favorites"}
-          <div class="icon-wrap">{@html ICONS.HEART_FILLED}</div>
+          <!-- .header-icon-wrap: the app's header-emblem role (queue, playlist).
+               This view had its own copy at 100%/40px. -->
+          <div class="header-icon-wrap">{@html ICONS.HEART_FILLED}</div>
         {:else}
           <ImageLoader
             src={headerData.cover || headerImage || ""}
             alt={headerData.title}
-            radius="8px"
+            radius="var(--radius-md)"
           >
             {#snippet fallback()}
               <div class="icon-fallback">
@@ -105,13 +134,26 @@
               .toUpperCase()
               .replace("YANDEX_", "")}
           </div>
-          <h1 class="header-title">
+          <h1 class="header-title" title={headerData.title || headerData.name}>
             {headerData.title || headerData.name}
           </h1>
           {#if headerArtist || headerData.description}
-            <h2 class="header-sub-text">
-              {headerArtist || headerData.description}
-            </h2>
+            <!-- Album: artist + year, the row the library's album header uses. -->
+            <div class="header-subtitle-row">
+              <h2 class="header-sub-text" title={headerArtist || headerData.description}>
+                {headerArtist || headerData.description}
+              </h2>
+              {#if headerYear}
+                <span class="meta-tag">{headerYear}</span>
+              {/if}
+            </div>
+          {/if}
+          {#if countBadges.length > 0}
+            <div class="meta-badges">
+              {#each countBadges as badge}
+                <span class="meta-tag">{badge}</span>
+              {/each}
+            </div>
           {/if}
         </div>
         <div class="header-actions">
@@ -143,7 +185,7 @@
 {/if}
 
 {#if viewMode === "artist_details" && $albumsStore.length > 0}
-  <h3 class="header-label" style="margin-top: var(--space-5);">Albums</h3>
+  <h3 class="header-label section-spacing">Albums</h3>
   <div
     class="music-grid horizontal section-mb"
     onwheel={handleHorizontalScroll}
@@ -154,11 +196,18 @@
           <ImageLoader
             src={album.image ?? ""}
             alt={album.title}
-            radius="8px"
-          />
+            radius="var(--radius-md)"
+          >
+            {#snippet fallback()}
+              <div class="icon-fallback">{@html ICONS.ALBUMS}</div>
+            {/snippet}
+          </ImageLoader>
         {/snippet}
         {#snippet sub()}
-          <div class="card-sub">{album.year}</div>
+          <div class="card-sub text-ellipsis">{album.artist ?? "Album"}</div>
+          {#if album.year}
+            <div class="card-badge">{album.year}</div>
+          {/if}
         {/snippet}
       </MediaCard>
     {/each}
@@ -168,24 +217,11 @@
 
 <style>
 
-  .icon-wrap {
-    width: 100%;
-    height: 100%;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    color: var(--c-text-primary);
-  }
-  .icon-wrap :global(svg) {
-    width: 40px;
-    height: 40px;
-  }
-
-
+  /* Glyph inside a labelled pill — Button's own sizing, so only the
+     alignment and the stroke belong here. */
   .icon-inline {
     display: inline-flex;
     align-items: center;
-    margin-right: var(--space-2);
   }
   .icon-inline :global(svg) {
     width: var(--icon-size-sm);

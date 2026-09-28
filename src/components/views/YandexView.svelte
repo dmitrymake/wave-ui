@@ -254,12 +254,13 @@
       const landing = landingR.status === "fulfilled" ? landingR.value : null;
       const moodData = moodR.status === "fulfilled" ? moodR.value : null;
 
+      // The vibe gradient is a STYLE decision, so it lives with the card that
+      // paints it (YandexDashboard.coverStyle), not as data on the card.
       const myVibe: YandexPlaylist = {
         uid: "my_vibe",
         kind: "my_vibe",
         title: "My Vibe",
         isStation: true,
-        bgColor: "var(--grad-vibe)",
       };
 
       const moodStations = moodData?.stations ?? [];
@@ -267,6 +268,9 @@
 
       const mappedPlaylists = (userPls ?? []).map((pl) => {
         if (pl.kind === "favorites") {
+          // "\u2665" is the API's "count unknown" placeholder: the view shows a
+          // real number once the likes list has been counted, and the cards fall
+          // back to a plain label in the meantime (never "\u2665 tracks").
           const count =
             $yandexFavorites.size > 0
               ? $yandexFavorites.size
@@ -725,7 +729,7 @@
         {#snippet footer()}
           <div class="loading-footer">
             {#if isLoadingMore}<div class="spinner"></div>{/if}
-            <div bind:this={loadMoreSentinel} style="height:20px;"></div>
+            <div bind:this={loadMoreSentinel} class="load-more-sentinel"></div>
           </div>
         {/snippet}
       </BaseList>
@@ -748,6 +752,10 @@
   /* Global .spinner (src/styles/shared.css); only the centring is local. */
   .spinner {
     margin: var(--space-0) auto;
+  }
+  /* The pagination sentinel: an empty hit area the observer watches. */
+  .load-more-sentinel {
+    height: var(--space-5);
   }
 
 </style>

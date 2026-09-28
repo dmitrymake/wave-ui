@@ -221,7 +221,7 @@
       </div>
 
       <div class="controls">
-        <LikeButton track={$currentSong} compact class="desktop" />
+        <LikeButton track={$currentSong} compact class="only-wide" />
 
         <IconButton ariaLabel="Previous" onclick={stop(() => nav("previous"))}>
           {@html ICONS.PREVIOUS}
@@ -236,11 +236,11 @@
         </IconButton>
 
         {#if !isRadio}
-          <PlayModeButton compact class="desktop" />
+          <PlayModeButton compact class="only-wide" />
         {/if}
       </div>
 
-      <div class="volume desktop">
+      <div class="volume only-wide">
         <VolumeSlider compact />
       </div>
     </div>
@@ -361,8 +361,16 @@
 
   .volume { display: flex; align-items: center; justify-content: flex-end; gap: var(--space-3); }
 
+  /* :global() is load-bearing: LikeButton, PlayModeButton and the volume block
+     receive this class through a prop, so the element that ends up carrying it
+     is rendered by ANOTHER component and does not have MiniPlayer's scoping
+     class. A plain `.only-wide` rule silently matched nothing, which is how a
+     390px dock ended up with five controls and a one-letter title.
+
+     What stays on a phone: the transport that has to work at a glance. The heart
+     and the play mode are one tap away in the full player. */
   @media (max-width: 768px) {
-    .desktop { display: none !important; }
+    :global(.only-wide) { display: none !important; }
     .grid { grid-template-columns: 1fr max-content; padding: var(--space-0) var(--space-4); }
     .play-btn { width: var(--control-h-lg); height: var(--control-h-lg); }
     .art { width: var(--thumb-md); height: var(--thumb-md); }
