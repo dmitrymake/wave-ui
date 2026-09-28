@@ -225,11 +225,13 @@
   /* ---- Trailing clear button ---- */
   /* The clear glyph spans the field's height like the text baseline does, so
      only that stretch is local — the control itself is the shared primitive. */
+  /* The gap to the text belongs to the field (its own `gap`), not to the
+     control: a second owner put the cross 16px from the text while the
+     magnifier sat 12px away. */
   .field :global(.field__clear) {
     flex-shrink: 0;
     width: var(--switch-h); /* 24px */
     height: 100%;
-    margin-left: var(--space-1); /* 4px */
     color: var(--c-text-muted);
   }
   .field :global(.field__clear:hover) {

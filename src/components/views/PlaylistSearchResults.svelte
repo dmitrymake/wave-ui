@@ -163,12 +163,17 @@
     overflow: hidden;
     text-overflow: ellipsis;
   }
+  /* Same chip as the header's .meta-tag: 4px cap, 8px sides, leading-none, so
+     the count reads as a tag in the band and not as loose text. */
   .group-count {
     background: var(--c-surface-button);
-    padding: var(--space-0_5) var(--space-2);
+    padding: var(--space-1) var(--space-2);
     border-radius: var(--radius-full);
     font-size: var(--text-sm);
     color: var(--c-text-muted);
+    display: inline-flex;
+    align-items: center;
+    line-height: var(--leading-none);
   }
   .group-actions {
     display: flex;
@@ -185,8 +190,18 @@
 
   /* .header-label is global (eyebrow style) and was overridden here to 18px/700
      white, so "Matched Playlists" rendered differently from every other section
-     heading. The extra space below is what this view actually wanted. */
+     heading. The extra space below is what this view actually wanted — on the
+     Pi. 12px above and 12px below is not the app's rhythm though: every other
+     section heading is 8px from the row it labels, so on a phone this view gets
+     the same 8px (see the block below). */
   .header-label {
     margin-bottom: var(--space-3);
+  }
+
+  /* ---- Phone only: 800px would match the Pi screen and move its rows. ---- */
+  @media (max-width: 768px) {
+    .header-label {
+      margin-bottom: var(--space-2);
+    }
   }
 </style>

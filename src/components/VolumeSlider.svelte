@@ -166,9 +166,12 @@
 
   .common-knob {
     position: absolute;
-    top: 50%;
+    /* Centred by the same margin-block:auto idiom as the dock's rail, instead of
+       a -7px nudge that is really "half of my own height". */
+    top: var(--space-0);
+    bottom: var(--space-0);
+    margin-block: auto;
     transform: translateX(-50%);
-    margin-top: calc(-1 * var(--space-7px));
     width: 14px;
     height: 14px;
     background: var(--c-text-primary);

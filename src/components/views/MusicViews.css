@@ -38,6 +38,10 @@
   -webkit-user-select: none;
 }
 
+/* THE page inset. Every screen pads its content with this one value, so a
+   16px left edge on the library, the radio grid, the settings cards and the
+   dock all line up. See the role list at the top of the spacing block in
+   tokens.css. */
 .content-padded {
   padding: var(--space-4);
 }
@@ -83,6 +87,11 @@
   margin: 0;
 }
 
+/* The card column reads top-down as artwork -> title -> value, and the gaps say
+   which is which: 12px off the artwork (a block and its label), then 4px to the
+   value (which belongs to the title), and 8px inside the value row (which
+   belongs to the title too). Card padding is 12px, so a title never sits closer
+   to the value above it than to the card's own edge. */
 .music-card {
   position: relative;
   cursor: pointer;
@@ -93,6 +102,8 @@
   transition:
     background var(--dur-fast),
     transform var(--dur-fast);
+  /* The hover lift needs room the grid does not give it, so the card bleeds 12px
+     into its own gutter and its padding puts the artwork back on the grid. */
   margin: calc(-1 * var(--space-3));
   /* A card is a button, not prose: dragging across a row of them must not
      paint a text selection over the whole grid. */
@@ -169,12 +180,19 @@
   text-overflow: ellipsis;
 }
 
+/* The year / quality chip on a card. Same box as the header's .meta-tag: a 1px
+   border on the whole family, transparent until the quality variant colours it,
+   so the two chips that sit in ONE sub row are the same 16px tall and their
+   labels start on the same line (before: 14px vs 16px, and the bordered one's
+   text 1px lower). 2px is the cap-to-edge of a 10px cap — the hairline step,
+   the same one the settings mono chip uses. */
 .card-badge {
   font-size: var(--text-2xs);
   font-weight: var(--weight-semibold);
   color: var(--c-text-primary);
   background: rgba(255, 255, 255, 0.1);
-  padding: var(--space-0_5) var(--space-5px);
+  border: var(--border-width-thin) solid transparent;
+  padding: var(--space-0_5) var(--space-1);
   border-radius: var(--radius-xs);
   flex-shrink: 0;
   line-height: var(--leading-none);
@@ -182,7 +200,7 @@
 
 .card-badge.quality {
   color: var(--c-text-primary);
-  border: var(--border-default);
+  border-color: var(--c-border);
   background: transparent;
 }
 
@@ -219,10 +237,16 @@
   filter: drop-shadow(0 2px 4px var(--c-black-50));
 }
 
-/* The glyph that stands in for artwork on a tinted cover. One definition for the
-   three grids that use it (playlists, playlist search, the Yandex dashboard) —
-   the copy that made the Yandex cards read as another app was 100%/100% with a
-   fixed 40px glyph in --c-text-primary. */
+/* THE emblem: the glyph that stands in for artwork on a tinted cover. One role
+   for four surfaces — the three card grids (playlists, playlist search, the
+   Yandex dashboard) and every view header's art block (queue, playlist,
+   Yandex favourites). 30% of the square, the glyph filling it, soft white.
+   Sized as a share of the art rather than in pixels, so a 218px phone header, a
+   64px Pi header and a 180px card all get the same proportion and the same
+   optical weight; a fixed px glyph filled a 64px art completely and read as a
+   giant hamburger rather than a cover. There used to be a second
+   `.header-icon-wrap` at 40%, which is what made a playlist header and a
+   playlist card look like two different products. */
 .icon-wrap {
   width: 30%;
   height: 30%;
@@ -276,6 +300,10 @@
   .music-grid {
     grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
     gap: var(--space-4);
+    /* The tail under the last row is the same step as the gutter between rows on
+       a phone; it inherited the Pi grid's 20px, so a phone grid ended 4px off
+       its own rhythm. */
+    padding-bottom: var(--space-4);
   }
   .music-grid.horizontal .music-card {
     width: 140px;
@@ -301,7 +329,10 @@
    gap under a search field. Both were defined in two *scoped* style blocks while
    being used in 7 places — so in the Yandex views (YandexDashboard,
    YandexSearchResults, YandexContentHeader) the class did nothing and the
-   sections ran together. Global here = one definition, works everywhere. */
+   sections ran together. Global here = one definition, works everywhere.
+
+   Both are the GROUP gap: 24px between two groups, against the 8px between a
+   heading and the row it labels (below) and the 16/20px grid gutter inside one. */
 .section-mb {
   margin-bottom: var(--space-6);
 }
@@ -345,21 +376,10 @@
   position: relative;
 }
 
-/* The glyph that stands in for artwork in a header (queue, playlist). Was
-   written out in both views, with a different colour in each.
-
-   Sized as a share of the art, not in pixels: a fixed 64px glyph filled the
-   whole 64px art on a phone and read as a giant hamburger rather than a cover. */
-.header-icon-wrap {
-  width: 40%;
-  height: 40%;
-  color: var(--c-text-primary);
-}
-.header-icon-wrap svg {
-  width: 100%;
-  height: 100%;
-  stroke-width: var(--icon-stroke-width);
-}
+/* The glyph inside .header-art is `.icon-wrap` — the same role the card emblem
+   has (see above). There is deliberately no `.header-icon-wrap` any more: a
+   second copy of the role at 40% is what made a playlist header read as a
+   different product from a playlist card. */
 
 .header-info {
   display: flex;
@@ -430,6 +450,24 @@
   text-overflow: ellipsis;
 }
 
+/* The actions row owns the gap to the text block above it, and owns it ALONE.
+   Its previous sibling is not a fixed thing: a loaded album has a .meta-badges
+   row (8px of its own bottom margin), a playlist with nothing loaded renders
+   that row EMPTY, and the Yandex header drops it when it has no count. The gap
+   used to be "whatever the previous sibling's margin happened to be", so the
+   buttons sat 16px under the badges on an album and 8px under the title on an
+   empty playlist. One owner: the last thing in the text group gives up its own
+   bottom margin, and this row declares the single 16px step between two blocks
+   (the same step as the art->text gap above it, against the 8px inside the
+   text group). The adjacent-sibling combinator is what keeps the Yandex
+   SKELETON header — which has no .header-text-group — on its own spacing. */
+.header-text-group > :last-child {
+  margin-bottom: var(--space-0);
+}
+.header-text-group + .header-actions {
+  margin-top: var(--space-4);
+}
+
 .header-actions {
   display: flex;
   align-items: center;
@@ -492,6 +530,9 @@
   .header-actions {
     justify-content: flex-start;
     width: 100%;
+    /* Reached only by a header with no .header-text-group (the Yandex loading
+       skeleton), because `.header-text-group + .header-actions` outranks a
+       single class: the real header's 16px belongs to the rule above. */
     margin-top: var(--space-2);
   }
 }
@@ -571,9 +612,11 @@
     font-size: var(--text-base);
   }
 
-  /* Actions sit under the text block, anchored to its left edge. The gap between
-     the meta row and this row is the badge row's own 8px margin, so the header
-     rhythm is a flat 8px instead of 8 + 8. */
+  /* Actions sit under the text block, anchored to its left edge, one 16px step
+     below it (the same step as the gap under the cover above). The gap has one
+     owner — `.header-text-group + .header-actions` — so a header reads the same
+     with a badge row, with an empty one and with none at all. `margin-top: 0`
+     below applies to the same skeleton-header exception as in the block above. */
   .header-actions {
     justify-content: flex-start;
     width: 100%;
@@ -593,6 +636,10 @@
   min-height: var(--control-h-xl);
   display: flex;
   align-items: center;
+  /* The gap between the leading glyph and the field is the flex parent's, not a
+     margin on the glyph: one owner, and a hand-rolled copy of this field (the
+     playlists one) inherits it instead of having to restate it. */
+  gap: var(--space-3);
   padding: var(--space-0) var(--space-4);
   margin-bottom: var(--space-6);
   transition:
@@ -629,7 +676,6 @@
   justify-content: center;
   width: var(--icon-size-md);
   height: var(--icon-size-md);
-  margin-right: var(--space-3);
   flex-shrink: 0;
   color: var(--c-icon-idle);
 }

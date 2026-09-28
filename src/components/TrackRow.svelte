@@ -217,7 +217,10 @@
     {:else if track.title || (track.file && !isStreamTrack)}
       <div class="artist text-ellipsis">Unknown Artist</div>
     {:else}
-      <Skeleton width="40%" height="13px" radius="4px" style="margin-top: 4px;" />
+      <!-- The 2px that separates the title from the artist is .info's own gap
+           (a real artist line gets exactly that), so the placeholder must not
+           add a second margin on top of it. -->
+      <Skeleton width="40%" height="13px" radius="4px" style="margin-top: var(--space-0);" />
     {/if}
   </div>
 
@@ -345,18 +348,21 @@
     overflow: hidden;
   }
 
+  /* The title and the artist are one group — the 2px between two lines of one
+     track — so the gap belongs to the column that stacks them, not to a margin
+     on the title. */
   .info {
     flex: 1;
     min-width: 0;
     display: flex;
     flex-direction: column;
     justify-content: center;
+    gap: var(--space-0_5);
   }
   .title-row {
     display: flex;
     align-items: center;
     gap: var(--space-2);
-    margin-bottom: var(--space-0_5);
     min-width: 0;
   }
   .title {

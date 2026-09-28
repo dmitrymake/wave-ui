@@ -109,9 +109,10 @@
           : ""}
       >
         {#if headerData.kind === "favorites"}
-          <!-- .header-icon-wrap: the app's header-emblem role (queue, playlist).
-               This view had its own copy at 100%/40px. -->
-          <div class="header-icon-wrap">{@html ICONS.HEART_FILLED}</div>
+          <!-- .icon-wrap: the app's one emblem role (the card glyph, and the
+               queue + playlist headers). This view had its own copy at
+               100%/40px, then a 40% .header-icon-wrap of its own. -->
+          <div class="icon-wrap">{@html ICONS.HEART_FILLED}</div>
         {:else}
           <ImageLoader
             src={headerData.cover || headerImage || ""}

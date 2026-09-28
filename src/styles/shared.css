@@ -286,17 +286,16 @@ body[data-theme="gruvbox"]:is(
    src/components/ui/Button.svelte — the legacy .btn-primary / .btn-secondary /
    .btn-action rules are gone. */
 
-/* --- Header Actions Container --- */
-.header-actions {
-  display: flex;
-  gap: var(--space-3);
-  align-items: center;
-}
-
+/* --- Badges --- */
 .meta-badges {
   display: flex;
   gap: var(--space-2);
-  margin: var(--space-0) 0 var(--space-2);
+  /* No bottom margin: the four views that print a badge row all put it inside
+     .header-text-group, and the gap to whatever follows belongs to the header
+     (`.header-text-group + .header-actions` in MusicViews.css). A loaded album
+     has this row, an empty playlist renders it 0x0, and the buttons used to sit
+     8px or 16px up depending on which. */
+  margin: var(--space-0);
   /* Badges are nowrap; without this a long one ("12 hr 34 min") pushed the
      others out of the row instead of shrinking. */
   min-width: 0;
@@ -338,14 +337,4 @@ body[data-theme="gruvbox"]:is(
   border: 1px solid var(--c-border);
   color: var(--c-text-primary);
   opacity: 0.9;
-}
-
-/* --- Responsive Utils --- */
-@media (max-width: 768px) {
-  .header-actions {
-    justify-content: flex-start;
-    flex-wrap: wrap;
-    gap: var(--space-2);
-    width: 100%;
-  }
 }

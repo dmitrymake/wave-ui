@@ -334,7 +334,7 @@
         <div class="content-padded">
           <div class="view-header">
             <div class="header-art" style={resolveHeaderStyle((currentView.data as { name?: string; colorVar?: string; color?: string }) ?? null)}>
-              <div class="header-icon-wrap">
+              <div class="icon-wrap">
                 {@html isFavPlaylist ? ICONS.HEART_FILLED : ICONS.PLAYLISTS}
               </div>
             </div>
@@ -444,6 +444,10 @@
 <style>
 
 
+  /* Hand-rolled because it also holds a spinner (see the global field in
+     MusicViews.css for the shared shape). The 12px between the glyph and the
+     text is the field's own `gap` now — a local `margin-right` here used to
+     stack on top of it. */
   .search-input-container {
     display: flex;
     align-items: center;
@@ -451,6 +455,13 @@
     border: var(--border-default);
     border-radius: var(--radius-md);
     padding: var(--space-2) var(--space-3);
+    /* Its own gap, because this is not the shared 48px field: 8px is the
+       Pi-frozen value, 12px is what every other field in the app uses and what
+       this one gets on a phone (below). One owner either way — the container. */
+    gap: var(--space-2);
+    /* 20px is the Pi-frozen value: the global field's 24px is a phone-only
+       change (see the block at the end of this file) because the screen is
+       exactly 800px wide and 4px there moves its grid. */
     margin-bottom: var(--space-5);
     width: 100%;
     box-sizing: border-box;
@@ -460,7 +471,6 @@
     align-items: center;
     justify-content: center;
     color: var(--c-text-muted);
-    margin-right: var(--space-2);
     flex-shrink: 0;
   }
   .search-icon :global(svg) {
@@ -495,6 +505,14 @@
     color: var(--c-text-primary);
   }
 
-
-
+  /* ---- Phone only: 800px would match the Pi screen and move its grid. ----
+     The gap between the search field and the first row of cards is the GROUP
+     gap (24px) on every other screen; this hand-rolled field still used 20px,
+     so the grid jumped 4px when switching between tabs. */
+  @media (max-width: 768px) {
+    .search-input-container {
+      gap: var(--space-3);
+      margin-bottom: var(--space-6);
+    }
+  }
 </style>

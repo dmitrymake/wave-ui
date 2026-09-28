@@ -88,7 +88,10 @@
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    gap: var(--space-2);
+    /* No gap here: the label and the glyph inside a button are children of
+       .btn__content, so that is the one box that owns the 8px between them.
+       Two owners for one gap means the number can be right in one and wrong in
+       the other. */
     white-space: nowrap;
     box-sizing: border-box;
     border: var(--border-width-thin) solid transparent;
@@ -185,7 +188,9 @@
     cursor: default;
   }
 
-  /* ---- Layout ---- */
+  /* ---- Layout ----
+     The 8px between a button's label and its glyph — one owner, the box that
+     actually holds them. */
   .btn__content {
     display: inline-flex;
     align-items: center;

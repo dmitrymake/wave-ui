@@ -274,17 +274,27 @@
   }
   .progress-bar.radio { cursor: default; opacity: var(--opacity-hidden); pointer-events: none; }
 
+  /* The rail is a hairline that sits on ONE line: the 1px below the dock's top
+     edge, which is also where the knob's centre is and where the hovered 4px
+     bar grows around. It used to be three numbers for that one line — top 6px
+     at 2px tall, top 5px at 4px tall, and a -7px knob — which is why the
+     numbers drifted apart whenever the bar's thickness changed. Centred in its
+     own hit-area instead, the thickness is the only number left. */
   .rail {
-    position: absolute; left: var(--space-0); width: 100%; top: var(--space-2xs);
-    height: var(--space-0_5); background: var(--c-border); border-radius: var(--radius-full);
+    position: absolute; left: var(--space-0); width: 100%;
+    top: var(--space-0); bottom: var(--space-0); height: var(--space-0_5);
+    margin-block: auto;
+    background: var(--c-border); border-radius: var(--radius-full);
     transition: height var(--dur-fast);
   }
   .fill {
-    position: absolute; left: var(--space-0); top: var(--space-2xs); height: var(--space-0_5);
-    width: 100%; transform-origin: left center; border-radius: var(--radius-full);
+    position: absolute; left: var(--space-0); width: 100%;
+    top: var(--space-0); bottom: var(--space-0); height: var(--space-0_5);
+    margin-block: auto;
+    transform-origin: left center; border-radius: var(--radius-full);
     background: var(--c-accent); pointer-events: none;
   }
-  .progress-bar:hover .rail, .progress-bar:hover .fill { height: var(--space-1); top: var(--space-5px); }
+  .progress-bar:hover .rail, .progress-bar:hover .fill { height: var(--space-1); }
   .knob {
     position: absolute; top: 50%; left: var(--space-0);
     width: var(--space-3); height: var(--space-3); border-radius: var(--radius-circle);
@@ -297,7 +307,7 @@
      `dragging` class is set from the drag state, not from hover. */
   .progress-bar.dragging .knob { transform: translate(-50%, -50%) scale(1.3); }
   .progress-bar.dragging .rail,
-  .progress-bar.dragging .fill { height: var(--space-1); top: var(--space-5px); }
+  .progress-bar.dragging .fill { height: var(--space-1); }
   /* The bar is a wide hit area, so the focus indicator is the knob itself: it
      is normally hover-only, so reveal and enlarge it for keyboard focus (fill
      only — no ring, same as every other control). */
@@ -306,10 +316,15 @@
     transform: translate(-50%, -50%) scale(1.6);
   }
 
+  /* The same chip as every .meta-tag in the app (4px cap, 8px sides, tight
+     leading), not a 3px nudge: the time labels under a rail and the tags under a
+     title are the same role and were two different boxes. */
   .tooltip {
-    position: absolute; top: calc(-1 * var(--space-28px));
+    position: absolute; top: calc(-1 * var(--space-7));
     background: var(--c-surface-active); color: var(--c-text-primary);
-    font-size: var(--text-xs); font-weight: var(--weight-bold); padding: var(--space-3px) var(--space-2);
+    font-size: var(--text-xs); font-weight: var(--weight-bold);
+    padding: var(--space-1) var(--space-2);
+    line-height: var(--leading-none);
     border-radius: var(--radius-sm); transform: translateX(-50%);
     pointer-events: none; box-shadow: var(--shadow-sm);
   }
@@ -334,8 +349,15 @@
   }
   .icon-fallback :global(svg) { width: var(--icon-size-lg); height: var(--icon-size-lg); opacity: var(--opacity-faint); }
 
-  .meta { display: flex; flex-direction: column; justify-content: center; overflow: hidden; }
-  .title-row { display: flex; align-items: center; gap: var(--space-2); margin-bottom: var(--space-0_5); }
+  /* Title and artist are one group: the 2px between them is the group's own gap
+     (a pair of lines on one thumb), owned by the column that stacks them rather
+     than by a margin on the title — one owner, and no chance of a second margin
+     joining it. */
+  .meta {
+    display: flex; flex-direction: column; justify-content: center;
+    gap: var(--space-0_5); overflow: hidden;
+  }
+  .title-row { display: flex; align-items: center; gap: var(--space-2); }
   .title { font-size: var(--text-lg); font-weight: var(--weight-medium); color: var(--c-text-primary); }
   .artist-row { display: flex; align-items: center; gap: var(--space-2); }
   .artist { font-size: var(--text-base); color: var(--c-text-secondary); }

@@ -239,7 +239,10 @@
     gap: var(--space-2);
     background: var(--c-error);
     color: var(--c-text-inverse);
-    padding: var(--space-7px) var(--space-4);
+    /* 8px cap, not a 7px nudge: the banner is a pill on the same scale as the
+       toast below it, and a 7px pad on 14px text is neither a step of the ladder
+       nor the height the toast's own padding produces. */
+    padding: var(--space-2) var(--space-4);
     border-radius: var(--radius-full);
     box-shadow: var(--shadow-md-popover);
     font-weight: var(--weight-semibold);

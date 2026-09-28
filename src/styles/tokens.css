@@ -25,31 +25,66 @@
 
 :root {
   /* ===========================================================================
-     1. SPACING — base 4px scale (--space-1 = 4px). Off-scale aliases keep
-        byte-parity with existing literals. Negative offsets via
-        calc(-1 * var(--space-*)); 'auto' stays literal (keyword, not a value).
+     1. SPACING — one 4px ladder, 1x = --space-1 = 4px, plus the five
+        non-multiples that survive a real audit (bottom of this block).
+
+        THE ROLES, in the order the UI nests them. Pick by role, not by "close
+        enough", and a gap must have exactly ONE owner (the flex parent), never
+        a margin on the child next to the parent's gap:
+          inset   --space-4  the page inset. .content-padded, .top-bar, .row
+          pair    --space-2  inside a group: title->value, icon->label
+          row     --space-3  between the parts of one block
+          group   --space-6  between two groups (.section-mb, card groups)
+          section --space-8  between two sections (settings)
+        Proximity carries meaning: a value sits CLOSER to its own label than to
+        the next group, so every group in the app uses pair/row INSIDE and
+        group/section BETWEEN. Where a 24px grid gutter already exists (the
+        card grids), a heading 8px above its row and 24-32px below it is the
+        same statement at grid scale.
+
+        Negative offsets use calc(-1 * var(--space-*)); 'auto' stays a literal
+        (a keyword, not a value). A border is not spacing: hairline rules use
+        --border-width-thin.
      ======================================================================== */
 
-  /* --- on-scale (multiples of 4px base) --- */
-  --space-0: 0;       /* zero padding/margin/inset/gap (~53 occ) */
-  --space-0_5: 2px;   /* 0.5x — micro spacing for badges/indicators */
-  --space-1: 4px;     /* 1x — very common */
-  --space-2: 8px;     /* 2x — gap:8px x14 */
-  --space-3: 12px;    /* 3x — gap:12px x11, margin-bottom:12px x8 */
-  --space-4: 16px;    /* 4x — canonical container inset; padding:0 16px x10 */
-  --space-5: 20px;    /* 5x — gap:20px x6 */
-  --space-6: 24px;    /* 6x — margin-bottom:24px x5 */
-  --space-8: 32px;    /* 8x — settings section spacing x5 */
-  --space-10: 40px;   /* 10x — empty-state padding x3; neg inset via calc */
+  /* --- the ladder (multiples of the 4px base) --- */
+  --space-0: 0;       /* zero padding/margin/inset/gap; `margin: 0` resets */
+  --space-1: 4px;     /* 1x — micro pair gaps, chip cap-to-edge, 4/8 rhythm */
+  --space-2: 8px;     /* 2x — the PAIR gap: title->value, icon->label, 4pt step */
+  --space-3: 12px;    /* 3x — inside one block: row gaps, cover->title, card pad */
+  --space-4: 16px;    /* 4x — THE INSET: .content-padded, .top-bar, .row, grid gap */
+  --space-5: 20px;    /* 5x — grid gutter (Pi), transport row gap */
+  --space-6: 24px;    /* 6x — the GROUP gap: .section-mb, search-field->content */
+  --space-7: 28px;    /* 7x — lift-off distances (SideMenu .sep, dock tooltip) */
+  --space-8: 32px;    /* 8x — the SECTION gap: settings .section, phone sheet */
+  --space-10: 40px;   /* 10x — empty-state padding; neg inset via calc */
 
-  /* --- off-scale (retained micro-steps; precision-tuned, kept on purpose) --- */
-  --space-px: 1px;    /* hairline / subpixel nudge (VolumeSlider) */
-  --space-2xs: 6px;   /* MiniPlayer progress-bar offsets / PlayModeButton dot — precision */
-  --space-3px: 3px;   /* tiny dots / tooltip vpad — precision */
-  --space-5px: 5px;   /* MiniPlayer progress hover offset — precision */
-  --space-7px: 7px;   /* VolumeSlider thumb centering (parity) */
-  --space-14px: 14px; /* MiniPlayer progress hit-area + menu rows */
-  --space-28px: 28px; /* 7x base; SideMenu / MiniPlayer fold handle */
+  /* --- the five non-multiples that survived the audit ----------------------
+     Each one below is the geometry of something, not a nudge: delete the thing
+     it describes and the value goes with it. Nothing else may use them, and a
+     new 2/3/5px need is a layout problem, not a token. --- */
+
+  --space-0_5: 2px;   /* 0.5x — the HAIRLINE, and only the hairline: the 2px
+                         progress rail's thickness, the cap-to-edge of a 10px
+                         chip (.card-badge, the settings .mono chip) and the
+                         2px between a title and its own second line
+                         (TrackRow .info, MiniPlayer .meta — a flex gap there,
+                         not a margin). */
+  --space-px: 1px;    /* the 1px inset a switch knob sits inside its track, and
+                         the 1px separator hairline — border geometry, not a gap */
+  --space-2xs: 6px;   /* 1.5x — HALF of something, twice: the MiniPlayer seek
+                         hit-area's overhang above the dock edge (a 14px bar
+                         around a 2px rail leaves 6px above and below) and the
+                         PlayModeButton dot's offset from the edge. */
+  --space-14px: 14px; /* 3.5x — the MiniPlayer seek hit-area (2px rail, 6px of
+                         daylight each side, deliberately overhanging the dock
+                         edge so a drag can start on the chrome) and the
+                         context/sort menu rows' horizontal inset. */
+  /* --space-3px (3px) and --space-5px (5px) are GONE. They existed only to
+     nudge the dock's progress rail (6/2 resting, 5/4 hovered — two values for
+     one optically centred line) and a tooltip's 3px cap. The rail now centres
+     itself in its own 14px hit-area, the tooltip wears the same 4px cap as every
+     other chip, and --space-28px folded into --space-7. */
 
   /* ===========================================================================
      2. TYPOGRAPHY — font sizes (T-shirt scale, 1:1 with existing px sizes).

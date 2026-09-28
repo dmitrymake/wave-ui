@@ -11,6 +11,12 @@
   name `.row` is taken: TrackRow's own row is a different role with the same
   name, and an unscoped `.row { gap }` would have added a gap to every track row
   in the app.
+
+  The rhythm, in the app's roles: a Card's own `gap` (12px, the ROW step) is the
+  only thing that separates the parts of a card, and the section's 32px
+  (--space-8, the SECTION step) separates two sections. A hint and a separator
+  are part of the block they sit in, so they add NO margin of their own — which
+  is what the phone block at the bottom of this file is for.
 */
 
 .settings .row {
@@ -25,7 +31,8 @@
   width: 100%;
 }
 
-/* Two controls that belong to one setting (a field and its unit button). */
+/* Two controls that belong to one setting (a field and its unit button): a
+   tighter step than the row's own 12px, because they are one value. */
 .settings .row-gap {
   display: flex;
   align-items: center;
@@ -44,15 +51,34 @@
   flex: 1;
 }
 
+/* A hint is the second line OF the row above it, so proximity says it belongs
+   closer to that row than to whatever comes next. */
 .settings .hint {
   font-size: var(--text-sm);
   color: var(--c-text-muted);
   margin: var(--space-1) 0 0;
 }
 
+/* A 1px rule is border geometry, not spacing: same value as
+   --border-width-thin, and like the switch knob's inset it says "inside", not
+   "further away". */
 .settings .separator {
   height: var(--space-px);
   background: var(--c-border);
   opacity: var(--opacity-faint);
   margin: var(--space-1) 0;
+}
+
+/* ---- Phone only --------------------------------------------------------
+   800px would match the Pi screen exactly and shift every card on it, so the
+   base values above are the Pi's. On a phone the Card's 12px gap owns the row
+   rhythm outright: a hint sat 16px below its own row but 12px above the next
+   one, which reads as belonging to the row BELOW it. */
+@media (max-width: 768px) {
+  .settings .hint {
+    margin: var(--space-0);
+  }
+  .settings .separator {
+    margin: var(--space-0);
+  }
 }

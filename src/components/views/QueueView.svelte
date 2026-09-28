@@ -135,7 +135,7 @@
       <div class="content-padded">
         <div class="view-header">
           <div class="header-art" style="background: var(--c-surface-active);">
-            <div class="header-icon-wrap">{@html ICONS.MENU}</div>
+            <div class="icon-wrap">{@html ICONS.MENU}</div>
           </div>
 
           <div class="header-info">
@@ -261,12 +261,16 @@
   /* ---- Phone only. The breakpoint is the codebase's --bp-md: 800px would match
      the Pi screen exactly and move its approved layout. ---- */
   @media (max-width: 768px) {
-    /* The phone header art is a hero square, and the queue has nothing to put in
-       one — its block is a grey box holding a hamburger glyph, and an empty
-       164px square is worse than no square. The Pi keeps its 64px anchor. */
-    .header-art {
-      display: none;
-    }
+    /* The art block is NOT hidden here any more, and that is the point: the
+       album, playlist and Yandex headers all carry a hero square on a phone
+       (218px at 390x900, capped by 30vh so a short screen gets 192px), and the
+       queue was the one header without one — so the same screen furniture had
+       two different shapes depending on the tab, and the list below started at
+       a different height on every one of them. The queue's art is a tinted
+       square with the queue glyph in it at the shared `.icon-wrap` size, exactly
+       like the other two. Cost, measured: the queue header is 344px instead of
+       136px on a 390x640 phone, so it shows two track rows instead of five —
+       which is what the playlist and album headers already cost there. */
 
     /* The red DAEMON ACTIVE badge and the red STOP STREAM pill already say the
        stream is live, so the title itself goes neutral: red eyebrow + red title

@@ -422,8 +422,13 @@
     transform: translate(-50%, -50%) scale(1.5);
   }
 
+  /* The hit area is a tap target, not the layout: the 4px rail sits centred in
+     its 40px, which leaves 18px of daylight, and the time labels are pulled up
+     through all but 8px of it. That used to be a flat -12px, which only lined up
+     for one bar height; derived from the bar it stays put. */
   .time-row {
-    display: flex; justify-content: space-between; margin-top: calc(-1 * var(--space-3));
+    display: flex; justify-content: space-between;
+    margin-top: calc((var(--space-1) - var(--control-h-lg)) / 2 + var(--space-2));
     font-size: var(--text-sm); color: var(--c-text-secondary); font-weight: var(--weight-medium); font-variant-numeric: tabular-nums;
   }
   /* Docked is the ONLY player on 800x480: same value as the full view, so the

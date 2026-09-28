@@ -106,8 +106,18 @@
 
 <style>
 
+  /* The gap between the field and the first row: the GROUP gap, the same 24px
+     the library, the search view and the (hand-rolled) playlists field use. It
+     was 20px here, so switching from Library to Radio moved the grid 4px. */
   .search-wrap {
     margin-bottom: var(--space-5);
+  }
+
+  /* ---- Phone only: 800px would match the Pi screen and move its grid. ---- */
+  @media (max-width: 768px) {
+    .search-wrap {
+      margin-bottom: var(--space-6);
+    }
   }
 
   .status-badge {

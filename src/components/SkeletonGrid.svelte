@@ -61,6 +61,10 @@
 </div>
 
 <style>
+  /* Mirrors the real card's own two margins — the cover's 12px (see
+     .card-img-container in MusicViews.css, whose margin is zeroed below) and the
+     title's 4px. The two must not be tuned separately: the grid is a placeholder
+     for a grid, and it has to be the same height when the real cards arrive. */
   .sk-title {
     margin: var(--space-3) 0 var(--space-1);
   }

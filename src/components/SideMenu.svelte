@@ -415,7 +415,7 @@
   .sep {
     height: var(--border-width-thin);
     background: var(--c-border);
-    margin: var(--space-3) var(--space-28px);
+    margin: var(--space-3) var(--space-7);
     flex-shrink: 0;
     opacity: var(--opacity-faint);
   }
@@ -484,6 +484,19 @@
     }
     .footer-text.hidden {
       opacity: var(--opacity-faint) !important;
+    }
+
+    /* The drawer is a screen of its own on a phone, so its insets are the
+       screen's insets: 16px like .content-padded and the track rows behind it,
+       not the 12px the 250px Pi sidebar uses. Nothing in the Pi's block changes. */
+    .header {
+      padding: var(--space-0) var(--space-4);
+    }
+    .nav-item {
+      margin: var(--space-0_5) var(--space-4);
+    }
+    .sep {
+      margin: var(--space-3) var(--space-8);
     }
   }
 
