@@ -99,8 +99,9 @@
 
   /* ---- Checked ---- */
   .toggle.is-checked {
-    background: var(--c-accent);
-    border-color: var(--c-accent);
+    /* AA: dark label on the accent-btn fill, like the primary Button. */
+    background: var(--c-accent-btn);
+    border-color: var(--c-accent-btn);
   }
   .toggle.is-checked .toggle__knob {
     /* travel = --switch-w - --switch-knob - 2 * 1px inset = 20px */
@@ -111,12 +112,8 @@
 
   /* ---- States ---- */
   .toggle:disabled {
-    opacity: var(--opacity-faint);
+    opacity: var(--opacity-muted);
     cursor: default;
-  }
-  .toggle:focus-visible {
-    outline: none;
-    box-shadow: var(--shadow-focus-ring);
   }
 
   @media (prefers-reduced-motion: reduce) {

@@ -6,6 +6,8 @@ import {
   navigationStack,
   navigateTo,
   consumeRouteDataFor,
+  assignHash,
+  isOwnHashAssignment,
   resetNavigation,
   updateTopEntry,
   isSameNavEntry,
@@ -15,6 +17,7 @@ import {
 
 beforeEach(() => {
   resetNavigation();
+  window.location.hash = "";
 });
 
 describe("pending queue (no clobber on fast navigations)", () => {
@@ -69,7 +72,20 @@ describe("navIdentityKey", () => {
       navIdentityKey("yandex_artist_details", { id: "1", title: "Artist" }),
     );
   });
-  it("treats view names and mode names identically for the same content", () => {
+  it("treats a header-merged top entry as the same view (no duplicate push)", () => {
+    // After loadArtistData merges {name, cover, ...} into the top entry,
+    // re-navigating to the same artist must dedup instead of pushing again.
+    expect(
+      navIdentityKey("yandex_artist_details", {
+        id: "1",
+        title: "Detailed",
+        name: "Detailed",
+        cover: "c",
+        description: "d",
+      }),
+    ).toBe(navIdentityKey("yandex_artist_details", { id: "1", title: "Artist" }));
+  });
+  it("ignores non-identity fields within and across view/mode namespaces", () => {
     // The router matches on view names, YandexView on mode names — both must
     // agree, otherwise header merges retrigger loads in a loop.
     expect(navIdentityKey("artist_details", { id: "1", title: "Real" })).toBe(
@@ -103,6 +119,26 @@ describe("navIdentityKey", () => {
   });
 });
 
+describe("assignHash / isOwnHashAssignment (popstate vs hashchange)", () => {
+  it("recognizes our own assignment so popstate can skip it", () => {
+    assignHash("/albums");
+    expect(window.location.hash).toBe("#/albums");
+    expect(isOwnHashAssignment()).toBe(true);
+  });
+
+  it("reports a foreign hash as a genuine traversal", () => {
+    assignHash("/albums");
+    window.location.hash = "/artists";
+    expect(isOwnHashAssignment()).toBe(false);
+  });
+
+  it("normalizes a missing leading #", () => {
+    assignHash("albums");
+    expect(window.location.hash).toBe("#albums");
+    expect(isOwnHashAssignment()).toBe(true);
+  });
+});
+
 describe("consumeRouteDataFor (identity-matched consume)", () => {
   it("skips stale search payloads for an artist route (the reported bug)", () => {
     // Search keystrokes use replaceState (no hashchange), so their payloads sit
@@ -126,6 +162,7 @@ describe("consumeRouteDataFor (identity-matched consume)", () => {
 
   it("prefers the newest entry with the same identity", () => {
     navigateTo("yandex_artist_details", { id: "1", title: "First" });
+    navigateTo("yandex_artist_details", { id: "2", title: "Other" });
     navigateTo("yandex_artist_details", { id: "1", title: "Second" });
     const data = consumeRouteDataFor("yandex_artist_details", { id: "1", title: "Artist" });
     expect(data).toEqual({ id: "1", title: "Second" });

@@ -25,10 +25,11 @@ import {
   closeContextMenu,
 } from "../../stores/ui.js";
 import type { Track } from "../../types";
+import type { EventWithDetail } from "../../stores/ui.js";
 
 // Cast partial test data
 const asTrack = (obj: Partial<Track>) => obj as Track;
-const asEvent = (obj: Record<string, unknown>) => obj as any;
+const asEvent = (obj: Record<string, unknown>) => obj as unknown as EventWithDetail;
 
 describe("showToast / toastMessage", () => {
   beforeEach(() => {

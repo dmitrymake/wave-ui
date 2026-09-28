@@ -111,6 +111,9 @@
   }
 
   function handleKeyDown(e: KeyboardEvent) {
+    // Ignore keys from nested controls (artist/menu/like buttons bubble here);
+    // without this, Enter on a child fires both its action and row playback.
+    if ((e.target as HTMLElement | null)?.closest?.("button, a, input, [role='slider']")) return;
     if (e.key === "Enter" || e.key === " ") {
       e.preventDefault();
       if (!isExactActive) onplay?.();
@@ -186,7 +189,7 @@
       {#if track.title}
         <div class="title text-ellipsis" title={track.title}>{track.title}</div>
       {:else if track.file && !isStreamTrack}
-        <div class="title text-ellipsis">{track.file.split("/").pop()}</div>
+        <div class="title text-ellipsis" title={track.file.split("/").pop()}>{track.file.split("/").pop()}</div>
       {:else}
         <Skeleton width="60%" height="15px" radius="4px" />
       {/if}
@@ -199,13 +202,14 @@
       {#if !isRadio || isStreamTrack}
         <button
           class="artist text-ellipsis link"
+          title={track.artist}
           onclick={handleArtistClick}
           aria-label={`Go to artist ${track.artist}`}
         >
           {track.artist}
         </button>
       {:else}
-        <div class="artist text-ellipsis">
+        <div class="artist text-ellipsis" title={track.artist}>
           {track.artist}
         </div>
       {/if}
@@ -263,11 +267,9 @@
   }
   .row:hover { background: var(--c-surface-hover); }
   .row.active { background: var(--c-surface-active); }
-  .row:focus-visible {
-    outline: var(--border-width-thick) solid transparent;
-    outline-offset: -2px;
-    box-shadow: var(--shadow-focus-ring);
-  }
+  /* Touchscreen: :hover never fires, so a tap on a row had no feedback until
+     MPD answered 200-500ms later. */
+  .row:active { background: var(--c-surface-active); }
 
   .row.striped::before {
     content: "";
@@ -310,19 +312,15 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    width: 32px;
-    height: 32px;
+    /* 44px: the handle is the ONLY way to reorder on a touchscreen. */
+    width: var(--control-h-lg);
+    height: var(--control-h-lg);
     background: none;
     border: none;
     padding: 0;
     border-radius: var(--radius-sm);
   }
   .drag-handle:active { cursor: grabbing; color: var(--c-text-primary); }
-  .drag-handle:focus-visible {
-    outline: var(--border-width-thick) solid transparent;
-    outline-offset: 0;
-    box-shadow: var(--shadow-focus-ring);
-  }
 
   .icon-small {
     width: var(--icon-size-xs);
@@ -361,7 +359,7 @@
     color: var(--c-text-primary);
     line-height: var(--leading-snug);
   }
-  .active .title { color: var(--c-accent); }
+  .active .title { color: var(--c-accent-btn); }
 
   .artist {
     font-size: var(--text-base);
@@ -374,16 +372,19 @@
     text-align: left;
     font-family: inherit;
   }
+  /* The artist name is a text button, so its focus plate is a chip with real
+     padding — negative margins keep the row's two-line layout byte-identical
+     while giving the highlight a comfortable target instead of hugging the
+     glyphs. */
+  .artist.link {
+    border-radius: var(--radius-sm);
+    padding: var(--space-1) var(--space-2);
+    margin: calc(-1 * var(--space-1)) calc(-1 * var(--space-2));
+  }
   .artist.link:hover {
     text-decoration: underline;
     color: var(--c-text-primary);
     cursor: pointer;
-  }
-  .artist.link:focus-visible {
-    outline: var(--border-width-thick) solid transparent;
-    outline-offset: 1px;
-    box-shadow: var(--shadow-focus-ring);
-    border-radius: var(--radius-xs);
   }
 
   .right {
@@ -393,14 +394,27 @@
     gap: var(--space-2);
   }
   .small { padding: var(--space-5px); }
-  .small :global(svg) { width: var(--icon-size-sm); height: var(--icon-size-sm); }
+  .small :global(svg) {
+    width: var(--icon-size-sm);
+    height: var(--icon-size-sm);
+    stroke-width: var(--icon-stroke-width);
+  }
   .remove { color: var(--c-text-muted); }
-  .remove:hover { color: var(--c-accent); }
+  .remove:hover { color: var(--c-accent-btn); }
+  /* Timecode role: --text-sm / --weight-medium / tabular-nums, shared with the
+     player's time row. Was 14px/400 here, 12px/600 there, 10px/600 in the dock and
+     11px/700 in the tooltip — four values for one role. */
   .dur {
-    font-size: var(--text-base);
+    font-size: var(--text-sm);
+    font-weight: var(--weight-medium);
     color: var(--c-text-muted);
     font-variant-numeric: tabular-nums;
+    /* Fixed column so the title column never jitters between rows; min-width +
+       flex-shrink so a long M:SS (podcast, radio set-up) cannot grow the box and
+       squeeze the title — the number is unbreakable, so it would not shrink. */
     width: 28px;
+    min-width: 28px;
+    flex-shrink: 0;
     text-align: right;
   }
   .context-menu-btn { opacity: var(--opacity-muted); transition: opacity var(--dur-fast); }

@@ -66,7 +66,6 @@
   --text-4xl: 28px;     /* display — OFF-SCALE candidate (single, 24<->32) */
   --text-5xl: 32px;     /* display: SettingsView header */
   --text-6xl: 40px;     /* display-xl: hero numbers */
-  --text-7xl: 48px;     /* display-2xl: hero */
   --text-8xl: 60px;     /* display-3xl: empty-state icon — OFF-SCALE candidate */
 
   /* ===========================================================================
@@ -75,13 +74,11 @@
   --leading-none: 1;          /* icons / single-line numbers */
   --leading-snug: 1.15;       /* tight multiline: TrackRow (was 1.2) */
   --leading-normal: 1.4;      /* readable body (was 1.5) */
-  --leading-relaxed: 1.6;     /* airy body / long-form */
 
   /* ===========================================================================
      4. LETTER SPACING (tracking)
      ======================================================================== */
   --tracking-wide: 0.5px;  /* uppercase pills/badges */
-  --tracking-wider: 1px;   /* 10px uppercase micro-badges (RadioView) */
 
   /* ===========================================================================
      5. FONT WEIGHT — 'bold' normalized to 700 (visually identical)
@@ -128,7 +125,7 @@
         Color tokens live in theme.ts; these resolve at runtime per theme.
      ======================================================================== */
   --border-default: var(--border-width-thin) solid var(--c-border);
-  --border-default-dim: var(--border-width-thin) solid var(--c-border-dim);
+  --border-default-dim: var(--border-width-thin) solid var(--c-border);
   --border-dashed: var(--border-width-thick) dashed var(--c-border-dashed);
 
   /* ===========================================================================
@@ -165,12 +162,10 @@
      11. Z-INDEX — global bands + a small local scale. Full set defined here
          (shared.css :root was missing sidebar/menu/context-menu).
      ======================================================================== */
-  --z-bg: -1;             /* background blur/overlay layers (main.css); -2 via separate context */
   --z-base: 1;            /* base local stacking */
   --z-above: 2;           /* small local step (intra-component) */
   --z-content: 3;         /* local content layers 3-5 collapse here */
   --z-overlay-local: 10;  /* local overlay (RadioView/PlaylistGrid) */
-  --z-miniplayer: 100;    /* MiniPlayer internal stack (base; 101/105/110 via offsets) */
   --z-sidebar: 999;       /* was theme.ts-only — added here */
   --z-dock: 1000;
   --z-modal: 2000;
@@ -252,8 +247,8 @@
      ======================================================================== */
   --opacity-hidden: 0;    /* enter/exit hidden (10x) */
   --opacity-ghost: 0.3;   /* faint bg/skeletons; 0.1/0.2/0.4 OFF-SCALE candidates */
-  --opacity-faint: 0.5;   /* disabled/dim (13x) */
-  --opacity-muted: 0.6;   /* secondary text/icons (9x); matches :disabled .6 */
+  --opacity-faint: 0.5;   /* dimmed text/icons and decorative fills */
+  --opacity-muted: 0.6;   /* THE disabled strength (every :disabled rule) + secondary text/icons */
   --opacity-dim: 0.7;     /* muted (6x) */
   --opacity-strong: 0.8;  /* near-opaque overlays; 0.85/0.9/0.95 OFF-SCALE candidates */
   --opacity-visible: 1;   /* shown state (13x) */
@@ -266,13 +261,13 @@
   --icon-stroke-width: 1.5px;
 
   /* shell & list geometry (single source; values == current literals, 0px shift) */
-  --row-h: 64px;              /* TrackRow / BaseList skeleton row height */
+  --row-h: 56px;              /* TrackRow / BaseList skeleton row height */
   --thumb-sm: 40px;          /* TrackRow / docked mini thumb */
   --thumb-md: 48px;          /* MiniPlayer compact thumb */
   --thumb-lg: 64px;          /* MiniPlayer thumb */
   --sidebar-w: 250px;        /* SideMenu expanded */
   --sidebar-w-collapsed: 80px; /* SideMenu collapsed */
-  --dock-w: 280px;           /* docked FullPlayer / sidebar drawer */
+  --dock-w: 264px;           /* docked FullPlayer / sidebar drawer */
 
   /* ===========================================================================
      19. CONTROL TYPOGRAPHY (semantic aliases)

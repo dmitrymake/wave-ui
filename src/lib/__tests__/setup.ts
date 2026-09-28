@@ -38,6 +38,32 @@ if (typeof Element !== "undefined" && typeof Element.prototype.animate !== "func
   };
 }
 
+// jsdom here exposes `window` but not `localStorage` (`typeof localStorage ===
+// "undefined"`), while the settings stores read and write it on import. The
+// stores guard every access with try/catch, the tests could not — so install a
+// minimal in-memory Storage in the shared setup instead of patching each store.
+if (typeof globalThis.localStorage === "undefined") {
+  const items = new Map<string, string>();
+  const stub: Storage = {
+    get length() {
+      return items.size;
+    },
+    key: (index) => [...items.keys()][index] ?? null,
+    getItem: (key) => items.get(key) ?? null,
+    setItem: (key, value) => void items.set(key, String(value)),
+    removeItem: (key) => void items.delete(key),
+    clear: () => items.clear(),
+  };
+  for (const target of [globalThis, typeof window !== "undefined" ? window : null]) {
+    if (!target) continue;
+    Object.defineProperty(target, "localStorage", {
+      value: stub,
+      configurable: true,
+      writable: true,
+    });
+  }
+}
+
 // `globals: true` makes the svelteTesting() plugin skip its own auto-cleanup, so
 // unmount rendered components after every test to keep the jsdom tree isolated.
 afterEach(() => {

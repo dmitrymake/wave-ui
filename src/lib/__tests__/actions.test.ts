@@ -137,18 +137,62 @@ describe("longpress action", () => {
     expect(handler).toHaveBeenCalledTimes(1);
   });
 
-  it("uses default duration of 2000ms", () => {
+  it("uses a 600ms default duration", () => {
     const handler = vi.fn();
     node.addEventListener("longpress", handler);
 
     action = longpress(node);
 
     node.dispatchEvent(new MouseEvent("mousedown", { button: 0 }));
-    vi.advanceTimersByTime(1999);
+    vi.advanceTimersByTime(599);
     expect(handler).not.toHaveBeenCalled();
 
     vi.advanceTimersByTime(1);
     expect(handler).toHaveBeenCalledTimes(1);
+  });
+
+  it("swallows the click the browser synthesizes after a long press", () => {
+    // Regression: on a touchscreen, lifting the finger after a long press also
+    // fired a click, which played the track (or closed the menu that had just
+    // opened) on top of the long-press action.
+    const longpressHandler = vi.fn();
+    const clickHandler = vi.fn();
+    node.addEventListener("longpress", longpressHandler);
+    node.addEventListener("click", clickHandler);
+
+    action = longpress(node, 500);
+
+    node.dispatchEvent(new MouseEvent("mousedown", { button: 0 }));
+    vi.advanceTimersByTime(500);
+    expect(longpressHandler).toHaveBeenCalledTimes(1);
+
+    node.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    expect(clickHandler).not.toHaveBeenCalled();
+  });
+
+  it("does not swallow an ordinary click", () => {
+    const clickHandler = vi.fn();
+    node.addEventListener("click", clickHandler);
+
+    action = longpress(node, 500);
+
+    node.dispatchEvent(new MouseEvent("mousedown", { button: 0 }));
+    node.dispatchEvent(new MouseEvent("mouseup"));
+    node.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    expect(clickHandler).toHaveBeenCalledTimes(1);
+  });
+
+  it("lets the next click through after a long press was swallowed", () => {
+    const clickHandler = vi.fn();
+    node.addEventListener("click", clickHandler);
+
+    action = longpress(node, 500);
+
+    node.dispatchEvent(new MouseEvent("mousedown", { button: 0 }));
+    vi.advanceTimersByTime(500);
+    node.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    node.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    expect(clickHandler).toHaveBeenCalledTimes(1);
   });
 
   it("cleans up listeners on destroy", () => {

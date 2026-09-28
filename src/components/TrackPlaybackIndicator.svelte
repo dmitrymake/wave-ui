@@ -3,6 +3,10 @@
 <script lang="ts">
   import { ICONS } from "../lib/icons";
 
+  // Coarse pointer = touchscreen: there is no hover state to react to, so the
+  // glyph has to come from the row's own state instead.
+  const hasHover = window.matchMedia?.("(hover: hover)")?.matches ?? true;
+
   interface Props {
     index: number;
     isExactActive?: boolean;
@@ -13,13 +17,22 @@
 
   let { index, isExactActive = false, isPlaying = false, isHovering = false, onaction }: Props = $props();
 
-  let showPause = $derived(isExactActive && isPlaying && isHovering);
-  let showEq = $derived(isExactActive && isPlaying && !isHovering);
+  // On a touchscreen :hover never fires, so the play/pause glyph swapped only
+  // for a mouse user. Hover still wins when it happens; otherwise the row's own
+  // state decides — the current track always shows what tapping it will do.
+  let showPause = $derived(isExactActive && isPlaying && (isHovering || !hasHover));
+  let showEq = $derived(isExactActive && isPlaying && !showPause);
   let showStatic = $derived(isExactActive && !isPlaying && !isHovering);
   let showPlay = $derived(isHovering && !showPause);
+  let isActivePlaying = $derived(isExactActive && isPlaying);
 </script>
 
-<button class="num-box" onclick={onaction}>
+<button
+  class="num-box"
+  onclick={onaction}
+  aria-label={isActivePlaying ? "Pause" : `Play track ${index + 1}`}
+  aria-current={isExactActive}
+>
   {#if showEq}
     <div class="eq-anim">
       <span class="bar b1"></span>
@@ -39,7 +52,11 @@
 
 <style>
   .num-box {
-    width: 24px;
+    /* 28px fits three digits at --text-base tabular-nums; 24px overflowed onto
+       the cover once a playlist passed 99 tracks. min-width keeps the hit area
+       for two-digit numbers without shifting the row. */
+    width: 28px;
+    min-width: 28px;
     height: 24px;
     display: flex;
     justify-content: center;
@@ -49,6 +66,8 @@
     padding: var(--space-0);
     cursor: pointer;
     flex-shrink: 0;
+    /* Tappable on its own: circle, like every other icon button. */
+    border-radius: var(--radius-circle);
   }
   .num {
     font-size: var(--text-base);
@@ -56,7 +75,7 @@
     font-variant-numeric: tabular-nums;
   }
   .num.active {
-    color: var(--c-accent);
+    color: var(--c-accent-btn);
     font-weight: var(--weight-bold);
   }
 
@@ -67,7 +86,7 @@
     fill: var(--c-text-primary);
   }
   .icon-small :global(svg) { width: 100%; height: 100%; }
-  .icon-small.accent { color: var(--c-accent); }
+  .icon-small.accent { color: var(--c-accent-btn); }
 
   .eq-anim {
     display: flex;
@@ -88,5 +107,8 @@
   @keyframes eq {
     0%, 100% { height: 3px; }
     50% { height: 12px; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .b1, .b2, .b3 { animation: none; }
   }
 </style>

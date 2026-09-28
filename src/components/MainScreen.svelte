@@ -4,11 +4,13 @@
   import { onMount } from "svelte";
   import { fly } from "svelte/transition";
   import { ICONS } from "../lib/icons";
+  import { Router } from "../lib/router";
   import {
     activeMenuTab,
     navigationStack,
     navigateBack,
     handleBrowserBack,
+    isOwnHashAssignment,
     isFullPlayerOpen,
     toastMessage,
     connectionStatus,
@@ -33,12 +35,23 @@
   // playback control is unavailable and that we are reconnecting.
   let isOffline = $derived($connectionStatus !== "Connected");
 
+  // In-app and browser Back pop the stack; the hash is then re-pointed at the
+  // new top (replace, no new entry) so refresh/deep-link lands where the UI is.
+  function goBack(): void {
+    navigateBack();
+    Router.syncTopToUrl();
+  }
+
   onMount(() => {
     window.history.replaceState({ depth: $navigationStack.length }, "", "");
     const onPopState = () => {
+      // Fragment navigations fire popstate too: skip ours (hashchange owns
+      // them) and only treat genuine traversals as Back.
+      if (isOwnHashAssignment()) return;
       // Single owner of Back: Router stack. Overlays (ContextMenu) close
       // themselves via their own popstate listener without flags.
       handleBrowserBack();
+      Router.syncTopToUrl();
     };
     window.addEventListener("popstate", onPopState);
     return () => window.removeEventListener("popstate", onPopState);
@@ -77,7 +90,7 @@
         </button>
 
         {#if $navigationStack.length > 1}
-          <button class="back-btn" onclick={navigateBack}>
+          <button class="back-btn" onclick={goBack}>
             <span class="icon-inline">{@html ICONS.BACK}</span> Back
           </button>
         {:else}
@@ -166,7 +179,10 @@
     content: "";
     position: absolute;
     inset: var(--space-0);
-    background: #000;
+    /* Was #000 — a hardcoded pure-black dim, so in gruvbox the scrim was colder
+       than the warm surface it dimmed. The themed black at the same opacity is
+       identical in the default theme. */
+    background: var(--c-black-90);
     opacity: var(--opacity-hidden);
     pointer-events: none;
     z-index: calc(var(--z-modal) + 1);
@@ -286,6 +302,8 @@
     border: none;
     color: var(--c-text-primary);
     cursor: pointer;
+    /* Icon-only control: circle, like every other icon button in the app. */
+    border-radius: var(--radius-circle);
   }
   .hamburger-btn :global(svg) {
     width: var(--icon-size-lg);
@@ -295,14 +313,17 @@
   .back-btn {
     background: none;
     border: none;
-    color: var(--c-accent);
+    color: var(--c-accent-btn);
     font-size: var(--text-lg);
     font-weight: var(--weight-semibold);
     cursor: pointer;
     display: flex;
     align-items: center;
     gap: var(--space-2);
-    padding: var(--space-0);
+    padding: var(--space-1) var(--space-2);
+    margin: calc(-1 * var(--space-1)) calc(-1 * var(--space-2));
+    /* Labeled control: pill, like the Button primitive. */
+    border-radius: var(--radius-pill);
     line-height: var(--leading-none);
   }
 

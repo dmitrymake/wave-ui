@@ -9,6 +9,7 @@
     isSyncingLibrary,
     isSidebarCollapsed,
     resetNavigation,
+    assignHash,
   } from "../lib/store";
   import { isYandexEnabled } from "../lib/stores/yandex";
   import { ApiActions } from "../lib/api";
@@ -44,7 +45,7 @@
       activeMenuTab.set(id);
       resetNavigation();
     } else {
-      window.location.hash = targetHash;
+      assignHash(targetHash);
     }
     onClose?.();
   }
@@ -52,7 +53,7 @@
   async function handleSync() {
     if ($isSyncingLibrary) return;
     await ApiActions.syncLibrary();
-    window.location.hash = "/artists";
+    assignHash("/artists");
   }
 
   function toggleCollapse() {
@@ -130,12 +131,13 @@
     </button>
   </div>
 
-  <div class="scroll-area custom-scrollbar">
+  <div class="scroll-area">
     <nav>
       {#each visibleMenuItems as item (item.id)}
         <button
           class="nav-item"
           class:active={$activeMenuTab === item.id}
+          aria-current={$activeMenuTab === item.id ? "page" : undefined}
           title={item.label}
           onclick={() => switchTab(item.id)}
         >
@@ -149,6 +151,7 @@
       <button
         class="nav-item"
         class:active={$activeMenuTab === "search"}
+        aria-current={$activeMenuTab === "search" ? "page" : undefined}
         title="Search"
         onclick={() => switchTab("search")}
       >
@@ -178,6 +181,7 @@
       <button
         class="nav-item"
         class:active={$activeMenuTab === "settings"}
+        aria-current={$activeMenuTab === "settings" ? "page" : undefined}
         title="Settings"
         onclick={() => switchTab("settings")}
       >
@@ -356,17 +360,30 @@
 
     padding: var(--space-0) var(--space-4);
 
+    /* Text the finger slides over on every scroll — a selection highlight here
+       paints a white block over the menu. */
+    user-select: none;
+    -webkit-user-select: none;
+
     transition:
       background var(--dur-fast),
-      color var(--dur-fast);
+      color var(--dur-fast),
+      transform var(--dur-instant);
+  }
+  /* Press feedback: on a touchscreen there is no :hover, so without this a tap
+     on a menu item gave no feedback at all. */
+  .nav-item:active {
+    transform: scale(0.97);
   }
   .nav-item:hover {
     background: var(--c-surface-hover);
     color: var(--c-text-primary);
   }
+  /* AA: dark label on the accent-btn fill (5.53:1 default / 5.84:1 gruvbox).
+     White on --c-accent was 3.79 / 3.41 — below AA in both themes. */
   .nav-item.active {
-    background: var(--c-accent);
-    color: var(--c-text-primary);
+    background: var(--c-accent-btn);
+    color: var(--c-text-inverse);
   }
 
   .icon {
@@ -425,16 +442,7 @@
     opacity: var(--opacity-hidden);
   }
 
-  .custom-scrollbar::-webkit-scrollbar {
-    width: var(--space-1);
-  }
-  .custom-scrollbar::-webkit-scrollbar-thumb {
-    background: var(--c-border);
-    border-radius: var(--radius-xs);
-  }
-  .custom-scrollbar::-webkit-scrollbar-track {
-    background: transparent;
-  }
+  /* Scrollbars are styled once, globally, in src/styles/shared.css. */
 
   @media (max-width: 768px) and (orientation: portrait) {
     .side-menu {

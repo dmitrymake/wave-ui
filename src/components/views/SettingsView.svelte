@@ -17,7 +17,9 @@
 
 <div class="view-container scrollable" in:fade={{ duration: 200 }}>
   <div class="content-padded">
-    <h1 class="header-title big">Settings</h1>
+    <!-- No <h1>Settings</h1> here: the top bar already shows the current
+         section, and the duplicate heading cost a whole line of screen. The
+         per-section headers (Services / Alarm Clock / …) carry the structure. -->
 
     <ServicesSettings />
 
@@ -30,11 +32,3 @@
     <AboutSettings />
   </div>
 </div>
-
-<style>
-  .header-title.big {
-    font-size: var(--text-5xl);
-    margin-bottom: var(--space-6);
-    padding-left: var(--space-1);
-  }
-</style>

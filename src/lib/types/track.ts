@@ -92,7 +92,10 @@ export interface ModalState {
   message: string;
   confirmLabel: string;
   cancelLabel: string;
-  onConfirm: ((value?: string) => void) | null;
+  // May return a promise: an async confirm (save/clear queue) keeps the dialog
+  // open until it resolves instead of closing first and reporting the error on
+  // whatever screen the user landed on.
+  onConfirm: ((value?: string) => void | Promise<void>) | null;
   type: "confirm" | "prompt" | "alert" | "select";
   inputValue: string;
   placeholder: string;

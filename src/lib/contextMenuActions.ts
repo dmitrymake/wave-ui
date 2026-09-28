@@ -3,10 +3,12 @@
 import { PlayerActions } from "./playback/player";
 import { LibraryActions } from "./playback/library";
 import { toggleLike as toggleLikeForTrack } from "./playerHelpers";
-import { resolveSource, resolveSourceForTrack } from "./sources/trackSource";
+import { resolveSourceForTrack } from "./sources/trackSource";
 import {
   closeContextMenu,
   navigateTo,
+  activeMenuTab,
+  resetNavigation,
   activePlaylistTracks,
   showModal,
   showToast,
@@ -33,7 +35,11 @@ export function toggleLike(track: Track | null): void {
 
 export function goToAlbum(track: Track | null): void {
   // Local-library navigation only; a streaming-source track has no local album view.
+  // Switches the tab like TrackRow does — pushing a stack entry for a hidden tab
+  // leaves the screen unchanged and poisons Back.
   if (track && track.album && !resolveSourceForTrack(track)) {
+    activeMenuTab.set("albums");
+    resetNavigation();
     navigateTo("tracks_by_album", { name: track.album, artist: track.artist });
   }
   closeContextMenu();
@@ -41,6 +47,8 @@ export function goToAlbum(track: Track | null): void {
 
 export function goToArtist(track: Track | null): void {
   if (track && track.artist && !resolveSourceForTrack(track)) {
+    activeMenuTab.set("artists");
+    resetNavigation();
     navigateTo("albums_by_artist", { name: track.artist });
   }
   closeContextMenu();
@@ -129,7 +137,9 @@ export function playlistDelete(context: ContextMenuContext): void {
 export async function radioByTrack(track: Track | null): Promise<void> {
   try {
     if (track) {
-      await resolveSource(track.file)?.startRadioByTrack?.(track);
+      // Service tag first: list rows carry file:"" with the owner in `service`,
+      // so a raw file match would miss and Vibe would silently no-op.
+      await resolveSourceForTrack(track)?.startRadioByTrack?.(track);
     }
   } catch {
     showToast(MSG.RADIO_ERROR_STARTING, "error");
@@ -141,7 +151,7 @@ export async function radioByTrack(track: Track | null): Promise<void> {
 export async function radioByArtist(track: Track | null): Promise<void> {
   try {
     if (track) {
-      await resolveSource(track.file)?.startRadioByArtist?.(track);
+      await resolveSourceForTrack(track)?.startRadioByArtist?.(track);
     }
   } catch {
     showToast(MSG.RADIO_ERROR_STARTING, "error");

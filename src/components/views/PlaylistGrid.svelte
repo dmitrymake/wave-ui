@@ -54,6 +54,7 @@
         {#if !isFav}
           <button
             class="card-menu-btn"
+            aria-label="More actions for {playlist.name}"
             onclick={(e) => handleContext(e, playlist)}
           >
             {@html ICONS.DOTS}
@@ -63,7 +64,7 @@
           <span class="overlay-icon">{@html ICONS.PLAY}</span>
         </div>
       </div>
-      <div class="card-title">{playlist.name}</div>
+      <div class="card-title" title={playlist.name}>{playlist.name}</div>
       <div class="card-sub-row">
         <div class="card-sub">
           {playlist.lastModified
@@ -77,14 +78,12 @@
 
 <style>
 
-  .playlists-grid-override {
-    grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)) !important;
-    gap: var(--space-6) !important;
-  }
 
   .dashed-cover {
     border: var(--border-width-thick) dashed var(--c-border);
     background: transparent !important;
+    /* Same corners as the cover it stands in for. */
+    border-radius: var(--radius-md);
   }
 
   .icon-wrap {
@@ -129,12 +128,13 @@
   .card-menu-btn :global(svg) {
     width: var(--icon-size-xs);
     height: var(--icon-size-xs);
+    stroke-width: var(--icon-stroke-width);
   }
 
   @media (hover: none) {
     .card-menu-btn {
       opacity: var(--opacity-visible);
-      background: transparent;
+      background: var(--c-black-50);
     }
   }
   @media (max-width: 768px) {

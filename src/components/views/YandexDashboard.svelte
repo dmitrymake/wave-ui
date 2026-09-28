@@ -3,6 +3,7 @@
 <script lang="ts">
   import { ICONS } from "../../lib/icons";
   import ImageLoader from "../ImageLoader.svelte";
+  import SkeletonGrid from "../SkeletonGrid.svelte";
   import Skeleton from "../Skeleton.svelte";
   import type { YandexPlaylist } from "../../lib/types/yandex";
 
@@ -21,38 +22,8 @@
 </script>
 
 {#if isLoading && vibeCards.length === 0}
-  <h2 class="header-label"><Skeleton width="100px" height="20px" /></h2>
-  <div class="music-grid horizontal section-mb">
-    {#each Array(4) as _}
-      <div class="music-card">
-        <div class="card-img-container">
-          <Skeleton width="100%" height="100%" radius="8px" />
-        </div>
-        <div style="margin-bottom: 4px;">
-          <Skeleton width="80%" height="15px" radius="4px" />
-        </div>
-        <div>
-          <Skeleton width="40%" height="13px" radius="4px" style="opacity: 0.6" />
-        </div>
-      </div>
-    {/each}
-  </div>
-  <h2 class="header-label"><Skeleton width="150px" height="20px" /></h2>
-  <div class="music-grid horizontal section-mb">
-    {#each Array(4) as _}
-      <div class="music-card">
-        <div class="card-img-container">
-          <Skeleton width="100%" height="100%" radius="8px" />
-        </div>
-        <div style="margin-bottom: 4px;">
-          <Skeleton width="80%" height="15px" radius="4px" />
-        </div>
-        <div>
-          <Skeleton width="40%" height="13px" radius="4px" style="opacity: 0.6" />
-        </div>
-      </div>
-    {/each}
-  </div>
+  <SkeletonGrid count={4} layout="horizontal" skeletonCard={false} heading="Vibes" headingWidth="100px" subtitleWidth="40%" />
+  <SkeletonGrid count={4} layout="horizontal" skeletonCard={false} heading="Collection & Mixes" headingWidth="150px" subtitleWidth="40%" />
 {:else}
   <h2 class="header-label">Vibes</h2>
   <div
@@ -162,7 +133,7 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    color: white;
+    color: var(--c-text-primary);
   }
   .icon-wrap :global(svg) {
     width: 40px;

@@ -14,6 +14,10 @@
   let { compact = false, class: className = "" }: Props = $props();
 
   let currentMode = $derived(getPlayMode($status));
+  // 0 = off, 1 = shuffle, 2 = repeat.
+  let modeLabel = $derived(
+    currentMode === 2 ? "Repeat: on" : currentMode === 1 ? "Shuffle: on" : "Play mode: off",
+  );
 
   function toggle(e?: MouseEvent) {
     if (e) e.stopPropagation();
@@ -26,6 +30,8 @@
   class:active={currentMode > 0}
   class:compact
   onclick={toggle}
+  aria-label={modeLabel}
+  aria-pressed={currentMode > 0}
 >
   {#if currentMode === 2}
     {@html ICONS.REPEAT}
@@ -43,14 +49,16 @@
     padding: var(--icon-btn-pad-lg);
   }
   .mode-btn.active {
-    color: var(--c-accent);
+    color: var(--c-accent-btn);
   }
   .mode-btn:active { opacity: var(--opacity-dim); }
   .mode-btn :global(svg) { width: var(--icon-size-lg); height: var(--icon-size-lg); }
 
-  .compact { padding: var(--icon-btn-pad-sm); opacity: var(--opacity-dim); }
+  /* Compact == the docked rail on 800x480: padding-sm (6px) + a 20px glyph was
+     a 32px target, under the 44px minimum. */
+  .compact { padding: var(--icon-btn-pad); opacity: var(--opacity-dim); }
   .compact.active { opacity: var(--opacity-visible); }
-  .compact :global(svg) { width: var(--icon-size-md); height: var(--icon-size-md); }
+  .compact :global(svg) { width: var(--icon-size-lg); height: var(--icon-size-lg); }
 
   .dot {
     position: absolute;

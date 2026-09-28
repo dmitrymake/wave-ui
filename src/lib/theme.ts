@@ -59,19 +59,26 @@ export const THEMES: Theme[] = [
       "--c-surface-input": "#1a1a1a",
       "--c-surface-input-focus": "rgba(255, 255, 255, 0.1)",
       "--c-surface-button": "rgba(255, 255, 255, 0.1)",
-      "--c-surface-button-hover": "rgba(255, 255, 255, 0.1)",
+      "--c-surface-button-hover": "rgba(255, 255, 255, 0.2)",
+
+      /* --- 4b. KEYBOARD FOCUS --- */
+      /* Focus is a state, not an accent: one neutral gray plate for every
+         control in every theme. Solid (not alpha) so it reads the same over
+         cards, rows and menus alike, and light enough to clear the 3:1
+         non-text contrast that a focus indicator needs: #454545 was 1.8-2.2:1
+         against the surfaces it lands on. */
+      "--c-focus-fill": "#6a6a6a",
+      "--c-focus-line": "rgba(255, 255, 255, 0.55)",
 
       "--c-surface-drag-phantom": "#1a1a1a",
       "--c-surface-drag-land": "rgba(255, 255, 255, 0.1)",
 
       "--c-rail-bg": "rgba(255, 255, 255, 0.2)",
-      "--c-rail-bg-hover": "rgba(255, 255, 255, 0.3)",
 
       "--c-skeleton-base": "rgba(255, 255, 255, 0.1)",
 
       /* --- 5. BORDERS --- */
       "--c-border": "rgba(255, 255, 255, 0.1)",
-      "--c-border-dim": "rgba(255, 255, 255, 0.1)",
       "--c-border-bright": "rgba(255, 255, 255, 0.2)",
       "--c-border-dashed": "rgba(255, 255, 255, 0.2)",
       "--c-border-dashed-hover": "rgba(255, 255, 255, 0.5)",
@@ -88,7 +95,6 @@ export const THEMES: Theme[] = [
 
       /* --- 7. ICONS --- */
       "--c-icon-idle": "#9ca3af",
-      "--c-icon-hover": "#ffffff",
       "--c-icon-faint": "rgba(255, 255, 255, 0.5)",
       /* Theme-invariant tokens (icon stroke, layout, radius, z-index,
          transitions) moved to src/styles/tokens.css — only per-theme COLOR
@@ -131,7 +137,7 @@ export const THEMES: Theme[] = [
 
       /* --- 2. TEXT --- */
       "--c-text-primary": "#fbf1c7",
-      "--c-text-secondary": "#ebdbb2",
+      "--c-text-secondary": "#d5c4a1",
       /* fg4 (was #928374 = 4.02:1 on #282828 — failed AA-normal) -> #a89984 = 5.30:1 */
       "--c-text-muted": "#a89984",
       "--c-text-inverse": "#282828",
@@ -143,7 +149,7 @@ export const THEMES: Theme[] = [
       "--c-bg-card": "#3c3836",
       "--c-bg-placeholder": "#504945",
       "--c-bg-glass": "rgba(40, 40, 40, 0.98)",
-      "--c-bg-toast": "#32302f",
+      "--c-bg-toast": "#504945",
 
       "--c-heart": "#fb4934",
       /* was #cc241d = 2.69:1 on #282828 (fail). #fe5b4a = 4.78:1 (AA-normal). */
@@ -161,17 +167,23 @@ export const THEMES: Theme[] = [
       "--c-surface-button": "rgba(251, 241, 199, 0.1)",
       "--c-surface-button-hover": "rgba(251, 241, 199, 0.2)",
 
+      /* --- 4b. KEYBOARD FOCUS --- */
+      /* gruvbox gray-1: the lightest neutral that still clears 3:1 against
+         #3c3836 (the card surface) at 3.75:1. It needs the inverted label
+         declared in shared.css (body[data-theme="gruvbox"]) — on a plate this
+         light the cream text would be 3.4:1. */
+      "--c-focus-fill": "#a89d8d",
+      "--c-focus-line": "#a89984",
+
       "--c-surface-drag-phantom": "#504945",
       "--c-surface-drag-land": "rgba(251, 241, 199, 0.1)",
 
       "--c-rail-bg": "#504945",
-      "--c-rail-bg-hover": "#665c54",
 
       "--c-skeleton-base": "#3c3836",
 
       /* --- 5. BORDERS --- */
       "--c-border": "#504945",
-      "--c-border-dim": "#3c3836",
       "--c-border-bright": "#665c54",
       "--c-border-dashed": "rgba(168, 153, 132, 0.2)",
       "--c-border-dashed-hover": "rgba(168, 153, 132, 0.5)",
@@ -188,8 +200,7 @@ export const THEMES: Theme[] = [
 
       /* --- 7. ICONS --- */
       "--c-icon-idle": "#a89984",
-      "--c-icon-hover": "#fbf1c7",
-      "--c-icon-faint": "#504945",
+      "--c-icon-faint": "#928374",
       /* Theme-invariant tokens (icon stroke, layout, radius, z-index,
          transitions) moved to src/styles/tokens.css — only per-theme COLOR
          tokens remain here. gruvbox --radius-xl was 16px; unified to 20px in

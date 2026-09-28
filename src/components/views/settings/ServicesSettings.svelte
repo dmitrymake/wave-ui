@@ -1,6 +1,7 @@
 <!-- SPDX-License-Identifier: MIT -->
 <!-- Copyright (c) 2025 dmitrymake -->
 <script lang="ts">
+  import Card from "../../ui/Card.svelte";
   import { fade } from "svelte/transition";
   import { showToast } from "../../../lib/store";
   import { isYandexEnabled, yandexAuthStatus } from "../../../lib/stores/yandex";
@@ -55,7 +56,7 @@
   <div class="section-header">
     <span>Services</span>
   </div>
-  <div class="card">
+  <Card>
     <div class="row space-between">
       <span class="label-text">Enable Yandex Music (Beta)</span>
       <Toggle
@@ -129,7 +130,7 @@
         {/if}
       {/if}
     {/if}
-  </div>
+  </Card>
 </div>
 
 <style>
@@ -146,16 +147,6 @@
     color: var(--c-text-primary);
     margin-bottom: var(--space-3);
     padding-left: var(--space-1);
-  }
-
-  .card {
-    background: var(--c-bg-card);
-    border: var(--border-default);
-    border-radius: var(--radius-lg);
-    padding: var(--space-4);
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-3);
   }
 
   .row {

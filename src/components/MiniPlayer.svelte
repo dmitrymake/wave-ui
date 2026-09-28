@@ -59,10 +59,19 @@
   function handleBarKey(e: KeyboardEvent) {
     e.stopPropagation();
     if (isRadio) return;
-    if (e.key === "ArrowLeft" || e.key === "ArrowRight") {
+    const step = e.shiftKey ? 10 : 5;
+    if (e.key === "ArrowLeft" || e.key === "ArrowDown") {
       e.preventDefault();
-      const delta = e.key === "ArrowRight" ? 5 : -5;
-      seek(Math.max(0, Math.min(duration, elapsed + delta)));
+      seek(Math.max(0, elapsed - step));
+    } else if (e.key === "ArrowRight" || e.key === "ArrowUp") {
+      e.preventDefault();
+      seek(Math.min(duration, elapsed + step));
+    } else if (e.key === "Home") {
+      e.preventDefault();
+      seek(0);
+    } else if (e.key === "End") {
+      e.preventDefault();
+      seek(duration);
     }
   }
 
@@ -89,8 +98,12 @@
     if (!isControlEvent(e)) isFullPlayerOpen.set(true);
   }
 
-  function handleDockKey(e: KeyboardEvent) {
-    if (e.key === "Enter" && !isControlEvent(e)) isFullPlayerOpen.set(true);
+  function handleInfoKey(e: KeyboardEvent) {
+    if (isControlEvent(e)) return;
+    if (e.key === "Enter" || e.key === " ") {
+      e.preventDefault();
+      isFullPlayerOpen.set(true);
+    }
   }
 
   function handleLongPress(e: CustomEvent<{ originalEvent: Event }>) {
@@ -99,16 +112,16 @@
 </script>
 
 {#if !$isFullPlayerOpen}
+  <!-- role=group (not button): the dock contains focusable controls, so the
+       open action lives on the info block below instead of the whole dock. -->
   <div
     class="dock"
     transition:fade={{ duration: 220 }}
     onclick={handleDockOpen}
-    use:longpress={500}
+    use:longpress
     onlongpress={handleLongPress}
-    role="button"
-    tabindex="0"
-    onkeydown={handleDockKey}
-    aria-label="Open full player"
+    role="group"
+    aria-label="Now playing"
   >
     <div
       class="progress-shadow"
@@ -118,6 +131,7 @@
     <div
       class="progress-bar"
       class:radio={isRadio}
+      class:dragging={isDragging}
       bind:this={progressBar}
       onmouseenter={() => (isHoveringBar = true)}
       onmouseleave={() => (isHoveringBar = false)}
@@ -132,6 +146,7 @@
       aria-valuemin={0}
       aria-valuemax={100}
       aria-valuenow={Math.round(pct)}
+      aria-valuetext={isRadio ? "Live stream" : `${formatTime(elapsed)} of ${formatTime(duration)}`}
       tabindex="0"
     >
       <div class="rail"></div>
@@ -155,13 +170,23 @@
     </div>
 
     <div class="grid">
-      <div class="info">
+      <!-- Info block doubles as the full-player opener (keyboard: Enter/Space
+           anywhere except the nested menu button, guarded in handleInfoKey). -->
+      <!-- svelte-ignore a11y_no_noninteractive_tabindex, a11y_no_noninteractive_element_interactions -->
+      <div
+        class="info"
+        role="button"
+        tabindex="0"
+        aria-label={`Open full player: ${displayTitle} by ${displayArtist}`}
+        onclick={handleDockOpen}
+        onkeydown={handleInfoKey}
+      >
         <div
           class="art"
           in:receiveArt|global={{ key: "np-art" }}
           out:sendArt|global={{ key: "np-art" }}
         >
-          <ImageLoader src={artSrc} alt="art" radius="4px">
+          <ImageLoader src={artSrc} alt="" radius="4px">
             {#snippet fallback()}
               <div class="icon-fallback">
                 {@html isRadio ? ICONS.RADIO : ICONS.ALBUMS}
@@ -246,11 +271,12 @@
 
   .rail {
     position: absolute; left: var(--space-0); width: 100%; top: var(--space-2xs);
-    height: var(--space-0_5); background: var(--c-border); transition: height var(--dur-fast);
+    height: var(--space-0_5); background: var(--c-border); border-radius: var(--radius-full);
+    transition: height var(--dur-fast);
   }
   .fill {
     position: absolute; left: var(--space-0); top: var(--space-2xs); height: var(--space-0_5);
-    width: 100%; transform-origin: left center;
+    width: 100%; transform-origin: left center; border-radius: var(--radius-full);
     background: var(--c-accent); pointer-events: none;
   }
   .progress-bar:hover .rail, .progress-bar:hover .fill { height: var(--space-1); top: var(--space-5px); }
@@ -261,6 +287,19 @@
     box-shadow: var(--shadow-xs-strong);
   }
   .progress-bar:hover .knob { transform: translate(-50%, -50%) scale(1); }
+  /* :hover never fires on a touchscreen, so the knob (and the time tooltip)
+     stayed invisible while a finger dragged the bar — seeking blind. The
+     `dragging` class is set from the drag state, not from hover. */
+  .progress-bar.dragging .knob { transform: translate(-50%, -50%) scale(1.3); }
+  .progress-bar.dragging .rail,
+  .progress-bar.dragging .fill { height: var(--space-1); top: var(--space-5px); }
+  /* The bar is a wide hit area, so the focus indicator is the knob itself: it
+     is normally hover-only, so reveal and enlarge it for keyboard focus (fill
+     only — no ring, same as every other control). */
+  .progress-bar:focus-visible { outline: none; }
+  .progress-bar:focus-visible .knob {
+    transform: translate(-50%, -50%) scale(1.6);
+  }
 
   .tooltip {
     position: absolute; top: calc(-1 * var(--space-28px));
@@ -276,7 +315,9 @@
     gap: var(--space-5); position: relative; z-index: 105;
   }
 
-  .info { display: flex; align-items: center; gap: var(--space-4); overflow: hidden; }
+  /* The whole info block opens the full player, so its focus plate is a chip
+     too — square corners on a 64px thumbnail block read as a defect. */
+  .info { display: flex; align-items: center; gap: var(--space-4); overflow: hidden; border-radius: var(--radius-sm); }
   .art {
     width: var(--thumb-lg); height: var(--thumb-lg); border-radius: var(--radius-sm);
     background: var(--c-bg-placeholder); overflow: hidden;

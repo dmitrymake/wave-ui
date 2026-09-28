@@ -26,6 +26,9 @@ export const MpdParser = {
   parseStatus(text: string): MpdStatus {
     const data = this.parseKeyValue(text);
     let format = "";
+    // MPD only ever reports play/pause/stop; anything else is garbage, not a cast.
+    const state: MpdStatus["state"] =
+      data.state === "play" || data.state === "pause" || data.state === "stop" ? data.state : "stop";
     if (data.audio) {
       // audio is sampleRate:bits:channels. MPD reports bits as "f" for float and
       // "dsd<rate>" for DSD streams, neither of which is a PCM bit-depth.
@@ -39,7 +42,7 @@ export const MpdParser = {
       }
     }
     return {
-      state: (data.state as MpdStatus["state"]) || "stop",
+      state,
       volume: parseInt(data.volume) || 0,
       elapsed: parseFloat(data.elapsed) || 0,
       duration: parseFloat(data.duration) || 0,

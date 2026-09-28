@@ -163,7 +163,7 @@
     min-height: var(--control-h-xl);
     padding: var(--space-0) var(--space-4); /* 0 16px */
     border-radius: var(--radius-lg); /* 12px */
-    border-color: var(--c-border-dim);
+    border-color: var(--c-border);
     gap: var(--space-3); /* 12px between icon / input */
   }
   .field--search.field--sm {
@@ -231,6 +231,8 @@
     margin-left: var(--space-1); /* 4px */
     background: transparent;
     border: none;
+    /* Icon-only control: circle, like every other icon button in the app. */
+    border-radius: var(--radius-circle);
     color: var(--c-text-muted);
     cursor: pointer;
     transition: color var(--trans-fast);
@@ -243,25 +245,19 @@
     height: var(--icon-size-xs);
     stroke-width: var(--icon-stroke-width);
   }
-  .field__clear:focus-visible {
-    outline: none;
-    box-shadow: var(--shadow-focus-ring);
-  }
-
   /* ---- States ---- */
+  /* Text fields show a brighter gray border instead of a plate (the field is
+     already a filled surface), using the same neutral focus color family. */
   .field:focus-within {
     background: var(--c-surface-input-focus);
-    border-color: var(--c-accent);
-  }
-  .field--search:focus-within {
-    border-color: var(--c-border-bright);
+    border-color: var(--c-focus-line);
   }
   .field.is-error {
     border-color: var(--c-error);
     box-shadow: var(--shadow-error-ring);
   }
   .field.is-disabled {
-    opacity: var(--opacity-faint);
+    opacity: var(--opacity-muted);
     cursor: not-allowed;
   }
 

@@ -190,6 +190,12 @@
     box-shadow: var(--shadow-sm-strong);
     pointer-events: none;
   }
+  /* Tall/wide hit area -> the focus indicator is the knob (enlarged, fill
+     only — same language as every other control). */
+  .volume-hit-area:focus-visible { outline: none; }
+  .volume-hit-area:focus-visible .common-knob {
+    transform: translateX(-50%) scale(1.5);
+  }
 
   .vol-icon-static {
     color: var(--c-text-secondary);

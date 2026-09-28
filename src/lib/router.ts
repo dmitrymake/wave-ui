@@ -8,6 +8,7 @@ import {
   pushNavigationEntry,
   searchQuery,
   consumeRouteDataFor,
+  assignHash,
 } from "./store";
 import { isSameNavEntry } from "./stores/navigation";
 import { logger } from "./logger";
@@ -47,11 +48,10 @@ export const Router = {
     while (raw.startsWith("/")) {
       raw = raw.slice(1);
     }
-
     if (!raw) {
       if (get(navigationStack).length > 1 || get(activeMenuTab) === "search") {
         this.setRootTab("artists");
-        window.location.hash = "/artists";
+        assignHash("/artists");
       }
       return;
     }
@@ -195,7 +195,7 @@ export const Router = {
     resetNavigation();
   },
 
-  updateUrl(view: string, data: Record<string, unknown> | null): void {
+  updateUrl(view: string, data: Record<string, unknown> | null, mode: "push" | "replace" = "push"): void {
     let newPath = "";
 
     // A view owned by a track source serializes its own full hash path, so the
@@ -250,12 +250,20 @@ export const Router = {
         // Search-style views (the source's empty-data-allowing search route, or
         // the local search) replace history rather than pushing a new entry, so
         // browser-Back skips transient keystrokes.
-        if (sourceRoute?.allowEmptyData || view === "search") {
+        if (mode === "replace" || sourceRoute?.allowEmptyData || view === "search") {
           window.history.replaceState(null, "", nextHash);
         } else {
-          window.location.hash = `/${newPath}`;
+          assignHash(`/${newPath}`);
         }
       }
     }
+  },
+
+  /** Point the URL at the current stack top without adding history (Back). */
+  syncTopToUrl(): void {
+    const stack = get(navigationStack);
+    const top = stack[stack.length - 1];
+    if (!top) return;
+    this.updateUrl(top.view, (top.data ?? null) as Record<string, unknown> | null, "replace");
   },
 };

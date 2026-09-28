@@ -6,7 +6,8 @@
   (pill geometry, accent primary, surface secondary) and Modal.svelte (footer buttons).
 
   Styled ONLY with design tokens (var(--space-*), var(--text-*), var(--radius-*), ...).
-  No business logic. Accessible: native <button>, focus-visible ring, aria-busy when loading.
+  No business logic. Accessible: native <button>; the shared gray focus fill
+   (src/styles/shared.css), disabled via the native attribute.
 
   Parity notes:
     - default size "md" == legacy 40px pill (--control-h-lg, pad 0 --control-pad-x-md, font 14/700).
@@ -18,14 +19,15 @@
 <script lang="ts">
   import type { Snippet } from "svelte";
 
-  type Variant = "primary" | "secondary" | "ghost" | "danger";
+  // No "ghost": the outlined icon button it existed for is now IconButton
+  // variant="filled" (a neutral surface), which matches the pills next to it.
+  type Variant = "primary" | "secondary" | "danger";
   type Size = "sm" | "md" | "lg";
 
   interface Props {
     variant?: Variant;
     size?: Size;
     disabled?: boolean;
-    loading?: boolean;
     type?: "button" | "submit" | "reset";
     /** Icon-only mode: square hit target, no horizontal padding, centered glyph. */
     icon?: boolean;
@@ -39,12 +41,10 @@
     onclick?: (event: MouseEvent) => void;
     children?: Snippet;
   }
-
   let {
     variant = "secondary",
     size = "md",
     disabled = false,
-    loading = false,
     type = "button",
     icon = false,
     ariaLabel,
@@ -55,7 +55,7 @@
     children,
   }: Props = $props();
 
-  const isDisabled = $derived(disabled || loading);
+  const isDisabled = $derived(disabled);
 
   function handleClick(event: MouseEvent) {
     if (isDisabled) {
@@ -72,17 +72,12 @@
   class="btn btn--{variant} btn--{size} {className}"
   class:btn--icon={icon}
   class:btn--block={block}
-  class:is-loading={loading}
   disabled={isDisabled}
   aria-label={ariaLabel}
-  aria-busy={loading}
   {title}
   onclick={handleClick}
 >
-  {#if loading}
-    <span class="btn__spinner" aria-hidden="true"></span>
-  {/if}
-  <span class="btn__content" class:is-hidden={loading}>
+  <span class="btn__content">
     {@render children?.()}
   </span>
 </button>
@@ -155,19 +150,9 @@
     background: var(--c-surface-active);
   }
 
-  .btn--ghost {
-    background: transparent;
-    border-color: var(--c-border);
-    color: var(--c-text-primary);
-  }
-  .btn--ghost:hover:not(:disabled) {
-    background: var(--c-surface-hover);
-    border-color: var(--c-text-primary);
-  }
-
   .btn--danger {
     background: transparent;
-    color: var(--c-accent);
+    color: var(--c-accent-btn);
   }
   .btn--danger:hover:not(:disabled) {
     background: var(--c-surface-hover);
@@ -182,7 +167,7 @@
     width: var(--control-h-md); /* 36px square */
   }
   .btn--icon.btn--md {
-    width: var(--control-h-lg); /* 40px square — matches legacy .btn-action */
+    width: var(--control-h-lg); /* 40px square */
   }
   .btn--icon.btn--lg {
     width: var(--control-h-lg);
@@ -208,48 +193,17 @@
     cursor: default;
   }
 
-  .btn:focus-visible {
-    outline: none;
-    box-shadow: var(--shadow-focus-ring);
-  }
-
-  /* ---- Loading ---- */
+  /* ---- Layout ---- */
   .btn__content {
     display: inline-flex;
     align-items: center;
     justify-content: center;
     gap: var(--space-2);
   }
-  .btn__content.is-hidden {
-    visibility: hidden;
-  }
-
-  .btn__spinner {
-    position: absolute;
-    top: 50%;
-    left: 50%;
-    width: var(--icon-size-xs);
-    height: var(--icon-size-xs);
-    margin: calc(-1 * var(--icon-size-xs) / 2) 0 0 calc(-1 * var(--icon-size-xs) / 2);
-    border: var(--border-width-thick) solid currentColor;
-    border-right-color: transparent;
-    border-radius: var(--radius-circle);
-    opacity: var(--opacity-dim);
-    animation: btn-spin 0.6s var(--ease-linear) infinite;
-  }
-
-  @keyframes btn-spin {
-    to {
-      transform: rotate(360deg);
-    }
-  }
 
   @media (prefers-reduced-motion: reduce) {
     .btn {
       transition: none;
-    }
-    .btn__spinner {
-      animation-duration: 1.5s;
     }
   }
 </style>

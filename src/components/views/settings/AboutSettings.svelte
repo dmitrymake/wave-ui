@@ -1,6 +1,7 @@
 <!-- SPDX-License-Identifier: MIT -->
 <!-- Copyright (c) 2025 dmitrymake -->
 <script lang="ts">
+  import Card from "../../ui/Card.svelte";
   const appVersion =
     typeof __APP_VERSION__ !== "undefined" ? __APP_VERSION__ : "1.0.0";
   const buildDateRaw =
@@ -14,7 +15,7 @@
   <div class="section-header">
     <span>About</span>
   </div>
-  <div class="card">
+  <Card>
     <div class="info-row">
       <span>Version</span>
       <span class="mono">{appVersion}</span>
@@ -24,7 +25,7 @@
       <span>Build Date</span>
       <span class="mono small">{buildDate}</span>
     </div>
-  </div>
+  </Card>
 </div>
 
 <style>
@@ -41,16 +42,6 @@
     color: var(--c-text-primary);
     margin-bottom: var(--space-3);
     padding-left: var(--space-1);
-  }
-
-  .card {
-    background: var(--c-bg-card);
-    border: var(--border-default);
-    border-radius: var(--radius-lg);
-    padding: var(--space-4);
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-3);
   }
 
   .info-row {

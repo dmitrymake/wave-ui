@@ -56,7 +56,7 @@ export function showModal({
   inputValue = "",
   placeholder = "",
   options = [] as { label: string; value: string }[],
-  onConfirm = (() => {}) as (value?: string) => void,
+  onConfirm = (() => {}) as (value?: string) => void | Promise<void>,
 }): void {
   modal.set({
     isOpen: true,
@@ -92,12 +92,28 @@ export const isFullPlayerOpen = writable<boolean>(false);
 export const activeMenuTab = writable<MenuTab>("library");
 export const connectionStatus = writable<string>("Disconnected");
 
-let storedSidebar = false;
-try { storedSidebar = localStorage.getItem("sidebarCollapsed") === "true"; } catch {}
-export const isSidebarCollapsed = writable<boolean>(storedSidebar);
+const SIDEBAR_KEY = "sidebarCollapsed";
+
+// Default on the Pi's 800x480 screen: collapsed. The 200px sidebar left 318px
+// of content column, and only ~82px of that was left for the track title — with
+// the rail (80px) it is 438px / ~202px, and the card grid goes from 1 to 2
+// columns. An explicit user choice always wins over the default.
+function initialSidebarCollapsed(): boolean {
+  try {
+    const stored = localStorage.getItem(SIDEBAR_KEY);
+    if (stored !== null) return stored === "true";
+  } catch {}
+  try {
+    return window.matchMedia?.("(max-height: 600px) and (orientation: landscape)")?.matches ?? false;
+  } catch {
+    return false;
+  }
+}
+
+export const isSidebarCollapsed = writable<boolean>(initialSidebarCollapsed());
 
 isSidebarCollapsed.subscribe((val: boolean) => {
-  try { localStorage.setItem("sidebarCollapsed", String(val)); } catch {}
+  try { localStorage.setItem(SIDEBAR_KEY, String(val)); } catch {}
 });
 
 

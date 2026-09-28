@@ -45,6 +45,14 @@ describe("YandexApi.request", () => {
     await expect(YandexApi.request("status")).rejects.toBeInstanceOf(YandexApiError);
   });
 
+  it("throws on a null/primitive JSON body even with HTTP 200", async () => {
+    const fetchMock = globalThis.fetch as ReturnType<typeof vi.fn>;
+    fetchMock.mockResolvedValue({ ok: true, json: () => Promise.resolve(null) });
+    await expect(YandexApi.request("status")).rejects.toBeInstanceOf(YandexApiError);
+    fetchMock.mockResolvedValue({ ok: true, json: () => Promise.resolve("oops") });
+    await expect(YandexApi.request("status")).rejects.toBeInstanceOf(YandexApiError);
+  });
+
   it("flags 401/403 as auth errors", async () => {
     (globalThis.fetch as ReturnType<typeof vi.fn>).mockResolvedValue({ ok: false, status: 401 });
     const err = (await YandexApi.request("status").catch((e) => e)) as YandexApiError;

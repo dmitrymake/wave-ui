@@ -66,6 +66,9 @@ vi.mock("../store", () => ({
   navigationStack: h.navigationStack,
   searchQuery: h.searchQuery,
   consumeRouteDataFor: h.consumeRouteDataFor,
+  assignHash: (hash: string) => {
+    window.location.hash = hash;
+  },
   resetNavigation: () => h.navigationStack.set([{ view: "root" }]),
   setNavigationStack: (entries: NavigationEntry[]) => h.navigationStack.set(entries),
   pushNavigationEntry: (view: string, data: Record<string, unknown> | null = null) =>
@@ -273,6 +276,11 @@ describe("handleHashChange — dedup guard", () => {
   it("survives a malformed percent-escape in the hash without throwing", () => {
     expect(() => navigateHash("#/artist/%E0%A4%A")).not.toThrow();
     // The undecodable segment is kept verbatim and still pushed.
+    expect(top().view).toBe("albums_by_artist");
+  });
+
+  it("survives a lone percent sign in the hash without throwing", () => {
+    expect(() => navigateHash("#/artist/100%25%")).not.toThrow();
     expect(top().view).toBe("albums_by_artist");
   });
 });

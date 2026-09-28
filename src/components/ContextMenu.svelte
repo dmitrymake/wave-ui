@@ -23,6 +23,7 @@
   let menuWidth = $state(0);
 
   let view = $state<"main" | "playlists">("main");
+  let prevFocus: HTMLElement | null = null;
 
   $effect(() => {
     if ($contextMenu.isOpen) {
@@ -31,8 +32,24 @@
   });
 
   // Overlay closes via Escape/backdrop only — no history.* side-effects.
-  // The old pushState/back dance raced with Router popstate handling and made
-  // Back unpredictable when a menu was open during navigation.
+  // Move focus into the menu on open (first row, else the card itself so
+  // Escape still works with an empty list), refocus on view switches, and
+  // restore the trigger focus on close.
+  $effect(() => {
+    const open = $contextMenu.isOpen;
+    void view; // re-run (and refocus) when switching main<->playlists
+    if (open) {
+      if (!prevFocus) prevFocus = document.activeElement as HTMLElement | null;
+      queueMicrotask(() => {
+        const first = menuEl?.querySelector<HTMLButtonElement>(".menu-row");
+        if (first) first.focus();
+        else menuEl?.focus();
+      });
+    } else if (prevFocus) {
+      prevFocus.focus?.();
+      prevFocus = null;
+    }
+  });
 
   function handlePopState(_event: PopStateEvent) {
     // Browser Back while the menu is open just closes the menu.
@@ -63,7 +80,7 @@
     $contextMenu.track &&
     isRemoteUrl($contextMenu.track.file));
 
-  let isYandexTrack = $derived(
+  let isStreamTrack = $derived(
     $contextMenu.track &&
     !!resolveSourceForTrack($contextMenu.track));
 
@@ -121,21 +138,21 @@
     >
       <div class="menu-header">
         {#if view === "playlists"}
-          <button class="back-btn-area" onclick={backToMain}>
+          <button class="back-btn-area" onclick={backToMain} aria-label="Back to actions">
             <span class="back-icon">{@html ICONS.BACK}</span>
           </button>
           <span class="header-title">Select Playlist</span>
         {:else if isPlaylistCard}
           <div class="track-info">
-            <div class="title text-ellipsis">
+            <div class="title text-ellipsis" title={$contextMenu.context.playlist?.name}>
               {$contextMenu.context.playlist?.name}
             </div>
             <div class="artist text-ellipsis">Playlist</div>
           </div>
         {:else}
           <div class="track-info">
-            <div class="title text-ellipsis">{$contextMenu.track?.title}</div>
-            <div class="artist text-ellipsis">{$contextMenu.track?.artist}</div>
+            <div class="title text-ellipsis" title={$contextMenu.track?.title}>{$contextMenu.track?.title}</div>
+            <div class="artist text-ellipsis" title={$contextMenu.track?.artist}>{$contextMenu.track?.artist}</div>
           </div>
         {/if}
       </div>
@@ -186,7 +203,7 @@
             <span>Add to Playlist...</span>
           </button>
 
-          {#if isYandexTrack}
+          {#if isStreamTrack}
             <div class="sep"></div>
             <button class="menu-row" role="menuitem" onclick={() => actions.radioByTrack($contextMenu.track)}>
               <span class="icon">{@html ICONS.RADIO}</span>
@@ -198,7 +215,7 @@
             </button>
           {/if}
 
-          {#if !isRadio && !isYandexTrack}
+          {#if !isRadio && !isStreamTrack}
             <button class="menu-row" role="menuitem" onclick={() => actions.goToAlbum($contextMenu.track)}>
               <span class="icon">{@html ICONS.ALBUM_LINK || ICONS.ALBUMS}</span>
               <span>Go to Album</span>
@@ -313,6 +330,8 @@
     align-items: center;
     justify-content: center;
     margin-right: var(--space-1);
+    /* Icon-only control: circle, like every other icon button in the app. */
+    border-radius: var(--radius-circle);
   }
   .back-btn-area:active {
     background: var(--c-white-10);
@@ -340,6 +359,8 @@
     padding: var(--space-3) var(--space-14px);
     background: transparent;
     border: none;
+    /* Rounded so the shared gray focus plate keeps the app's corner language. */
+    border-radius: var(--radius-sm);
     color: var(--c-text-primary);
     font-size: var(--text-base);
     text-align: left;

@@ -27,6 +27,9 @@ import type { YandexContext, YandexTrack } from "../types/yandex";
 
 export const YANDEX_SOURCE_ID = "yandex";
 
+// Ids with a fetch already in flight (see fetchMetaForTrack below).
+const inFlightMeta = new Set<string>();
+
 // Bridge a Yandex source-list row to a full Track for TrackRow. YandexTrack omits
 // the local-library fields (file/genre/track), so they get neutral defaults — the
 // owning source is identified by the `service` tag the caller passes, not the
@@ -191,9 +194,13 @@ async function fetchMetaBatch(urls: string[]): Promise<void> {
 async function fetchMetaForTrack(url: string): Promise<void> {
   const yCtx: YandexContext = get(yandexContext);
   if (lookupStreamCache(yCtx.streamCache, url, getYandexIdFromUrl)) return;
-
-  const meta = await getYandexMeta(url);
-  if (meta) {
+  // enrichCurrentSong runs on every 1s poll while uncached: dedupe in-flight
+  // fetches per url so overlapping responses can't interleave writes.
+  if (inFlightMeta.has(url)) return;
+  inFlightMeta.add(url);
+  try {
+    const meta = await getYandexMeta(url);
+    if (!meta) return;
     const cacheEntry = buildYandexCacheEntry(url, meta);
     if (!cacheEntry) {
       logger.warn("[Yandex] Skipping invalid meta for", url);
@@ -221,6 +228,8 @@ async function fetchMetaForTrack(url: string): Promise<void> {
     }
 
     applyYandexMetaToQueue(url, cacheEntry, false);
+  } finally {
+    inFlightMeta.delete(url);
   }
 }
 
@@ -415,8 +424,13 @@ export const yandexSource: TrackSource = {
   async addToQueue(uri: string): Promise<boolean> {
     if (!uri.startsWith("yandex:")) return false;
     const id: string = uri.split(":")[1];
-    await YandexApi.request("add_tracks", { tracks: [{ id }] }, "POST");
-    showToast(MSG.PLAY_ADDED_TO_QUEUE, "success");
+    try {
+      await YandexApi.request("add_tracks", { tracks: [{ id }] }, "POST");
+      showToast(MSG.PLAY_ADDED_TO_QUEUE, "success");
+    } catch (e) {
+      logger.warn("[Yandex] addToQueue failed:", e);
+      showToast(MSG.PLAY_FAILED_TO_ADD, "error");
+    }
     return true;
   },
 
@@ -425,7 +439,10 @@ export const yandexSource: TrackSource = {
     const id: string = uri.split(":")[1];
 
     const newId: number = await appendYandexTrack(id);
-    if (isNaN(newId)) return true;
+    if (isNaN(newId)) {
+      showToast(MSG.PLAY_FAILED_TO_PLAY, "error");
+      return true;
+    }
 
     await PlayerActions.moveById(newId, currentPos + 1);
     showToast(MSG.PLAY_WILL_PLAY_NEXT, "success");
@@ -454,11 +471,11 @@ export const yandexSource: TrackSource = {
         else next.add(id);
         return next;
       });
+      await YandexApi.toggleLike(track.id, liked);
       showToast(
         liked ? MSG.FAV_REMOVED_YANDEX : MSG.FAV_ADDED_YANDEX,
         liked ? "info" : "success",
       );
-      await YandexApi.toggleLike(track.id, liked);
     } catch (err) {
       yandexFavorites.update((s) => {
         const next = new Set(s);

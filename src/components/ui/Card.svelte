@@ -99,10 +99,6 @@
     background: var(--c-surface-hover);
     transform: scale(0.99);
   }
-  .card--clickable:focus-visible {
-    outline: none;
-    box-shadow: var(--shadow-focus-ring);
-  }
 
   @media (prefers-reduced-motion: reduce) {
     .card--clickable {

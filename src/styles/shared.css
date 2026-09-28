@@ -59,15 +59,22 @@
   --c-surface-input: #1a1a1a;
   --c-surface-input-focus: var(--c-white-10);
   --c-surface-button: var(--c-white-10);
-  --c-surface-button-hover: var(--c-white-10);
-  
+  /* Was var(--c-white-10), i.e. identical to --c-surface-button: in the default
+     theme no secondary/filled button reacted to hover at all. */
+  --c-surface-button-hover: var(--c-white-20);
+
+  /* --- 4b. KEYBOARD FOCUS --- */
+  /* Baseline (see theme.ts for the per-theme values). Kept in sync with the
+     theme palette so the very first paint already has the focus plate. */
+  --c-focus-fill: #6a6a6a;
+  --c-focus-line: var(--c-white-60);
+
   /* Drag & Drop Surfaces */
   --c-surface-drag-phantom: #1a1a1a;
   --c-surface-drag-land: var(--c-white-10);
 
   /* Progress Bars */
   --c-rail-bg: var(--c-white-20);
-  --c-rail-bg-hover: var(--c-white-30);
 
   /* Skeletons */
   --c-skeleton-base: var(--c-white-10);
@@ -76,7 +83,6 @@
      5. BORDERS & SEPARATORS
      ========================= */
   --c-border: var(--c-white-10);
-  --c-border-dim: var(--c-white-10);
   --c-border-bright: var(--c-white-20);
   --c-border-dashed: var(--c-white-20);
   --c-border-dashed-hover: var(--c-white-50);
@@ -97,7 +103,6 @@
      7. ICONS
      ========================= */
   --c-icon-idle: #9ca3af;
-  --c-icon-hover: #ffffff;
   --c-icon-faint: var(--c-white-50); 
   /* Theme-invariant tokens (icon stroke, dimensions, radius, z-index,
      transitions) and the spacing/typography/control scales now live in
@@ -114,8 +119,15 @@ body {
   background: var(--c-bg-app);
   color: var(--c-text-primary);
   font-family: var(--font-sans);
+  /* One line-height for the whole app: 45 components had 8 local declarations
+     and everything else inherited `normal`, so multi-line text (toasts, hints,
+     empty states) had its own, tighter rhythm. */
+  line-height: var(--leading-normal);
   overflow: hidden;
   -webkit-tap-highlight-color: transparent;
+  /* A double tap on a heading used to zoom the viewport, and in a kiosk there
+     is no way to zoom back out. */
+  touch-action: manipulation;
 }
 
 button {
@@ -180,65 +192,129 @@ button {
   height: var(--icon-size-lg);
 }
 
-/* Keyboard focus ring for naked/raw interactive controls (WCAG 2.4.7).
-   Zero specificity (:where) so component rules can still override. The
-   transparent outline keeps a visible focus indicator under forced-colors.
-   .row/.music-card/.nav-item covered so keyboard nav is not blind. */
-:where(.btn-icon, .menu-row, .sort-item, .vol-btn, .side-btn, .play-btn-large, .row, .music-card, .nav-item, .drag-handle):focus-visible {
-  outline: var(--border-width-thick) solid transparent;
-  outline-offset: var(--space-0_5);
-  box-shadow: var(--shadow-focus-ring);
-}
-
-/* 2. Range Inputs (Sliders) */
-input[type="range"] {
-  width: 100%;
-  height: var(--space-1);
-  border-radius: var(--radius-xs);
-  background: var(--c-rail-bg);
-  -webkit-appearance: none;
+/* Keyboard focus (WCAG 2.4.7) — ONE indicator for the whole app and nothing
+   else: a flat gray FILL on the control, no ring, no accent color, and the
+   control's own border-radius does the rounding. Text/icon color lifts to
+   --c-text-primary so it stays legible on the plate.
+   The `body` prefix only raises specificity (0,2,1) so the fill wins over the
+   resting fills of the very same controls (.row.active, .nav-item.active)
+   instead of losing to them on source order. Components that own an opaque
+   accent fill get the same treatment for the same reason — the plate is the
+   single focus language, an active tab excepted (see below).
+   role="slider" is absent on purpose: a slider is a wide hit area, so it puts
+   the indicator on its knob instead (MiniPlayer/FullPlayer/VolumeSlider). */
+body :is(
+    button,
+    a[href],
+    select,
+    summary,
+    [role="button"],
+    [role="switch"],
+    [role="menuitem"],
+    [role="listitem"]
+  ):focus-visible {
+  /* The app owns the indicator, so the UA's default focus ring must go — that
+     ring is what used to show up as a white/blue halo on some controls. */
   outline: none;
-  cursor: pointer;
+  background-color: var(--c-focus-fill);
+  color: var(--c-text-primary);
 }
 
-input[type="range"]::-webkit-slider-thumb {
-  -webkit-appearance: none;
-  width: 12px;
-  height: 12px;
+/* A control whose fill IS the message ("you are here", "this is the primary
+   action") must not lose it on focus: the gray plate would erase the accent.
+   Those keep the accent and brighten instead, with the same dark label the
+   resting primary button uses (AA-safe in both themes). */
+body :is(.nav-item.active, .btn--primary, .toggle.is-checked):focus-visible {
+  background-color: var(--c-accent-btn-hover);
+  color: var(--c-text-inverse);
+}
+
+/* gruvbox's focus plate is a light warm gray (it has to be, to clear 3:1
+   against #3c3836), so the label inverts there — the only per-theme exception
+   in the focus layer. */
+body[data-theme="gruvbox"]:is(
+    button,
+    a[href],
+    select,
+    summary,
+    [role="button"],
+    [role="switch"],
+    [role="menuitem"],
+    [role="listitem"]
+  ):focus-visible {
+  color: var(--c-text-inverse);
+}
+
+/* Accidental drag-selection over card/row blocks painted a bright browser
+   highlight; selection is only meaningful for real text, so keep it neutral. */
+::selection {
+  background: var(--c-surface-active);
+  color: var(--c-text-primary);
+}
+
+
+/* Loading spinner — one definition (was 3 copies: SearchBar 16px/0.6s,
+   PlaylistsView 16px/0.6s, YandexView 20px/1s). */
+.spinner {
+  width: var(--icon-size-sm);
+  height: var(--icon-size-sm);
+  border: var(--border-width-thick) solid var(--c-border);
+  border-top-color: var(--c-accent);
   border-radius: var(--radius-circle);
-  background: var(--c-text-primary);
-  box-shadow: var(--shadow-xs);
-  transition: transform var(--dur-instant);
-  border: none;
+  animation: spinner-rotate 0.6s var(--ease-linear) infinite;
+  flex-shrink: 0;
 }
 
-input[type="range"]:hover::-webkit-slider-thumb {
-  transform: scale(1.2);
+@keyframes spinner-rotate {
+  to {
+    transform: rotate(360deg);
+  }
 }
 
-/* 3. Global Scrollbar */
-.scroll-y {
-  overflow-y: auto;
+@media (prefers-reduced-motion: reduce) {
+  .spinner {
+    animation: none;
+  }
+}
+
+/* 2. Scrollbars — ONE treatment for every scroll container in the app.
+   Before this only the sidebar had one: list and grid views fell back to the
+   browser's default light bar, which is a bright strip on a black UI and read
+   as a foreign element. 4px, 10% white thumb, transparent track — quiet, but it
+   still shows where you are in a long list. */
+:where(html, body, .scroll-y, .view-container.scrollable, .base-list-scroll-container, .scroll-area, .select-list, .menu-items) {
   scrollbar-width: thin;
   scrollbar-color: var(--c-border) transparent;
 }
 
-.scroll-y::-webkit-scrollbar {
-  width: var(--space-2);
+:where(html, body, .scroll-y, .view-container.scrollable, .base-list-scroll-container, .scroll-area, .select-list, .menu-items)::-webkit-scrollbar {
+  width: var(--space-1);
+  height: var(--space-1);
 }
 
-.scroll-y::-webkit-scrollbar-thumb {
+:where(html, body, .scroll-y, .view-container.scrollable, .base-list-scroll-container, .scroll-area, .select-list, .menu-items)::-webkit-scrollbar-thumb {
   background-color: var(--c-border);
   border-radius: var(--radius-xs);
+}
+
+:where(html, body, .scroll-y, .view-container.scrollable, .base-list-scroll-container, .scroll-area, .select-list, .menu-items)::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* Chromium still paints the up/down buttons on a thin bar; they read as stray
+   arrows at the ends of the track. */
+:where(html, body, .scroll-y, .view-container.scrollable, .base-list-scroll-container, .scroll-area, .select-list, .menu-items)::-webkit-scrollbar-button,
+:where(html, body, .scroll-y, .view-container.scrollable, .base-list-scroll-container, .scroll-area, .select-list, .menu-items)::-webkit-scrollbar-corner {
+  display: none;
 }
 
 /* =========================================
    UNIFIED BUTTONS & BADGES
    ========================================= */
 
-/* .btn-primary / .btn-secondary / .btn-action are defined once in MusicViews.css
-   (loaded after this file) — kept there to avoid the import-order cascade. The
-   responsive overrides for them live in the media query further down. */
+/* All buttons (text and icon, every variant) are the Button primitive in
+   src/components/ui/Button.svelte — the legacy .btn-primary / .btn-secondary /
+   .btn-action rules are gone. */
 
 /* --- Header Actions Container --- */
 .header-actions {
@@ -251,6 +327,24 @@ input[type="range"]:hover::-webkit-slider-thumb {
   display: flex;
   gap: var(--space-2);
   margin: var(--space-0) 0 var(--space-2);
+  /* Badges are nowrap; without this a long one ("12 hr 34 min") pushed the
+     others out of the row instead of shrinking. */
+  min-width: 0;
+  flex-wrap: wrap;
+}
+
+/* Text the user never needs to select: the finger slides over these on every
+   scroll and a browser selection highlight painted over the UI. */
+.view-header,
+.header-title,
+.header-sub-text,
+.header-label,
+.card-title,
+.card-sub,
+.toast-body,
+.backdrop {
+  user-select: none;
+  -webkit-user-select: none;
 }
 
 .meta-tag {
@@ -260,7 +354,8 @@ input[type="range"]:hover::-webkit-slider-thumb {
   border: var(--border-width-thin) solid transparent;
   background: var(--c-surface-button);
   padding: var(--space-1) var(--space-2);
-  height: 18px;
+  /* The `height: 18px` that used to be here did nothing (no border-box, so the
+     box was 26px) and only fought the vertical rhythm. */
   display: inline-flex;
   align-items: center;
   border-radius: var(--radius-sm);
@@ -282,20 +377,5 @@ input[type="range"]:hover::-webkit-slider-thumb {
     flex-wrap: wrap;
     gap: var(--space-2);
     width: 100%;
-  }
-  
-  .btn-primary,
-  .btn-secondary {
-    padding: var(--space-2) var(--space-4);
-    font-size: var(--text-sm);
-  }
-
-  .btn-action {
-    width: var(--control-h-sm);
-  }
-
-  .btn-action :global(svg) {
-    width: var(--icon-size-xs);
-    height: var(--icon-size-xs);
   }
 }

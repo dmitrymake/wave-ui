@@ -159,7 +159,7 @@
             <span class="overlay-icon">{@html ICONS.PLAY}</span>
           </div>
         </div>
-        <div class="card-title">{album.title}</div>
+        <div class="card-title" title={album.title}>{album.title}</div>
         <div class="card-sub">{album.year}</div>
       </div>
     {/each}
@@ -175,21 +175,13 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    color: white;
+    color: var(--c-text-primary);
   }
   .icon-wrap :global(svg) {
     width: 40px;
     height: 40px;
   }
 
-  .header-sub-text {
-    font-size: var(--text-2xl);
-    color: var(--c-white-60);
-    margin: var(--space-0);
-    overflow: hidden;
-    text-overflow: ellipsis;
-    font-weight: var(--weight-regular);
-  }
 
   .icon-inline {
     display: inline-flex;
@@ -199,5 +191,6 @@
   .icon-inline :global(svg) {
     width: var(--icon-size-sm);
     height: var(--icon-size-sm);
+    stroke-width: var(--icon-stroke-width);
   }
 </style>

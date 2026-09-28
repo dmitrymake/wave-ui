@@ -48,10 +48,15 @@
   padding-bottom: var(--space-5);
 }
 
+/* Horizontal card rows: `gap` is inherited from .music-grid (20px) and was NOT
+   reset here, so the effective spacing was gap 20 + margin-right 16 = 36px —
+   wider than the vertical grid, and with a dangling 16px after the last card. */
 .music-grid.horizontal {
   display: flex;
   flex-wrap: nowrap;
   overflow-x: auto;
+  /* No visible scrollbar: these rows are a swipe/scroll affordance, not a
+     document, and a bar under every card row ate vertical space. */
   scrollbar-width: none;
   -ms-overflow-style: none;
   scroll-snap-type: x mandatory;
@@ -68,7 +73,6 @@
   width: 180px;
   scroll-snap-align: start;
   margin: 0;
-  margin-right: var(--space-4);
 }
 
 .music-card {
@@ -82,6 +86,10 @@
     background var(--dur-fast),
     transform var(--dur-fast);
   margin: calc(-1 * var(--space-3));
+  /* A card is a button, not prose: dragging across a row of them must not
+     paint a text selection over the whole grid. */
+  user-select: none;
+  -webkit-user-select: none;
 }
 
 .music-card:hover {
@@ -89,13 +97,23 @@
   transform: translateY(-5px);
   z-index: 2;
 }
+/* Touchscreen: no :hover, so a tap on a card gave nothing back instantly. */
+.music-card:active {
+  background: var(--c-surface-active);
+  transform: scale(0.98);
+}
+@media (prefers-reduced-motion: reduce) {
+  .music-card:hover {
+    transform: none;
+  }
+}
 
 .music-card.is-active .card-img-container {
   box-shadow: var(--shadow-focus-ring);
 }
 
 .music-card.is-active .card-title {
-  color: var(--c-accent);
+  color: var(--c-accent-btn);
 }
 
 .card-img-container {
@@ -171,10 +189,21 @@
   opacity: 1;
 }
 
+/* Touchscreen: :hover never fires, so the "tap to play" hint was invisible on
+   every card except the active one. Same pattern the playlist card menu uses. */
+@media (hover: none) {
+  .music-card .play-overlay {
+    opacity: var(--opacity-dim);
+  }
+  .music-card:active .play-overlay {
+    opacity: 1;
+  }
+}
+
 .overlay-icon {
   width: 48px;
   color: var(--c-text-primary);
-  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.5));
+  filter: drop-shadow(0 2px 4px var(--c-black-50));
 }
 
 .icon-fallback {
@@ -189,8 +218,10 @@
 }
 
 .dashed-cover {
-  background: var(--c-border-dim) !important;
+  background: var(--c-border) !important;
   border: var(--border-dashed);
+  /* Same corners as the cover it stands in for. */
+  border-radius: var(--radius-md);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -200,28 +231,8 @@
   background: var(--c-surface-active) !important;
 }
 
-.new-playlist-icon,
-.playlist-icon-bg {
-  width: 40px;
-  height: 40px;
-  color: var(--c-icon-faint);
-}
 
-.playlist-icon-bg {
-  width: 60px;
-  height: 60px;
-  opacity: var(--opacity-ghost);
-  color: var(--c-text-inverse);
-}
 
-.new-playlist-icon svg,
-.playlist-icon-bg svg {
-  width: 100%;
-  height: 100%;
-  stroke-width: 1.5;
-  fill: none;
-  stroke: currentColor;
-}
 
 @media (max-width: 768px) {
   .music-grid {
@@ -231,6 +242,40 @@
   .music-grid.horizontal .music-card {
     width: 140px;
   }
+}
+
+/* Playlists use a denser grid (210px min) than the default 180px. It is passed
+   to SkeletonGrid as a plain class string, so it must be global — and it was
+   duplicated verbatim in PlaylistGrid.svelte as well. */
+.playlists-grid-override {
+  grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
+  gap: var(--space-6);
+}
+
+@media (max-width: 768px) {
+  .playlists-grid-override {
+    grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+    gap: var(--space-4);
+  }
+}
+
+/* Vertical rhythm between a section heading + its horizontal card row, and the
+   gap under a search field. Both were defined in two *scoped* style blocks while
+   being used in 7 places — so in the Yandex views (YandexDashboard,
+   YandexSearchResults, YandexContentHeader) the class did nothing and the
+   sections ran together. Global here = one definition, works everywhere. */
+.section-mb {
+  margin-bottom: var(--space-6);
+}
+
+.section-spacing {
+  margin-top: var(--space-3);
+}
+
+/* Search field → first content: five classes, five values (24/24/20/20/12) in
+   five files, so the first row jumped when switching tabs. */
+.search-block {
+  margin-bottom: var(--space-6);
 }
 
 /* =========================================
@@ -274,13 +319,16 @@
   align-items: flex-start;
 }
 
+/* Eyebrow / section heading — ONE rendering for all 17 uses. The margin is
+   explicit because 8 of them are <h2>/<h3>, whose UA margin-block-start
+   (~11.6px) silently added ~12px on top of whatever we set here. */
 .header-label {
   font-size: var(--text-base);
   font-weight: var(--weight-semibold);
   text-transform: uppercase;
   letter-spacing: var(--tracking-wide);
-  color: var(--c-accent);
-  margin-bottom: var(--space-2);
+  color: var(--c-accent-btn);
+  margin: var(--space-0) 0 var(--space-2);
 }
 
 .header-title {
@@ -304,11 +352,17 @@
   flex-wrap: wrap;
 }
 
+/* Artist/performer line under a header title. One definition: the two component
+   copies each re-specified the color (alpha 0.6 vs a literal 0.7) and added the
+   ellipsis rules, while this global copy was overridden everywhere. */
 .header-sub-text {
   font-size: var(--text-2xl);
-  color: rgba(255, 255, 255, 0.7);
+  color: var(--c-text-secondary);
   margin: var(--space-0);
   font-weight: var(--weight-medium);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .header-actions {
@@ -319,214 +373,71 @@
   margin-top: var(--space-4);
 }
 
-.track-count {
-  margin-top: var(--space-3);
-  color: var(--c-text-secondary);
-  font-size: var(--text-base);
-  font-weight: var(--weight-medium);
-}
 
-.view-header-simple {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: var(--space-4) var(--space-5);
-  min-height: 80px;
-  width: 100%;
-  box-sizing: border-box;
-}
 
-.view-header-simple .header-info {
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  margin-right: var(--space-4);
-  flex: 1;
-  min-width: 0;
-}
 
-.view-header-simple .header-title {
-  font-size: var(--text-3xl);
-  font-weight: var(--weight-bold);
-  color: var(--c-text-primary);
-  margin: var(--space-0);
-  line-height: var(--leading-snug);
-}
 
-.view-header-simple .header-subtitle {
-  color: var(--c-text-muted);
-  font-size: var(--text-base);
-  font-weight: var(--weight-medium);
-  margin-top: var(--space-1);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
 
-.view-header-simple .header-actions {
-  display: flex;
-  gap: var(--space-3);
-  flex-shrink: 0;
-  margin-top: var(--space-0);
-}
 
-/* Responsive Styles */
+/* =========================================
+   RESPONSIVE — the Pi screen is 800x480, so `max-width: 800px` matches it
+   EXACTLY and is the primary layout, not a fallback.
+
+   Measured at 800x480: the header used to stack to ~407px (art 180 + gap 20 +
+   label/title/badges/actions), leaving room for exactly ONE 64px track row of
+   the 480px screen. Hiding the artwork and tightening the gaps brings it to
+   ~215px = 4 rows. The artwork was decoration: the same cover is on every row.
+   ========================================= */
 @media (max-width: 800px) {
   .view-header {
-    flex-direction: column;
-    align-items: center;
-    text-align: center;
-    gap: var(--space-5);
+    flex-direction: row;
+    align-items: flex-start;
+    text-align: left;
+    gap: var(--space-3);
     height: auto;
+    margin-bottom: var(--space-4);
   }
   .header-art {
-    width: 180px;
+    /* 64px keeps the artwork as an identity anchor without eating the list. */
+    width: 64px;
   }
   .header-info {
     width: 100%;
-    align-items: center;
+    min-width: 0;
+    align-items: flex-start;
     justify-content: flex-start;
   }
   .header-text-group {
-    align-items: center;
+    align-items: flex-start;
   }
   .header-subtitle-row {
-    justify-content: center;
+    justify-content: flex-start;
   }
   .header-title {
-    font-size: var(--text-4xl);
-    white-space: normal;
+    font-size: var(--text-2xl);
+    line-height: var(--leading-snug);
+    -webkit-line-clamp: 2;
+  }
+  .header-sub-text {
+    font-size: var(--text-base);
   }
   .header-actions {
-    justify-content: center;
+    justify-content: flex-start;
     width: 100%;
-  }
-}
-
-@media (max-width: 600px) {
-  .view-header-simple {
-    display: flex !important;
-    flex-direction: row !important;
-    justify-content: space-between !important;
-    align-items: center !important;
-    padding: var(--space-3) var(--space-4) !important;
-    min-height: 60px !important;
-  }
-
-  .view-header-simple .header-info {
-    align-items: flex-start !important;
-    text-align: left !important;
-    margin-right: var(--space-3) !important;
-  }
-
-  .view-header-simple .header-title {
-    font-size: var(--text-xl) !important;
-  }
-
-  .view-header-simple .header-subtitle {
-    font-size: var(--text-base) !important;
-    display: block !important;
-  }
-
-  .view-header-simple .header-actions {
-    gap: var(--space-2) !important;
-    margin: var(--space-0) !important;
-    width: auto !important;
-  }
-
-  .view-header-simple .btn-action {
-    width: var(--control-h-md) !important;
-    height: var(--control-h-md) !important;
+    margin-top: var(--space-2);
   }
 }
 
 /* =========================================
-   4. SPECIAL BUTTONS
+   4. ICON BUTTONS IN LISTS/HEADERS
    ========================================= */
-
-.btn-primary,
-.btn-secondary,
-.btn-action {
-  white-space: nowrap;
-  height: var(--control-h-lg);
-  border-radius: var(--radius-pill);
-  border: none;
-  font-weight: var(--weight-control);
-  font-size: var(--text-control);
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: var(--space-0) var(--control-pad-x-md);
-  transition:
-    transform var(--dur-instant),
-    background var(--dur-fast),
-    opacity var(--dur-fast);
-}
-
-.btn-primary:active,
-.btn-secondary:active,
-.btn-action:active {
-  transform: scale(0.97);
-}
-
-.btn-primary {
-  /* AA-safe dark label on accent fill (default #fa2d48+#000=5.53:1;
-     gruvbox #fe8019+#282828=5.84:1). */
-  background: var(--c-accent-btn);
-  color: var(--c-text-inverse);
-  text-transform: uppercase;
-  letter-spacing: var(--tracking-wide);
-}
-.btn-primary:hover:not(:disabled) {
-  background: var(--c-accent-btn-hover);
-}
-.btn-primary:disabled {
-  opacity: var(--opacity-muted);
-  cursor: default;
-}
-
-.btn-secondary {
-  background: var(--c-surface-button);
-  color: var(--c-text-primary);
-}
-.btn-secondary:hover {
-  background: var(--c-surface-button-hover);
-}
-.btn-secondary:active {
-  background: var(--c-surface-active);
-}
-
-.btn-action {
-  background: transparent;
-  border: var(--border-default);
-  color: var(--c-text-primary);
-  padding: var(--space-0);
-  width: var(--control-h-lg);
-}
-
-.btn-action.active {
-  background: var(--c-accent);
-  border-color: var(--c-accent);
-  color: var(--c-text-primary);
-}
-
-.btn-action:hover {
-  background: var(--c-surface-hover);
-  border-color: var(--c-text-primary);
-}
-
-/* Force icons in header actions to 18px */
-.btn-action :global(svg) {
-  width: var(--icon-size-sm) !important;
-  height: var(--icon-size-sm) !important;
-  stroke-width: 1.5;
-}
 
 /* Small icons in search/lists */
 .btn-icon.small {
-  width: var(--circle-btn-md);
-  height: var(--circle-btn-md);
+  /* 32px was under the 44px tap minimum, and these (⋯, remove) repeat on every
+     track row, so the cost multiplied by the list length. */
+  width: var(--control-h-lg);
+  height: var(--control-h-lg);
   padding: var(--space-0);
   display: flex;
   align-items: center;
@@ -546,17 +457,15 @@
   color: var(--c-text-primary);
 }
 
-/* Force icons in small buttons to 18px */
+/* Force icons in small buttons to 18px. The stroke is scaled with the glyph
+   (--icon-stroke-width), otherwise a 24px Tabler stroke at 18px reads heavy —
+   the "thick glyph in a thin circle" look. */
 .btn-icon.small :global(svg) {
   width: var(--icon-size-sm) !important;
   height: var(--icon-size-sm) !important;
+  stroke-width: var(--icon-stroke-width);
 }
 
-/* Extra specificity for Group Header buttons in Playlists */
-.group-actions .btn-icon.small :global(svg) {
-  width: var(--icon-size-sm) !important;
-  height: var(--icon-size-sm) !important;
-}
 
 /* =========================================
    5. SEARCH INPUT
@@ -579,7 +488,7 @@
 
 .search-input-container:focus-within {
   background: var(--c-surface-input-focus);
-  border-color: var(--c-border-bright);
+  border-color: var(--c-focus-line);
 }
 
 .search-input-container input {
@@ -687,23 +596,27 @@
     box-shadow: none;
   }
 }
+@media (prefers-reduced-motion: reduce) {
+  .row-wrapper.just-dropped {
+    animation: none;
+  }
+}
 
 /* =========================================
    7. EMPTY STATES
    ========================================= */
-.empty-state-container {
-  grid-column: 1/-1;
-  height: 300px;
+/* One empty state for the whole app (4 near-identical copies lived in the views
+   and one inline style in BaseList). */
+.empty-text {
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
+  gap: var(--space-2);
+  padding: var(--space-10) var(--space-4);
+  text-align: center;
   color: var(--c-text-secondary);
   opacity: var(--opacity-muted);
-}
-
-.empty-state-icon {
-  font-size: var(--text-7xl);
-  margin-bottom: var(--space-3);
-  color: var(--c-icon-idle);
+  user-select: none;
+  -webkit-user-select: none;
 }

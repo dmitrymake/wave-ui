@@ -24,6 +24,7 @@
   import TrackRow from "../TrackRow.svelte";
   import BaseList from "./BaseList.svelte";
   import Button from "../ui/Button.svelte";
+  import IconButton from "../ui/IconButton.svelte";
 
   let isEditMode = $state(false);
   let headerTotalDuration = $state("");
@@ -179,27 +180,29 @@
                 </Button>
               {/if}
 
-              <Button
-                variant="ghost"
-                icon
+              <IconButton
+                variant="filled"
+                size="md"
                 ariaLabel="Save Queue"
                 onclick={handleSaveQueue}
                 title="Save Queue"
                 disabled={$queue.length === 0}
               >
                 {@html ICONS.SAVE}
-              </Button>
+              </IconButton>
 
-              <Button
-                variant={isEditMode ? "primary" : "ghost"}
-                icon
+              <IconButton
+                variant="filled"
+                size="md"
+                tone="accent"
+                active={isEditMode}
                 ariaLabel={isEditMode ? "Finish Editing" : "Edit Queue"}
                 onclick={toggleEditMode}
                 title={isEditMode ? "Finish Editing" : "Edit Queue"}
                 disabled={$queue.length === 0}
               >
                 {@html isEditMode ? ICONS.ACCEPT : ICONS.EDIT}
-              </Button>
+              </IconButton>
             </div>
           </div>
         </div>
@@ -233,17 +236,20 @@
   .header-icon-wrap :global(svg) {
     width: 100%;
     height: 100%;
-    stroke-width: 1.5;
+    stroke-width: var(--icon-stroke-width);
   }
 
   .daemon-active {
-    color: var(--c-accent);
+    color: var(--c-accent-btn);
     animation: pulse-text 2s infinite;
   }
 
   .active-badge {
-    background: var(--c-accent);
-    color: white;
+    /* AA: --c-text-inverse on --c-accent-btn = 5.53:1 / 5.84:1; the previous
+       white-on-accent was 3.79 / 3.41. */
+    background: var(--c-accent-btn);
+    color: var(--c-text-inverse);
+    border-radius: var(--radius-pill);
   }
 
   @keyframes pulse-text {

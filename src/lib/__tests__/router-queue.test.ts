@@ -15,6 +15,7 @@ vi.mock("../logger", () => ({
 import {
   navigationStack,
   navigateTo,
+  navigateBack,
   resetNavigation,
   setNavigationCallback,
 } from "../stores/navigation.js";
@@ -81,5 +82,44 @@ describe("search staleness vs artist open (reported device bug)", () => {
     window.location.hash = "#/yandex_artist/77";
     Router.handleHashChange();
     expect(top()).toEqual({ view: "yandex_artist_details", data: { id: "77", title: "Artist" } });
+  });
+
+  it("Back re-points the hash at the new top without adding history", () => {
+    const replaceSpy = vi.spyOn(window.history, "replaceState");
+    try {
+      navigateTo("albums_by_artist", { name: "A" });
+      Router.handleHashChange();
+      navigateTo("tracks_by_album", { name: "T", artist: "A" });
+      Router.handleHashChange();
+      expect(window.location.hash).toBe(`#/${"album"}/${encodeURIComponent("A")}/${encodeURIComponent("T")}`);
+
+      replaceSpy.mockClear();
+      navigateBack();
+      Router.syncTopToUrl();
+      expect(window.location.hash).toBe(`#/${"artist"}/${encodeURIComponent("A")}`);
+      expect(replaceSpy).toHaveBeenCalledTimes(1);
+    } finally {
+      replaceSpy.mockRestore();
+    }
+
+    // A refresh-equivalent on that hash must not duplicate or move the stack.
+    const len = stack().length;
+    Router.handleHashChange();
+    expect(stack()).toHaveLength(len);
+    expect(top()).toEqual({ view: "albums_by_artist", data: { name: "A" } });
+  });
+
+  it("re-clicking the same artist does not push a duplicate entry", () => {
+    navigateTo("yandex_artist_details", { id: "359560", title: "Калинов Мост" });
+    Router.handleHashChange();
+    const len = stack().length;
+    // Same content, header-merged shape (as after loadArtistData).
+    navigateTo("yandex_artist_details", {
+      id: "359560",
+      title: "Калинов Мост",
+      name: "Калинов Мост",
+      cover: "c",
+    });
+    expect(stack()).toHaveLength(len);
   });
 });

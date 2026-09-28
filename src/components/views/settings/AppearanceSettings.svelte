@@ -1,6 +1,7 @@
 <!-- SPDX-License-Identifier: MIT -->
 <!-- Copyright (c) 2025 dmitrymake -->
 <script lang="ts">
+  import Card from "../../ui/Card.svelte";
   import { showToast, showModal, currentTheme } from "../../../lib/store";
   import { MSG } from "../../../lib/messages";
   import { THEMES } from "../../../lib/theme";
@@ -30,7 +31,7 @@
   <div class="section-header">
     <span>Appearance</span>
   </div>
-  <div class="card clickable" onclick={openThemeSelector} role="button" tabindex="0" onkeydown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); openThemeSelector(); } }}>
+  <Card clickable ariaLabel="Open theme selector" onclick={openThemeSelector}>
     <div class="row space-between">
       <span>Interface Theme</span>
       <div class="row-gap">
@@ -38,7 +39,7 @@
         <span class="chevron">{@html ICONS.NEXT}</span>
       </div>
     </div>
-  </div>
+  </Card>
 </div>
 
 <style>
@@ -55,24 +56,6 @@
     color: var(--c-text-primary);
     margin-bottom: var(--space-3);
     padding-left: var(--space-1);
-  }
-
-  .card {
-    background: var(--c-bg-card);
-    border: var(--border-default);
-    border-radius: var(--radius-lg);
-    padding: var(--space-4);
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-3);
-  }
-
-  .card.clickable {
-    cursor: pointer;
-    transition: background var(--dur-fast);
-  }
-  .card.clickable:active {
-    background: var(--c-surface-hover);
   }
 
   .row {

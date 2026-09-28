@@ -1,6 +1,7 @@
 <!-- SPDX-License-Identifier: MIT -->
 <!-- Copyright (c) 2025 dmitrymake -->
 <script lang="ts">
+  import Card from "../../ui/Card.svelte";
   import { onDestroy } from "svelte";
   import { CONFIG } from "../../../config";
   import { showToast } from "../../../lib/store";
@@ -9,6 +10,7 @@
   import Input from "../../ui/Input.svelte";
 
   let ipAddress = $state(CONFIG.MOODE_IP);
+  let ipInvalid = $state(false);
   let reloadTimer: ReturnType<typeof setTimeout> | undefined;
 
   function saveConnection() {
@@ -16,9 +18,13 @@
     // Validate before persisting: an empty/malformed value would point the app at
     // an unreachable backend with no UI recovery after the reload.
     if (!ip || !/^[a-zA-Z0-9.-]+(:\d+)?$/.test(ip)) {
+      // Mark the field, not just the toast: the toast is gone in 3s and the
+      // field is what the user is looking at.
+      ipInvalid = true;
       showToast(MSG.SETTINGS_IP_INVALID, "error");
       return;
     }
+    ipInvalid = false;
     if (ip === CONFIG.MOODE_IP) {
       showToast(MSG.SETTINGS_IP_SAVED, "success");
       return;
@@ -37,13 +43,14 @@
   <div class="section-header">
     <span>Connection</span>
   </div>
-  <div class="card">
+  <Card>
     <div class="row">
       <span class="row-label">Moode Device IP</span>
       <div class="input-group">
         <Input
           type="text"
           bind:value={ipAddress}
+          error={ipInvalid}
           placeholder="192.168.x.x"
           size="sm"
           ariaLabel="Moode Device IP"
@@ -52,7 +59,7 @@
       </div>
     </div>
     <p class="hint">Current: {CONFIG.MOODE_IP}</p>
-  </div>
+  </Card>
 </div>
 
 <style>
@@ -69,16 +76,6 @@
     color: var(--c-text-primary);
     margin-bottom: var(--space-3);
     padding-left: var(--space-1);
-  }
-
-  .card {
-    background: var(--c-bg-card);
-    border: var(--border-default);
-    border-radius: var(--radius-lg);
-    padding: var(--space-4);
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-3);
   }
 
   .row {

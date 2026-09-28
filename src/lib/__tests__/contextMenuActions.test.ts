@@ -25,13 +25,17 @@ vi.mock("../store", () => {
   return {
     closeContextMenu: vi.fn(),
     navigateTo: vi.fn(),
+    activeMenuTab: { set: vi.fn() },
+    resetNavigation: vi.fn(),
     activePlaylistTracks: writable([]),
     showModal: vi.fn(),
+    showToast: vi.fn(),
   };
 });
 
-import { toggleLike as contextToggleLike } from "../contextMenuActions";
+import { toggleLike as contextToggleLike, goToAlbum, goToArtist } from "../contextMenuActions";
 import { registerTrackSource } from "../sources/trackSource";
+import { activeMenuTab, resetNavigation, navigateTo } from "../store.js";
 
 // A stub streaming source claiming any "stub:" uri. Its toggleLike is a spy so we
 // can prove contextMenuActions.toggleLike routes a streaming row to the source
@@ -96,5 +100,32 @@ describe("contextMenuActions.toggleLike routing (source-aware)", () => {
     contextToggleLike(null);
     expect(sourceToggleLikeSpy).not.toHaveBeenCalled();
     expect(toggleFavoriteSpy).not.toHaveBeenCalled();
+  });
+});
+
+describe("contextMenuActions go-to navigation (tab switch)", () => {
+  it("switches to the albums tab before navigating to an album", () => {
+    goToAlbum(baseTrack({ file: "Music/song.flac", album: "Album", artist: "Artist" }));
+
+    expect(vi.mocked(activeMenuTab).set).toHaveBeenCalledWith("albums");
+    expect(vi.mocked(resetNavigation)).toHaveBeenCalled();
+    expect(vi.mocked(navigateTo)).toHaveBeenCalledWith("tracks_by_album", {
+      name: "Album",
+      artist: "Artist",
+    });
+  });
+
+  it("switches to the artists tab before navigating to an artist", () => {
+    goToArtist(baseTrack({ file: "Music/song.flac", artist: "Artist" }));
+
+    expect(vi.mocked(activeMenuTab).set).toHaveBeenCalledWith("artists");
+    expect(vi.mocked(resetNavigation)).toHaveBeenCalled();
+    expect(vi.mocked(navigateTo)).toHaveBeenCalledWith("albums_by_artist", { name: "Artist" });
+  });
+
+  it("does not navigate for streaming tracks (no local album view)", () => {
+    goToAlbum(baseTrack({ file: "stub:42", album: "Album", artist: "Artist" }));
+
+    expect(vi.mocked(navigateTo)).not.toHaveBeenCalled();
   });
 });

@@ -20,6 +20,8 @@
   font-weight: var(--weight-semibold);
   height: 100%;
   cursor: pointer;
+  /* Labeled control: pill, like the Button primitive. */
+  border-radius: var(--radius-pill);
   transition: color var(--dur-fast);
 }
 
@@ -37,6 +39,7 @@
 .sort-trigger-icon :global(svg) {
   width: var(--icon-size-xs);
   height: var(--icon-size-xs);
+  stroke-width: var(--icon-stroke-width);
 }
 
 .sort-backdrop {
@@ -72,10 +75,10 @@
   justify-content: flex-start;
   width: 100%;
   padding: var(--space-3) var(--space-14px);
-  
   background: transparent;
   border: none;
-  
+  /* Rounded so the shared gray focus plate keeps the app's corner language. */
+  border-radius: var(--radius-sm);
   color: var(--c-text-secondary);
   font-size: var(--text-base);
   text-align: left;
@@ -88,8 +91,12 @@
   color: var(--c-text-primary);
 }
 
+/* Was rgba(255,255,255,0.05) — barely distinguishable from the resting row
+   (transparent) and *less* visible than :hover (0.1), so the applied sort
+   order was unreadable. Now: the same surface as an active list row plus the
+   accent check mark. */
 .sort-item.selected {
   color: var(--c-text-primary);
-  font-weight: var(--weight-medium); 
-  background: rgba(255, 255, 255, 0.05); 
+  font-weight: var(--weight-medium);
+  background: var(--c-surface-active);
 }

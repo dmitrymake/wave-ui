@@ -122,9 +122,15 @@
     background: var(--c-surface-hover);
   }
 
+  /* The filled variant is the header's icon button: a neutral surface with a
+     white glyph, the same family as the secondary pill beside it. min-* aligns it
+     to --control-h-lg (the pill height) while the glyph stays at size "md" —
+     IconButton sizes the GLYPH, the box is glyph + 2 x padding. */
   .ibtn--filled {
     background: var(--c-surface-button);
     color: var(--c-text-primary);
+    min-width: var(--control-h-lg);
+    min-height: var(--control-h-lg);
   }
   .ibtn--filled:hover:not(:disabled) {
     background: var(--c-surface-button-hover);
@@ -140,9 +146,11 @@
   }
 
   /* ---- Tones / active ---- */
-  .ibtn--tone-accent.is-active,
-  .ibtn--tone-accent:hover:not(:disabled) {
-    color: var(--c-accent);
+  /* A tone marks the ACTIVE state only. On hover the variant rules change the
+     surface and nothing else: an accent glyph that turned red under the finger
+     read as a state change that was not actually there. */
+  .ibtn--tone-accent.is-active {
+    color: var(--c-accent-btn);
   }
   .ibtn--tone-heart.is-active {
     color: var(--c-heart);
@@ -155,13 +163,11 @@
   .ibtn:active:not(:disabled) {
     transform: scale(0.95);
   }
+  /* Was --opacity-faint (0.5) while the Button next to it used 0.6: a row of
+     disabled controls looked like two different states. */
   .ibtn:disabled {
-    opacity: var(--opacity-faint);
+    opacity: var(--opacity-muted);
     cursor: default;
-  }
-  .ibtn:focus-visible {
-    outline: none;
-    box-shadow: var(--shadow-focus-ring);
   }
 
   @media (prefers-reduced-motion: reduce) {

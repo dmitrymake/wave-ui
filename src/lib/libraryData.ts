@@ -2,6 +2,7 @@
 // Copyright (c) 2025 dmitrymake
 import { db } from "./db";
 import { formatTotalDuration } from "./utils";
+import { isRecord, asString, asOptionalNumber } from "./validate";
 import type { NavigationEntry, LibraryItem } from "./types";
 
 export interface LibraryHeader {
@@ -26,22 +27,35 @@ export async function loadLibraryView(
   category: string,
   viewState: NavigationEntry,
 ): Promise<LibraryViewData> {
-  const data = (await fetchRows(category, viewState)) as Record<string, unknown>[];
+  const rows: unknown[] = await fetchRows(category, viewState);
 
-  const items: LibraryItem[] = data.map((raw, idx) => {
-    const obj: Record<string, unknown> =
-      typeof raw === "string" ? { name: raw } : raw;
+  const items: LibraryItem[] = rows.map((raw, idx) => {
+    const obj: Record<string, unknown> = isRecord(raw)
+      ? raw
+      : typeof raw === "string"
+        ? { name: raw }
+        : {};
 
-    let yStr = String(obj.year || "");
+    const name = asString(obj.name);
+    const file = asString(obj.file);
+    let yStr = asString(obj.year);
     if (yStr.length > 4) yStr = yStr.substring(0, 4);
 
     return {
-      ...obj,
-      displayName: (obj.name || obj.title || obj.artist || "Unknown") as string,
-      thumbFile: (obj.file as string) || null,
+      name: name || undefined,
+      title: asString(obj.title) || undefined,
+      artist: asString(obj.artist) || undefined,
+      album: asString(obj.album) || undefined,
+      track: asString(obj.track) || undefined,
+      file: file || undefined,
+      displayName: asString(obj.name || obj.title || obj.artist, "Unknown"),
+      thumbFile: file || null,
       year: yStr,
-      _uid: (obj.file || obj.name || idx) + category + viewState.view,
-    } as LibraryItem;
+      _uid: `${file || name || idx}${category}${viewState.view}`,
+      time: asOptionalNumber(obj.time),
+      qualityBadge: asString(obj.qualityBadge) || undefined,
+      thumbHash: asString(obj.thumbHash) || undefined,
+    };
   });
 
   const header: LibraryHeader = {
@@ -68,19 +82,20 @@ async function fetchRows(
   category: string,
   viewState: NavigationEntry,
 ): Promise<unknown[]> {
-  const vdata = viewState.data as { name?: string; artist?: string } | string;
+  const vdata: unknown = viewState.data;
+  const vobj: Record<string, unknown> | null = isRecord(vdata) ? vdata : null;
+  // Navigation payloads are objects, but tolerate a bare string for safety.
+  const vname = (key: string): string =>
+    typeof vdata === "string" && key === "name" ? vdata : asString(vobj?.[key]);
 
   if (viewState.view === "root") {
     return category === "artists" ? db.getArtists() : db.getAlbums();
   }
   if (viewState.view === "albums_by_artist") {
-    const artistName = (typeof vdata === "object" ? vdata.name : vdata) || "";
-    return db.getArtistAlbums(artistName as string);
+    return db.getArtistAlbums(vname("name"));
   }
   if (viewState.view === "tracks_by_album") {
-    const albumName = (typeof vdata === "object" ? vdata.name : vdata) || "";
-    const artistName = typeof vdata === "object" ? vdata.artist : undefined;
-    return db.getAlbumTracks(albumName as string, artistName);
+    return db.getAlbumTracks(vname("name"), vname("artist") || null);
   }
   return [];
 }

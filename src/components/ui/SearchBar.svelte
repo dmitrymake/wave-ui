@@ -55,27 +55,6 @@
 </Input>
 
 {#snippet spinner()}
-  <span class="searchbar-spinner" role="status" aria-label="Searching"></span>
+  <span class="spinner" role="status" aria-label="Searching"></span>
 {/snippet}
 
-<style>
-  .searchbar-spinner {
-    width: var(--icon-size-xs);
-    height: var(--icon-size-xs);
-    border: var(--border-width-thick) solid var(--c-border);
-    border-top-color: var(--c-accent);
-    border-radius: var(--radius-circle);
-    animation: searchbar-spin 0.6s var(--ease-linear) infinite;
-    flex-shrink: 0;
-  }
-  @keyframes searchbar-spin {
-    to {
-      transform: rotate(360deg);
-    }
-  }
-  @media (prefers-reduced-motion: reduce) {
-    .searchbar-spinner {
-      animation: none;
-    }
-  }
-</style>

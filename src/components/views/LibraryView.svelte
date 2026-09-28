@@ -2,6 +2,7 @@
 <!-- Copyright (c) 2025 dmitrymake -->
 <script lang="ts">
   import { fade, scale } from "svelte/transition";
+  import SkeletonGrid from "../SkeletonGrid.svelte";
   import { writable } from "svelte/store";
   import { sortItems } from "../../lib/librarySort";
   import { loadLibraryView } from "../../lib/libraryData";
@@ -169,9 +170,15 @@
         message: `This will clear your queue and play all tracks from "${targetName}".`,
         confirmLabel: "Play",
         type: "confirm",
-        onConfirm: () => {
+        onConfirm: async () => {
+          // The flag used to be cleared only when the view changed, so the
+          // button stayed "Playing..." + disabled after the action finished.
           pressedPlayAll = true;
-          playAllTracks(items.map(libraryItemToTrack));
+          try {
+            await playAllTracks(items.map(libraryItemToTrack));
+          } finally {
+            pressedPlayAll = false;
+          }
         },
       });
     }
@@ -179,14 +186,13 @@
 
   function handleAddToQueue() {
     const items = $itemsStore;
-    if (items.length > 0) {
-      pressedAddToQueue = true;
-      addAllToQueue(items.map(libraryItemToTrack));
-
-      setTimeout(() => {
+    if (items.length === 0 || pressedAddToQueue) return;
+    pressedAddToQueue = true;
+    void addAllToQueue(items.map(libraryItemToTrack))
+      .catch(() => {})
+      .finally(() => {
         pressedAddToQueue = false;
-      }, 2000);
-    }
+      });
   }
 </script>
 
@@ -326,6 +332,7 @@
                   <button
                     class="sort-item"
                     class:selected={sortOption === opt.id}
+                    aria-pressed={sortOption === opt.id}
                     onclick={() => selectSort(opt.id)}
                   >
                     {opt.label}
@@ -338,26 +345,7 @@
       </div>
 
       {#if isLoading}
-        <div class="music-grid">
-          {#each Array(12) as _}
-            <div class="music-card skeleton-card">
-              <div class="card-img-container">
-                <Skeleton width="100%" height="100%" radius="8px" />
-              </div>
-              <div style="margin-top: var(--space-3); margin-bottom: var(--space-1);">
-                <Skeleton width="80%" height="15px" radius="4px" />
-              </div>
-              <div>
-                <Skeleton
-                  width="50%"
-                  height="13px"
-                  radius="4px"
-                  style="opacity: var(--opacity-muted)"
-                />
-              </div>
-            </div>
-          {/each}
-        </div>
+        <SkeletonGrid count={12} />
       {:else}
         <div class="music-grid">
           {#each filteredItems as item (item._uid)}
@@ -395,7 +383,7 @@
                   </div>
                 </div>
 
-                <div class="card-title">{item.displayName}</div>
+                <div class="card-title" title={item.displayName}>{item.displayName}</div>
                 <div class="card-sub-row">
                   {#if item.artist}
                     <div class="card-sub text-ellipsis">{item.artist}</div>
@@ -426,14 +414,6 @@
 
   @import "../../styles/SortMenu.css";
 
-  .music-card.skeleton-card .card-img-container {
-    aspect-ratio: 1;
-    background: transparent;
-    margin-bottom: var(--space-0);
-  }
-  .music-card.skeleton-card:hover {
-    background: transparent;
-  }
 
   .header-subtitle-row {
     display: flex;
@@ -442,13 +422,6 @@
     margin: var(--space-0) var(--space-0) var(--space-2) var(--space-0);
   }
 
-  .header-sub-text {
-    font-size: var(--text-2xl);
-    color: var(--c-white-60);
-    margin: var(--space-0);
-    overflow: hidden;
-    text-overflow: ellipsis;
-  }
 
   .icon-fallback {
     display: flex;
@@ -471,10 +444,4 @@
     align-items: center;
   }
 
-  .empty-text {
-    grid-column: 1/-1;
-    text-align: center;
-    padding: var(--space-10);
-    opacity: var(--opacity-faint);
-  }
 </style>

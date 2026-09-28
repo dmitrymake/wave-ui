@@ -1,7 +1,17 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2025 dmitrymake
-export function longpress(node: HTMLElement, duration = 2000): { destroy(): void } {
+/**
+ * Long-press gesture shared by track rows, playlist cards and the mini-player.
+ *
+ * Touch notes: the browser fires a synthetic click when the finger lifts, so
+ * without the capture-phase swallow below a long-press on a row would BOTH open
+ * the context menu and play the track (or immediately close the menu it opened).
+ * The default duration is the single value for the whole app — long enough not
+ * to fire while scrolling, short enough to feel deliberate on a touchscreen.
+ */
+export function longpress(node: HTMLElement, duration = 600): { destroy(): void } {
   let timer: ReturnType<typeof setTimeout>;
+  let fired = false;
 
   // Interactive descendants that drive their own press/drag gestures
   // (volume slider, progress bar, buttons, links, form fields). A long-press
@@ -24,8 +34,10 @@ export function longpress(node: HTMLElement, duration = 2000): { destroy(): void
   const handleStart = (e: MouseEvent | TouchEvent): void => {
     if (e.type === "mousedown" && (e as MouseEvent).button !== 0) return;
     if (startsOnInteractive(e.target)) return;
+    fired = false;
 
     timer = setTimeout(() => {
+      fired = true;
       node.dispatchEvent(
         new CustomEvent("longpress", {
           detail: { originalEvent: e },
@@ -38,8 +50,18 @@ export function longpress(node: HTMLElement, duration = 2000): { destroy(): void
     clearTimeout(timer);
   };
 
+  // Capture phase: runs before the row/card onclick, and only swallows the
+  // click that belongs to a long press that already fired.
+  const handleClick = (e: MouseEvent): void => {
+    if (!fired) return;
+    fired = false;
+    e.stopPropagation();
+    e.preventDefault();
+  };
+
   node.addEventListener("mousedown", handleStart);
   node.addEventListener("touchstart", handleStart, { passive: true });
+  node.addEventListener("click", handleClick, true);
 
   node.addEventListener("mouseup", handleEnd);
   node.addEventListener("mouseleave", handleEnd);
@@ -51,6 +73,7 @@ export function longpress(node: HTMLElement, duration = 2000): { destroy(): void
     destroy() {
       node.removeEventListener("mousedown", handleStart);
       node.removeEventListener("touchstart", handleStart);
+      node.removeEventListener("click", handleClick, true);
       node.removeEventListener("mouseup", handleEnd);
       node.removeEventListener("mouseleave", handleEnd);
       node.removeEventListener("touchend", handleEnd);

@@ -21,6 +21,7 @@
     yandexSearchTrigger,
   } from "../../lib/stores/yandex";
   import { MSG } from "../../lib/messages";
+  import { Router } from "../../lib/router";
   import { artistTarget, albumTarget } from "../../lib/yandexNav";
   import { yandexSource, yandexTrackToTrack } from "../../lib/sources/yandexSource";
   import TrackRow from "../TrackRow.svelte";
@@ -80,6 +81,8 @@
   // Monotonic load token: async detail loads capture it and drop the result
   // when a newer navigation has started (fixes "opened B, see A" overwrites).
   let viewSeq = 0;
+  // Own token for pagination: a superseded page must not clear a newer spinner.
+  let moreSeq = 0;
 
   // --- Navigation Cache ---
   interface ViewCacheEntry {
@@ -135,24 +138,10 @@
 
   async function handleViewChange(mode: string, data: Record<string, unknown> | null) {
     const seq = ++viewSeq;
-    // Save current view to cache before switching
-    const prevKey = untrack(() => {
-      const prevMode = viewMode;
-      if (prevMode && prevMode !== mode && prevMode !== "dashboard") {
-        return navIdentityKey(prevMode, ($navigationStack[$navigationStack.length - 2]?.data ?? null) as Record<string, unknown> | null);
-      }
-      return null;
-    });
-
-    if (prevKey && prevKey !== navIdentityKey(mode, data)) {
-      saveToCache(prevKey, {
-        tracks: get(tracksStore),
-        albums: get(albumsStore),
-        searchResults: searchResults.tracks.length > 0 ? { ...searchResults } : undefined,
-        playlistContext: { ...currentPlaylistContext },
-        canLoadMore,
-      });
-    }
+    // A view's complete entry is cached by its own loader right after a
+    // successful load; nothing is snapshotted on leave, so a mid-load
+    // departure can never poison the cache with half-cleared stores.
+    clearTimeout(searchDebounceTimer);
 
     // Try restore from cache
     const cacheKey = navIdentityKey(mode, data);
@@ -164,7 +153,7 @@
 
     if (mode === "dashboard") {
       searchQuery = "";
-      if (vibeCards.length === 0) await loadDashboard();
+      if (vibeCards.length === 0) await loadDashboard(seq);
     } else if (mode === "search") {
       const term = (data?.query as string) || "";
       searchQuery = term;
@@ -172,6 +161,10 @@
         if (!restoreFromCache(cacheKey)) {
           await performSearch();
         }
+      } else {
+        // Empty search loads nothing — don't inherit a stale spinner.
+        isLoading = false;
+        isLoadingMore = false;
       }
     } else if (mode === "playlist") {
       if (!restoreFromCache(cacheKey)) {
@@ -189,8 +182,9 @@
   }
 
   onMount(() => {
-    if (isTokenSet && vibeCards.length === 0) {
-      loadDashboard();
+    // Dashboard loading is owned by the view effect (it runs on mount too);
+    // starting it here as well raced the effect's load and stuck the spinner.
+    if (isTokenSet) {
       syncLikes();
     }
     setupObserver();
@@ -239,9 +233,13 @@
     }
   }
 
-  async function loadDashboard() {
-    // Dedupe the onMount call and the view-change effect both firing on cold load.
-    if (isLoading) return;
+  // Single-flight for dashboard loads: the cold-start effect is the only
+  // caller, but a revisit while one is in flight must not pile on another.
+  let dashboardPending = false;
+
+  async function loadDashboard(seq: number = viewSeq) {
+    if (dashboardPending) return;
+    dashboardPending = true;
     isLoading = true;
     try {
       // allSettled: a single failing endpoint must not blank the whole board.
@@ -250,6 +248,7 @@
         YandexApi.getLanding(),
         YandexApi.getStationsDashboard(),
       ]);
+      if (seq !== viewSeq) return; // left mid-load — drop instead of painting stale cards
 
       const userPls = userPlsR.status === "fulfilled" ? userPlsR.value : null;
       const landing = landingR.status === "fulfilled" ? landingR.value : null;
@@ -281,12 +280,13 @@
 
       // Only alarm the user if nothing at all could be loaded.
       if (userPlsR.status === "rejected" && landingR.status === "rejected" && moodR.status === "rejected") {
-        reportError("Dashboard", moodR.reason, MSG.YANDEX_FAILED_DASHBOARD);
+        if (seq === viewSeq) reportError("Dashboard", moodR.reason, MSG.YANDEX_FAILED_DASHBOARD);
       }
     } catch (e) {
-      reportError("Dashboard", e, MSG.YANDEX_FAILED_DASHBOARD);
+      if (seq === viewSeq) reportError("Dashboard", e, MSG.YANDEX_FAILED_DASHBOARD);
     } finally {
-      isLoading = false;
+      dashboardPending = false;
+      if (seq === viewSeq) isLoading = false;
     }
   }
 
@@ -337,6 +337,18 @@
     currentPlaylistContext = { uid, kind, offset: 0, type: "playlist" };
     try {
       await loadPlaylistTracks(uid, kind, 0, seq);
+      if (seq !== viewSeq) return;
+      // Cache on success even when empty: a legitimately empty playlist then
+      // restores instantly instead of flashing a spinner on every Back.
+      // (Failures throw above and never reach here.)
+      if (uid && kind) {
+        saveToCache(navIdentityKey("playlist", data), {
+          tracks: get(tracksStore),
+          albums: [],
+          playlistContext: { ...currentPlaylistContext },
+          canLoadMore,
+        });
+      }
     } catch (e) {
       if (seq !== viewSeq) return;
       reportError("Playlist", e, MSG.YANDEX_FAILED_PLAYLIST);
@@ -489,6 +501,8 @@
     if (isLoadingMore || !canLoadMore) return;
     isLoadingMore = true;
     const seq = viewSeq;
+    // Own token: a superseded page load must not clear a newer one's spinner.
+    const mseq = ++moreSeq;
     const prevOffset = currentPlaylistContext.offset;
     try {
       currentPlaylistContext.offset += 50;
@@ -503,12 +517,14 @@
         if (count === 0) canLoadMore = false;
       }
     } catch (e) {
+      // Superseded first: the context object may already belong to the new
+      // view — never touch it, just drop the stale failure silently.
       if (seq !== viewSeq) return;
       // Roll back the optimistic offset bump so a retry doesn't skip a page.
       currentPlaylistContext.offset = prevOffset;
       reportError("Load more", e, MSG.YANDEX_FAILED_PLAYLIST);
     } finally {
-      if (seq === viewSeq) isLoadingMore = false;
+      if (mseq === moreSeq) isLoadingMore = false;
     }
   }
 
@@ -522,9 +538,9 @@
         // detail view while debouncing, abandon instead of yanking them back.
         const mode = getModeFromStack(get(navigationStack)[get(navigationStack).length - 1]);
         if (mode === "search") {
-          // Keep the entry query in sync so the cache key matches the term.
+          // Sync the entry query and let the view effect drive the load, so a
+          // keystroke never fires two searches (direct + effect).
           updateTopEntry({ query: val });
-          performSearch();
         } else if (mode === "dashboard") {
           navigateTo("yandex_search", { query: val });
         }
@@ -535,12 +551,15 @@
   async function performSearch() {
     if (!searchQuery) return;
     const seq = ++searchSeq;
+    // View-level token: leaving search mid-flight must drop the late result
+    // instead of painting it over the new view's track list.
+    const vseq = viewSeq;
     const q = searchQuery;
     isLoading = true;
     searchResults = { tracks: [], albums: [], artists: [] };
     try {
       const res = await YandexApi.search(q);
-      if (seq !== searchSeq) return; // superseded by a newer search — drop stale result
+      if (seq !== searchSeq || vseq !== viewSeq) return; // superseded — drop stale result
       const normalized: YandexSearchResultsType = {
         tracks: res?.tracks ?? [],
         albums: res?.albums ?? [],
@@ -548,10 +567,16 @@
       };
       searchResults = normalized;
       tracksStore.set(normalized.tracks);
+      // Cache so Back to a searched term restores instantly instead of refetching.
+      saveToCache(navIdentityKey("search", { query: q }), {
+        tracks: normalized.tracks,
+        albums: normalized.albums,
+        searchResults: normalized,
+      });
     } catch (e) {
-      if (seq === searchSeq) reportError("Search", e, MSG.YANDEX_FAILED_SEARCH);
+      if (seq === searchSeq && vseq === viewSeq) reportError("Search", e, MSG.YANDEX_FAILED_SEARCH);
     } finally {
-      if (seq === searchSeq) isLoading = false;
+      if (seq === searchSeq && vseq === viewSeq) isLoading = false;
     }
   }
 
@@ -636,7 +661,10 @@
         oninput={handleSearchInput}
         onClear={() => {
           searchQuery = "";
-          if (viewMode === "search") navigateBack();
+          if (viewMode === "search") {
+            navigateBack();
+            Router.syncTopToUrl();
+          }
         }}
       />
     {/if}
@@ -717,22 +745,9 @@
     flex-direction: column;
     align-items: center;
   }
+  /* Global .spinner (src/styles/shared.css); only the centring is local. */
   .spinner {
     margin: var(--space-0) auto;
-    border: var(--border-width-thick) solid var(--c-border);
-    border-top-color: var(--c-accent);
-    border-radius: var(--radius-circle);
-    width: 20px;
-    height: 20px;
-    animation: spin 1s var(--ease-linear) infinite;
-  }
-  @keyframes spin {
-    100% {
-      transform: rotate(360deg);
-    }
-  }
-  @media (prefers-reduced-motion: reduce) {
-    .spinner { animation: none; }
   }
 
 </style>

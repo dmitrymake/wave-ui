@@ -2,6 +2,7 @@
 <!-- Copyright (c) 2025 dmitrymake -->
 <script lang="ts">
   import { onMount, tick } from "svelte";
+  import SkeletonGrid from "../SkeletonGrid.svelte";
   import {
     playlists,
     isLoadingPlaylists,
@@ -43,6 +44,7 @@
   import PlaylistSearchResults from "./PlaylistSearchResults.svelte";
   import type { Track, Playlist } from "../../lib/types";
   import Button from "../ui/Button.svelte";
+  import IconButton from "../ui/IconButton.svelte";
 
   let isEditMode = $state(false);
   let pressedPlayAll = $state(false);
@@ -225,7 +227,13 @@
       onConfirm: () => {
         pressedPlayAll = true;
         if ($activePlaylistTracks && $activePlaylistTracks.length > 0) {
-          playAllTracks($activePlaylistTracks);
+          // Cleared when playback actually starts, not only when the view
+          // changes — otherwise the button stayed stuck on "Playing...".
+          void playAllTracks($activePlaylistTracks)
+            .catch(() => {})
+            .finally(() => {
+              pressedPlayAll = false;
+            });
         } else {
           pressedPlayAll = false;
         }
@@ -234,14 +242,14 @@
   }
 
   function handleAddToQueue() {
-    if ($activePlaylistTracks.length > 0) {
-      const data = (currentView.data ?? {}) as { name: string };
-      addPlaylistToQueue(data.name);
-      pressedAddToQueue = true;
-      setTimeout(() => {
+    if ($activePlaylistTracks.length === 0 || pressedAddToQueue) return;
+    const data = (currentView.data ?? {}) as { name: string };
+    pressedAddToQueue = true;
+    void Promise.resolve(addPlaylistToQueue(data.name))
+      .catch(() => {})
+      .finally(() => {
         pressedAddToQueue = false;
-      }, 2000);
-    }
+      });
   }
 
   function toggleEditMode() {
@@ -369,14 +377,17 @@
                 >
                   {pressedAddToQueue ? "Added" : "To Queue"}
                 </Button>
-                <button
-                  class="btn-action"
-                  class:active={isEditMode}
-                  title="Edit"
+                <IconButton
+                  variant="filled"
+                  size="md"
+                  tone="accent"
+                  active={isEditMode}
+                  ariaLabel={isEditMode ? "Finish Editing" : "Edit Playlist"}
+                  title={isEditMode ? "Finish Editing" : "Edit Playlist"}
                   onclick={toggleEditMode}
                 >
                   {@html isEditMode ? ICONS.ACCEPT : ICONS.EDIT}
-                </button>
+                </IconButton>
               </div>
             </div>
           </div>
@@ -399,21 +410,7 @@
     </BaseList>
   {:else if $isLoadingPlaylists}
     <div class="content-padded">
-      <div class="music-grid playlists-grid-override">
-        {#each Array(8) as _}
-          <div class="music-card skeleton-card">
-            <div class="card-img-container">
-              <Skeleton width="100%" height="100%" radius="var(--radius-md)" />
-            </div>
-            <div style="margin-bottom: var(--space-1);">
-              <Skeleton width="60%" height="15px" radius="var(--radius-sm)" />
-            </div>
-            <div>
-              <Skeleton width="40%" height="13px" radius="var(--radius-sm)" style="opacity: var(--opacity-muted)" />
-            </div>
-          </div>
-        {/each}
-      </div>
+      <SkeletonGrid count={8} gridClass="playlists-grid-override" subtitleWidth="40%" titleWidth="60%" />
     </div>
   {:else}
     <div class="content-padded">
@@ -478,6 +475,7 @@
   .search-icon :global(svg) {
     width: var(--icon-size-sm);
     height: var(--icon-size-sm);
+    stroke-width: var(--icon-stroke-width);
   }
   input {
     flex: 1;
@@ -504,50 +502,16 @@
     justify-content: center;
     cursor: pointer;
     padding: var(--space-0);
+    /* Icon-only control: circle, like every other icon button in the app. */
+    border-radius: var(--radius-circle);
     margin-right: var(--space-1);
   }
   .clear-icon-btn :global(svg) {
     width: var(--icon-size-xs);
     height: var(--icon-size-xs);
+    stroke-width: var(--icon-stroke-width);
   }
 
-  .spinner {
-    width: var(--icon-size-xs);
-    height: var(--icon-size-xs);
-    border: var(--border-width-thick) solid var(--c-border);
-    border-top-color: var(--c-accent);
-    border-radius: var(--radius-circle);
-    animation: spin 0.6s var(--ease-linear) infinite;
-    margin-left: var(--space-2);
-    flex-shrink: 0;
-  }
-  @keyframes spin {
-    to {
-      transform: rotate(360deg);
-    }
-  }
-  @media (prefers-reduced-motion: reduce) {
-    .spinner { animation: none; }
-  }
 
-  .playlists-grid-override {
-    grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)) !important;
-    gap: var(--space-6) !important;
-  }
 
-  .music-card.skeleton-card .card-img-container {
-    aspect-ratio: 1;
-    background: transparent;
-    margin-bottom: var(--space-0);
-  }
-  .music-card.skeleton-card:hover {
-    background: transparent;
-  }
-
-  @media (max-width: 768px) {
-    .playlists-grid-override {
-      grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)) !important;
-      gap: var(--space-4) !important;
-    }
-  }
 </style>

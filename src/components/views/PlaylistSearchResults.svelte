@@ -49,7 +49,7 @@
             <span class="overlay-icon">{@html ICONS.PLAY}</span>
           </div>
         </div>
-        <div class="card-title">{playlist.name}</div>
+        <div class="card-title" title={playlist.name}>{playlist.name}</div>
       </div>
     {/each}
   </div>
@@ -68,7 +68,7 @@
           onkeydown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onOpenPlaylist?.(group.playlist); }}}
         >
           <div class="group-icon">{@html ICONS.PLAYLISTS}</div>
-          <div class="group-title">{group.playlist.name}</div>
+          <div class="group-title" title={group.playlist.name}>{group.playlist.name}</div>
           <div class="group-count">{group.tracks.length}</div>
 
           <div class="group-actions">
@@ -147,6 +147,8 @@
     padding: var(--space-3) var(--space-4);
     background: var(--c-surface-hover);
     cursor: pointer;
+    /* Filled group band: same corners as the list rows it separates. */
+    border-radius: var(--radius-md);
     border-bottom: var(--border-default-dim);
   }
   .group-header:hover {
@@ -167,6 +169,13 @@
     font-weight: var(--weight-semibold);
     color: var(--c-text-primary);
     flex: 1;
+    /* Without these the title pushed the action buttons out of the flex row and
+       .group-container's overflow: hidden clipped them, so on long
+       (Cyrillic/German) names the buttons became unclickable. */
+    min-width: 0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
   .group-count {
     background: var(--c-surface-button);
@@ -187,23 +196,11 @@
     flex-direction: column;
   }
 
-  .empty-text {
-    grid-column: 1/-1;
-    text-align: center;
-    padding: var(--space-10);
-    color: var(--c-text-secondary);
-  }
 
-  .section-mb {
-    margin-bottom: var(--space-6);
-  }
-  .section-spacing {
-    margin-top: var(--space-3);
-    margin-bottom: var(--space-3);
-  }
+  /* .header-label is global (eyebrow style) and was overridden here to 18px/700
+     white, so "Matched Playlists" rendered differently from every other section
+     heading. The extra space below is what this view actually wanted. */
   .header-label {
-    font-size: var(--text-xl);
-    font-weight: var(--weight-bold);
-    color: var(--c-text-primary);
+    margin-bottom: var(--space-3);
   }
 </style>

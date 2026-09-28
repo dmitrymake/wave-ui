@@ -1,6 +1,7 @@
 <!-- SPDX-License-Identifier: MIT -->
 <!-- Copyright (c) 2025 dmitrymake -->
 <script lang="ts">
+  import Card from "../../ui/Card.svelte";
   import { onMount, onDestroy } from "svelte";
   import { fade } from "svelte/transition";
   import {
@@ -32,14 +33,30 @@
     if (timeInterval) clearInterval(timeInterval);
   });
 
+  // Toggling the switch and changing the time in quick succession used to fire
+  // two independent writes, and the slower one won — the stored alarm then
+  // disagreed with what the UI showed. The guard serialises them.
+  let alarmBusy = $state(false);
+  let alarmQueued = false;
+
   async function handleSaveAlarm() {
+    if (alarmBusy) {
+      alarmQueued = true;
+      return;
+    }
+    alarmBusy = true;
     try {
-      await ApiActions.setAlarm($isAlarmEnabled, $alarmTime, $alarmPlaylist);
+      do {
+        alarmQueued = false;
+        await ApiActions.setAlarm($isAlarmEnabled, $alarmTime, $alarmPlaylist);
+      } while (alarmQueued);
       if ($isAlarmEnabled) {
         showToast(MSG.alarmSet($alarmTime), "success");
       }
     } catch (e) {
       showToast(MSG.SETTINGS_FAILED_ALARM_SYNC, "error");
+    } finally {
+      alarmBusy = false;
     }
   }
 </script>
@@ -48,7 +65,7 @@
   <div class="section-header">
     <span>Alarm Clock</span>
   </div>
-  <div class="card">
+  <Card>
     <div class="row space-between">
       <span class="label-text">Current Player Time</span>
       <span class="mono-badge">{serverTime}</span>
@@ -62,6 +79,7 @@
         bind:checked={$isAlarmEnabled}
         ariaLabel="Enable Alarm"
         onchange={handleSaveAlarm}
+        disabled={alarmBusy}
       />
     </div>
 
@@ -74,6 +92,7 @@
           id="alarm-time"
           type="time"
           bind:value={$alarmTime}
+          disabled={alarmBusy}
           onchange={handleSaveAlarm}
         />
       </div>
@@ -96,7 +115,7 @@
         </div>
       </div>
     {/if}
-  </div>
+  </Card>
 </div>
 
 <style>
@@ -113,16 +132,6 @@
     color: var(--c-text-primary);
     margin-bottom: var(--space-3);
     padding-left: var(--space-1);
-  }
-
-  .card {
-    background: var(--c-bg-card);
-    border: var(--border-default);
-    border-radius: var(--radius-lg);
-    padding: var(--space-4);
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-3);
   }
 
   .row {
@@ -151,6 +160,14 @@
     font-size: var(--text-lg);
     font-family: inherit;
     outline: none;
+  }
+
+  /* This input is not inside an .field wrapper, so it has no focus-within style
+     and `outline: none` left it with NO focus indicator at all — the only
+     focusable control in the app that was keyboard-blind. Same treatment as the
+     text fields: a brighter neutral border. */
+  input[type="time"]:focus-visible {
+    border-color: var(--c-focus-line);
   }
 
   .mono-badge {
@@ -185,6 +202,8 @@
     font-size: var(--text-base);
     outline: none;
     width: 100%;
+    /* Same focus treatment as the other bare inputs in settings. */
+    white-space: nowrap;
     text-overflow: ellipsis;
   }
 

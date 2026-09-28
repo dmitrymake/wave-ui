@@ -58,6 +58,20 @@
   let artSrc = $derived(getTrackCoverUrl($currentSong, $stations, $currentSong.stationName));
 
   let progressBar: HTMLElement;
+  let playBtn: HTMLButtonElement;
+  let prevFocus: HTMLElement | null = null;
+
+  // Keyboard users land here with focus in body (the opener unmounts), which
+  // would also deaden the Escape handler: focus Play on open, restore on close.
+  $effect(() => {
+    if ($isFullPlayerOpen && !isDocked) {
+      prevFocus = document.activeElement as HTMLElement | null;
+      queueMicrotask(() => playBtn?.focus());
+    } else if (prevFocus) {
+      prevFocus.focus?.();
+      prevFocus = null;
+    }
+  });
 
   let duration = $derived($status.duration || 1);
   let elapsed = $derived($status.elapsed || 0);
@@ -102,6 +116,7 @@
   class="full-player"
   class:is-docked={isDocked}
   transition:hold|global={{ duration: isDocked ? 0 : 440 }}
+  onkeydown={(e) => { if (e.key === "Escape" && !isDocked) close(); }}
 >
   <div
     class="full-player-sheet"
@@ -221,7 +236,7 @@
           {@html ICONS.PREVIOUS}
         </button>
 
-        <button class="play-btn-large flex-center" onclick={togglePlay} aria-label={$status.state === "play" ? "Pause" : "Play"} title={$status.state === "play" ? "Pause" : "Play"}>
+        <button class="play-btn-large flex-center" bind:this={playBtn} onclick={togglePlay} aria-label={$status.state === "play" ? "Pause" : "Play"} title={$status.state === "play" ? "Pause" : "Play"}>
           {@html $status.state === "play" ? ICONS.PAUSE : ICONS.PLAY}
         </button>
 
@@ -253,7 +268,11 @@
     background: transparent;
     display: flex;
     flex-direction: column;
-    touch-action: none;
+    /* Was `touch-action: none` on the whole player: it blocked every native
+       pan/zoom across 35% of the screen. Each gesture surface declares what it
+       needs (.bar-hit-area, .volume-hit-area) and the drag zone handles its own
+       pointer moves, so the sheet itself only needs to stop double-tap zoom. */
+    touch-action: manipulation;
   }
   .full-player.is-docked {
     position: relative;
@@ -336,7 +355,10 @@
     width: 100%; flex-grow: 0; flex-shrink: 1; min-height: 0;
   }
   .is-docked .art-container {
-    flex: 1 1 auto; margin-bottom: var(--space-0); height: 100%; max-height: 50vh; overflow: hidden;
+    /* Was 50vh = 240px of 480, i.e. half the screen for a cover that is
+       already on every row. 34vh keeps it as an identity anchor and hands the
+       freed height to the controls below. */
+    flex: 1 1 auto; margin-bottom: var(--space-0); height: 100%; max-height: 34vh; overflow: hidden;
   }
   .artwork {
     width: 100%; max-width: 400px; aspect-ratio: 1;
@@ -367,7 +389,8 @@
   .is-docked .meta { text-align: center; margin-bottom: var(--space-1); }
 
   .title { font-size: var(--text-3xl); font-weight: var(--weight-bold); margin: var(--space-0) var(--space-0) var(--space-1); color: var(--c-text-primary); }
-  .is-docked .title { font-size: var(--text-lg); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  /* Same 16px title as the list and the mini player, so the same weight. */
+  .is-docked .title { font-size: var(--text-lg); font-weight: var(--weight-medium); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
   .artist-row { display: flex; align-items: center; gap: var(--space-2); width: 100%; }
   .is-docked .artist-row { justify-content: center; }
@@ -378,7 +401,9 @@
     height: var(--space-10); display: flex; align-items: center; cursor: pointer;
     touch-action: none; position: relative; width: 100%;
   }
-  .is-docked-bar { height: var(--space-6); }
+  /* Docked: 24px was the most miss-prone control on the app's only player —
+     a mistap fell through to the time labels below, which are not clickable. */
+  .is-docked-bar { height: var(--control-h-lg); }
 
   .common-track {
     width: 100%; height: var(--space-1); background: var(--c-white-20); border-radius: var(--radius-xs); position: relative;
@@ -394,12 +419,19 @@
     width: 14px; height: 14px; background: var(--c-text-primary); border-radius: var(--radius-circle);
     box-shadow: var(--shadow-sm-strong); pointer-events: none;
   }
+  /* Wide hit area -> the focus indicator is the knob (enlarged, fill only). */
+  .bar-hit-area:focus-visible { outline: none; }
+  .bar-hit-area:focus-visible .common-knob {
+    transform: translate(-50%, -50%) scale(1.5);
+  }
 
   .time-row {
     display: flex; justify-content: space-between; margin-top: calc(-1 * var(--space-3));
-    font-size: var(--text-sm); color: var(--c-white-90); font-weight: var(--weight-semibold); font-variant-numeric: tabular-nums;
+    font-size: var(--text-sm); color: var(--c-text-secondary); font-weight: var(--weight-medium); font-variant-numeric: tabular-nums;
   }
-  .is-docked .time-row { margin-top: var(--space-0); font-size: var(--text-2xs); }
+  /* Docked is the ONLY player on 800x480: same value as the full view, so the
+     time does not shrink when the rail is on screen. */
+  .is-docked .time-row { margin-top: var(--space-0); font-size: var(--text-sm); }
 
   .buttons-row {
     display: flex; justify-content: space-between; align-items: center; padding: var(--space-0) var(--space-2);
@@ -409,8 +441,11 @@
   .side-btn { padding: var(--icon-btn-pad-lg); color: var(--c-text-secondary); transition: color var(--dur-fast); }
   .side-btn:active { opacity: var(--opacity-dim); }
   .side-btn :global(svg) { width: var(--icon-size-lg); height: var(--icon-size-lg); }
-  .is-docked .side-btn { padding: var(--icon-btn-pad-sm); }
-  .is-docked .side-btn :global(svg) { width: var(--icon-size-md); height: var(--icon-size-md); }
+  /* Docked rail = the ONLY playback control on the 800x480 screen, so every
+     target here has to clear the 44px platform minimum: padding-sm (6px) around
+     a 20px glyph was 32px. */
+  .is-docked .side-btn { padding: var(--icon-btn-pad); }
+  .is-docked .side-btn :global(svg) { width: var(--icon-size-lg); height: var(--icon-size-lg); }
 
   .play-btn-large {
     width: var(--circle-play-lg); height: var(--circle-play-lg); border-radius: var(--radius-circle);

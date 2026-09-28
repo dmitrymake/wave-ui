@@ -2,6 +2,7 @@
 <!-- Copyright (c) 2025 dmitrymake -->
 <script lang="ts">
   import { fade } from "svelte/transition";
+  import SkeletonGrid from "../SkeletonGrid.svelte";
   import {
     stations,
     currentSong,
@@ -48,21 +49,7 @@
 
   <div class="content-padded">
     {#if $isLoadingRadio}
-      <div class="music-grid">
-        {#each Array(12) as _}
-          <div class="music-card">
-            <div class="card-img-container">
-              <Skeleton width="100%" height="100%" radius="var(--radius-md)" />
-            </div>
-            <div style="margin-bottom: var(--space-1);">
-              <Skeleton width="70%" height="15px" radius="var(--radius-sm)" />
-            </div>
-            <div>
-              <Skeleton width="40%" height="13px" radius="var(--radius-sm)" style="opacity: var(--opacity-muted)" />
-            </div>
-          </div>
-        {/each}
-      </div>
+      <SkeletonGrid count={12} skeletonCard={false} subtitleWidth="40%" titleWidth="70%" />
     {:else}
       <div class="music-grid">
         {#each filteredStations as station (station.file || station.name)}
@@ -100,7 +87,7 @@
               </div>
             </div>
 
-            <div class="card-title">{station.name}</div>
+            <div class="card-title" title={station.name}>{station.name}</div>
 
             <div class="card-sub-row">
               {#if station.genre}
@@ -151,10 +138,4 @@
     color: var(--c-text-secondary);
   }
 
-  .empty-text {
-    grid-column: 1/-1;
-    text-align: center;
-    padding: var(--space-10);
-    opacity: var(--opacity-faint);
-  }
 </style>

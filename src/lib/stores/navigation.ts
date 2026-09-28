@@ -15,6 +15,23 @@ export const searchQuery = writable<string>("");
 export const scrollPositions = writable<Record<string, number>>({});
 
 type RouteData = NavData | null;
+// Last hash assigned by us (push). Browsers fire popstate for fragment
+// navigations too, so the popstate handler must ignore events caused by our
+// own assignments — hashchange owns those. Only a real traversal (browser
+// Back/forward, hash different from what we set) is a Back.
+let lastAssignedHash = "";
+function normalizeHash(hash: string): string {
+  return hash.startsWith("#") ? hash : `#${hash}`;
+}
+/** Assign location.hash, remembering it to recognize our own popstate. */
+export function assignHash(hash: string): void {
+  lastAssignedHash = normalizeHash(hash);
+  window.location.hash = hash;
+}
+/** True when the current hash is what we assigned last (not a traversal). */
+export function isOwnHashAssignment(): boolean {
+  return normalizeHash(window.location.hash) === lastAssignedHash;
+}
 // Rich in-app payloads queued for hashchange. Some navigations never fire it
 // (search uses replaceState; same-hash updates assign nothing), so entries are
 // consumed by route identity (see consumeRouteDataFor), never by blind
@@ -33,6 +50,12 @@ export function setNavigationCallback(fn: (view: ViewName, data: RouteData) => v
 // index signature. It is stored/forwarded as NavData for views to narrow.
 export function navigateTo(view: ViewName, data: object | null = null): void {
   const payload = data as RouteData;
+  const stack = get(navigationStack);
+  const top = stack[stack.length - 1];
+  // No-op when already there (e.g. re-clicking the same artist after its
+  // header merged into the top entry): avoids a duplicate stack entry.
+  if (top && isSameNavEntry(top.view, top.data, view, payload)) return;
+
   if (payload) {
     pendingQueue.push(payload);
     if (pendingQueue.length > MAX_PENDING) {
@@ -176,8 +199,9 @@ export function navIdentityKey(
 }
 
 /**
- * Deep-equal dedup for navigation entries (view + full payload). The old check
- * compared only name/id/uid and duplicated every `{query}` navigation.
+ * Same-view check for navigation entries: compares identities, not full
+ * payloads, so a header-merged top entry still dedups against a fresh
+ * navigation to the same content (no duplicate pushes on re-click).
  */
 export function isSameNavEntry(
   viewA: string,
@@ -188,7 +212,7 @@ export function isSameNavEntry(
   if (viewA !== viewB) return false;
   if (!dataA && !dataB) return true;
   if (!dataA || !dataB) return false;
-  return stableStringify(dataA) === stableStringify(dataB);
+  return navIdentityKey(viewA, dataA) === navIdentityKey(viewB, dataB);
 }
 
 export function saveScrollPosition(key: string, pos: number): void {

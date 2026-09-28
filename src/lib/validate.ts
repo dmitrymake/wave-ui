@@ -20,15 +20,6 @@ export function asOptionalString(v: unknown): string | undefined {
   return undefined;
 }
 
-export function asNumber(v: unknown, fallback = 0): number {
-  if (typeof v === "number" && Number.isFinite(v)) return v;
-  if (typeof v === "string" && v.trim() !== "") {
-    const n = Number(v);
-    if (Number.isFinite(n)) return n;
-  }
-  return fallback;
-}
-
 export function asOptionalNumber(v: unknown): number | undefined {
   if (typeof v === "number" && Number.isFinite(v)) return v;
   if (typeof v === "string" && v.trim() !== "") {
@@ -36,20 +27,6 @@ export function asOptionalNumber(v: unknown): number | undefined {
     if (Number.isFinite(n)) return n;
   }
   return undefined;
-}
-
-/** Yandex/stream meta shape the queue enrichment actually reads. */
-export interface StreamMeta {
-  id?: string | number;
-  title?: unknown;
-  artist?: unknown;
-  album?: unknown;
-  image?: unknown;
-  time?: unknown;
-}
-
-export function isStreamMeta(v: unknown): v is StreamMeta {
-  return isRecord(v);
 }
 
 /** Normalize raw stream meta to safe display values. Never throws. */
@@ -73,14 +50,6 @@ export function normalizeStreamMeta(
 }
 
 /** Radio station row from wave-api.php?action=stations. */
-export interface RawStation {
-  id: unknown;
-  name: unknown;
-  station: unknown;
-  logo?: unknown;
-  genre?: unknown;
-}
-
 export function normalizeStation(item: unknown): {
   id: number | string;
   name: string;

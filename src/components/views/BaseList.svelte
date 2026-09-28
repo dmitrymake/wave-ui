@@ -219,10 +219,11 @@
         </div>
       {/each}
 
-      {#if $itemsStore.length === 0}
-        <div class="content-padded" style="text-align: center; opacity: 0.5;">
-          {emptyText}
-        </div>
+      {#if $itemsStore.length === 0 && emptyText}
+        <!-- The global .empty-text (one definition, was 5 copies + this inline
+             style). An empty string means "no empty state": SearchView passes ""
+             because it renders its own placeholder/no-results blocks. -->
+        <div class="empty-text">{emptyText}</div>
       {/if}
 
       {#if footer}

@@ -3,6 +3,7 @@
 import { resolveBaseUrl } from "../config";
 import { fetchWithTimeout, TimeoutError } from "./http";
 import { HTTP_CONFIG } from "./constants";
+import { isRecord } from "./validate";
 import type {
   YandexTrack,
   YandexPlaylist,
@@ -149,7 +150,18 @@ export const YandexApi: YandexApiType = {
     if (!res.ok) throw new YandexApiError(res.status);
     // res.json() is `any`; the caller's type parameter is the single point where we
     // assert the parsed payload's shape (the daemon's contract is external).
-    return (await res.json()) as T;
+    const body = (await res.json()) as T;
+    if (body === null || typeof body !== "object") {
+      throw new YandexApiError(500, `invalid ${action} payload`);
+    }
+    // PHP answers transport problems with HTTP codes, but unknown actions (and
+    // swallowed upstream failures) come back as 200 + {error}: fail loudly
+    // instead of rendering an empty success downstream.
+    if (isRecord(body) && "error" in body) {
+      const message = typeof body.error === "string" ? body.error : "Yandex API error";
+      throw new YandexApiError(500, message);
+    }
+    return body;
   },
 
   async search(query: string): Promise<YandexSearchResponse> {

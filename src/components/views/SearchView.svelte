@@ -132,7 +132,7 @@
   <BaseList
     itemsStore={tracksStore}
     isEditMode={false}
-    isLoading={false}
+    isLoading={isSearching}
     emptyText=""
   >
     {#snippet header()}
@@ -213,19 +213,6 @@
     margin-bottom: var(--space-6);
   }
 
-  .section-spacing {
-    margin-top: var(--space-3);
-  }
-
-  .section-mb {
-    margin-bottom: var(--space-6);
-  }
-
-  .empty-text {
-    text-align: center;
-    color: var(--c-text-secondary);
-    margin-top: var(--space-10);
-  }
 
   .placeholder-state {
     display: flex;

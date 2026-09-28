@@ -11,18 +11,13 @@
   let cardEl: HTMLElement;
 
   $effect(() => {
-    if (!$modal.isOpen) {
-      isError = false;
-    }
-  });
-
-  $effect(() => {
     if ($modal.isOpen) {
       prevFocus = document.activeElement as HTMLElement | null;
-      // Focus prompt input or confirm on open; restore on close.
+      // Focus prompt input, confirm button, or (select type) the card itself.
       queueMicrotask(() => {
         if ($modal.type === "prompt" && inputRef) inputRef.focus();
-        else confirmRef?.focus();
+        else if (confirmRef) confirmRef.focus();
+        else cardEl?.focus();
       });
     } else if (prevFocus) {
       prevFocus.focus?.();
@@ -51,7 +46,29 @@
     if (!$modal.isOpen) {
       isError = false;
     }
+    // Scroll-lock the background while the dialog is open; restore after.
+    // The returned cleanup also covers unmount-with-open (HMR/teardown).
+    document.body.style.overflow = $modal.isOpen ? "hidden" : "";
+    return () => {
+      document.body.style.overflow = "";
+    };
   });
+
+  // An async onConfirm keeps the dialog open and disabled until it settles —
+  // closing first meant the error toast arrived on the next screen, with no
+  // indication of which action had failed.
+  let isBusy = $state(false);
+
+  async function runConfirm(value?: string) {
+    if (isBusy) return;
+    isBusy = true;
+    try {
+      await $modal.onConfirm?.(value);
+      closeModal();
+    } finally {
+      isBusy = false;
+    }
+  }
 
   function handleConfirm() {
     if ($modal.type === "prompt") {
@@ -62,17 +79,15 @@
         return;
       }
 
-      if ($modal.onConfirm) $modal.onConfirm(val);
-    } else {
-      if ($modal.onConfirm) $modal.onConfirm();
+      void runConfirm(val);
+      return;
     }
 
-    closeModal();
+    void runConfirm();
   }
 
   function handleSelect(optionValue: string) {
-    if ($modal.onConfirm) $modal.onConfirm(optionValue);
-    closeModal();
+    void runConfirm(optionValue);
   }
 
   function triggerError() {
@@ -130,6 +145,7 @@
               class="modal-input"
               class:shake-error={isError}
               placeholder={$modal.placeholder}
+              aria-label={$modal.placeholder || $modal.title}
               bind:value={$modal.inputValue}
               onkeydown={handleKeydown}
               autofocus
@@ -156,12 +172,18 @@
       {#if $modal.type !== "select"}
         <div class="modal-actions">
           {#if $modal.type === "confirm" || $modal.type === "prompt"}
-            <button class="btn cancel" onclick={closeModal}>
+            <button class="btn cancel" onclick={closeModal} disabled={isBusy}>
               {$modal.cancelLabel}
             </button>
           {/if}
-          <button class="btn confirm" bind:this={confirmRef} onclick={handleConfirm}>
-            {$modal.confirmLabel}
+          <button
+            class="btn confirm"
+            bind:this={confirmRef}
+            onclick={handleConfirm}
+            disabled={isBusy}
+            aria-busy={isBusy}
+          >
+            {isBusy ? `${$modal.confirmLabel}...` : $modal.confirmLabel}
           </button>
         </div>
       {/if}
@@ -261,7 +283,7 @@
   }
 
   .modal-input:focus {
-    border-color: var(--c-accent);
+    border-color: var(--c-focus-line);
   }
 
   .select-list {
@@ -293,7 +315,7 @@
   .select-item.active {
     border-color: var(--c-accent);
     background: var(--c-surface-active);
-    color: var(--c-accent);
+    color: var(--c-accent-btn);
     font-weight: var(--weight-semibold);
   }
 
@@ -316,6 +338,10 @@
     cursor: pointer;
     transition: background var(--dur-instant);
   }
+  .btn:disabled {
+    opacity: var(--opacity-muted);
+    cursor: default;
+  }
 
   .btn:active {
     background: var(--c-surface-hover);
@@ -325,8 +351,13 @@
     color: var(--c-text-muted);
     border-right: var(--border-default);
   }
+  /* Press feedback: the dialog buttons had no :hover and no :active, so a tap
+     produced nothing. */
+  .btn:active:not(:disabled) {
+    background: var(--c-surface-hover);
+  }
 
   .btn.confirm {
-    color: var(--c-accent);
+    color: var(--c-accent-btn);
   }
 </style>

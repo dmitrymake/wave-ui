@@ -43,5 +43,6 @@
   .icon-ph :global(svg) {
     width: var(--icon-size-md);
     height: var(--icon-size-md);
+    stroke-width: var(--icon-stroke-width);
   }
 </style>

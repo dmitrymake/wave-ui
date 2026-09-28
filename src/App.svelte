@@ -15,6 +15,7 @@
     showToast,
     showModal,
     isSyncingLibrary,
+    modal,
   } from "./lib/store";
   import { isYandexEnabled } from "./lib/stores/yandex";
   import { MSG } from "./lib/messages";
@@ -29,6 +30,16 @@
     setNavigationCallback((view, data) => {
       Router.updateUrl(view, data);
     });
+
+    // Last-resort surface for async failures outside render (MPD socket,
+    // workers, unawaited promises): error boundaries can't catch those.
+    const onUnhandled = (e: PromiseRejectionEvent) => {
+      e.preventDefault();
+      logger.error("[App] Unhandled rejection:", e.reason);
+      const detail = e.reason instanceof Error && e.reason.message ? `: ${e.reason.message}` : "";
+      showToast(`${MSG.PLAY_NETWORK_ERROR}${detail}`, "error");
+    };
+    window.addEventListener("unhandledrejection", onUnhandled);
 
     MPD.connect();
     ApiActions.loadRadioStations();
@@ -107,6 +118,50 @@
   }
 </script>
 
-<MainScreen />
-<ContextMenu />
-<Modal />
+<svelte:boundary>
+  <!-- Inert while a modal is open: keyboard/screen-reader users stay in it. -->
+  <div inert={$modal.isOpen} class="app-inert-wrap">
+    <MainScreen />
+  </div>
+  {#snippet failed(error, reset)}
+    <div class="fatal-fallback" role="alert">
+      <p>Something went wrong: {error instanceof Error ? error.message : "unknown error"}</p>
+      <button class="fatal-retry" onclick={reset}>Reload view</button>
+    </div>
+  {/snippet}
+</svelte:boundary>
+<svelte:boundary>
+  <ContextMenu />
+  <Modal />
+  {#snippet failed()}
+    <!-- Overlay-only crash: drop the overlays, keep the app alive. -->
+  {/snippet}
+</svelte:boundary>
+
+<style>
+  .app-inert-wrap {
+    display: contents;
+  }
+  .fatal-fallback {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    height: 100dvh;
+    gap: var(--space-4);
+    color: var(--c-text-primary);
+    background: var(--c-bg-app);
+    padding: var(--space-6);
+    text-align: center;
+  }
+  .fatal-retry {
+    background: var(--c-accent);
+    color: var(--c-text-inverse);
+    border: none;
+    border-radius: var(--radius-full);
+    padding: var(--space-3) var(--space-6);
+    font-size: var(--text-base);
+    font-weight: var(--weight-semibold);
+    cursor: pointer;
+  }
+</style>

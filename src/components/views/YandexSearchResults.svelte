@@ -39,7 +39,7 @@
               radius="8px"
             />
           </div>
-          <div class="card-title center">{artist.title}</div>
+          <div class="card-title center" title={artist.title}>{artist.title}</div>
         </div>
       {/each}
     </div>
@@ -59,7 +59,7 @@
               radius="8px"
             />
           </div>
-          <div class="card-title">{album.title}</div>
+          <div class="card-title" title={album.title}>{album.title}</div>
           <div class="card-sub">{album.artist}</div>
         </div>
       {/each}
