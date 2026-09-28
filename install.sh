@@ -38,25 +38,25 @@ git clone "$REPO_URL" "$TEMP_DIR"
 # 4. Backend Installation
 echo ">>> [4/7] Installing API & Backend Logic..."
 
-# Создаем структуру директорий
+# Create the directory structure
 sudo mkdir -p "$INC_DIR"
 sudo mkdir -p "$BIN_DIR"
 sudo mkdir -p "/var/local/www"
 sudo mkdir -p "/dev/shm/yandex_music"
 
-# Копируем PHP файлы
+# Copy the PHP files
 sudo cp "$TEMP_DIR/src/api/wave-api.php" "$WEB_ROOT/"
 sudo cp "$TEMP_DIR/src/api/wave-yandex-api.php" "$WEB_ROOT/"
 sudo cp "$TEMP_DIR/src/api/yandex-music.php" "$INC_DIR/"
 sudo cp "$TEMP_DIR/src/api/yandex-cache.php" "$INC_DIR/"
 sudo cp "$TEMP_DIR/src/api/yandex-daemon.php" "$BIN_DIR/"
 
-# Выставляем владельца один раз на всё дерево
+# Set ownership once for the whole tree
 sudo chown -R www-data:www-data "$WEB_ROOT"
 sudo chown -R www-data:www-data "/var/local/www"
 sudo chown -R www-data:www-data "/dev/shm/yandex_music"
 
-# Права на исполнение демона и доступ к SHM
+# Daemon execute bit and SHM access
 sudo chmod +x "$BIN_DIR/yandex-daemon.php"
 sudo chmod -R 777 "/dev/shm/yandex_music"
 

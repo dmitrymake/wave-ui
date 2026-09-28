@@ -21,7 +21,7 @@ echo "-------------------------------------------------------"
 # 1. Stop Services to release file locks
 echo ">>> [1/5] Stopping services..."
 sudo systemctl stop wave-yandex.service || true
-# Не останавливаем mpd/websockify, если не трогаем их конфиги, но для надежности можно рестартануть в конце
+# mpd/websockify stay up unless their configs change; restart at the end for safety
 
 # 2. Fetching Code
 echo ">>> [2/5] Fetching code from branch '$BRANCH'..."
@@ -36,25 +36,25 @@ git clone -b "$BRANCH" "$REPO_URL" "$TEMP_DIR"
 # 3. Backend Update
 echo ">>> [3/5] Updating Backend Logic..."
 
-# Убедимся, что папки существуют (на случай если кто-то их удалил)
+# Ensure the directories exist (in case someone deleted them)
 sudo mkdir -p "$INC_DIR"
 sudo mkdir -p "$BIN_DIR"
 sudo mkdir -p "/var/local/www"
 sudo mkdir -p "/dev/shm/yandex_music"
 
-# Копируем PHP файлы (Перезаписываем существующие)
+# Copy the PHP files (overwrite existing ones)
 sudo cp "$TEMP_DIR/src/api/wave-api.php" "$WEB_ROOT/"
 sudo cp "$TEMP_DIR/src/api/wave-yandex-api.php" "$WEB_ROOT/"
 sudo cp "$TEMP_DIR/src/api/yandex-music.php" "$INC_DIR/"
 sudo cp "$TEMP_DIR/src/api/yandex-cache.php" "$INC_DIR/"
 sudo cp "$TEMP_DIR/src/api/yandex-daemon.php" "$BIN_DIR/"
 
-# Обновляем права (на случай если они слетели)
+# Refresh ownership (in case it drifted)
 sudo chown -R www-data:www-data "$WEB_ROOT"
 sudo chown -R www-data:www-data "/var/local/www"
 sudo chown -R www-data:www-data "/dev/shm/yandex_music"
 
-# Права на исполнение демона
+# Daemon execute bit
 sudo chmod +x "$BIN_DIR/yandex-daemon.php"
 sudo chmod -R 777 "/dev/shm/yandex_music"
 
@@ -62,7 +62,7 @@ sudo chmod -R 777 "/dev/shm/yandex_music"
 echo ">>> [4/5] Updating Frontend Assets..."
 sudo mkdir -p "$FINAL_WEB_DIR"
 
-# ВАЖНО: Чистим папку фронта перед копированием, чтобы удалить старые билды
+# IMPORTANT: clean the frontend dir before copying to drop stale builds
 echo "Cleaning old frontend files..."
 sudo rm -rf "$FINAL_WEB_DIR/*"
 
@@ -78,8 +78,8 @@ sudo chmod -R 755 "$FINAL_WEB_DIR"
 # 5. Restoring Services
 echo ">>> [5/5] Restarting Services..."
 
-# Обновляем конфигурацию сервиса демона (вдруг поменяли параметры в репо, хотя здесь это хардкод в скрипте)
-# Перезаписываем сервис файл, чтобы убедиться в чистоте конфига
+# Refresh the daemon service config (in case repo params changed; note the hardcode below)
+# Rewrite the service file to guarantee a clean config
 sudo bash -c "cat > /etc/systemd/system/wave-yandex.service" <<EOF
 [Unit]
 Description=WaveUI Yandex Music Daemon

@@ -45,7 +45,7 @@ describe("search staleness vs artist open (reported device bug)", () => {
     navigateTo("yandex_search", { query: "калинов" });
     expect(window.location.hash).toBe("#/yandex_search/%D0%BA%D0%B0%D0%BB%D0%B8%D0%BD%D0%BE%D0%B2");
 
-    // User clicks the Калинов Мост card.
+    // User clicks the artist card.
     navigateTo("yandex_artist_details", { id: "359560", title: "Калинов Мост" });
     expect(window.location.hash).toBe("#/yandex_artist/359560");
 
