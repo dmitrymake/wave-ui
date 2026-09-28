@@ -93,6 +93,67 @@ describe("getRowStyle", () => {
   });
 });
 
+describe("touch drag", () => {
+  function startTouchDrag() {
+    const { drag, tracksStore } = createDrag();
+    const rows = document.createElement("div");
+    rows.innerHTML = '<div class="row-wrapper"></div><div class="row-wrapper"></div>';
+    const container = document.createElement("div");
+    container.appendChild(rows);
+    document.body.appendChild(container);
+    drag.refs.scrollContainer = container;
+    drag.refs.listBodyContainer = rows;
+    const touch = new Event("touchstart") as TouchEvent;
+    Object.defineProperty(touch, "touches", { value: [{ clientX: 10, clientY: 10 }] });
+    drag.onDragInit(touch, 0, get(tracksStore)[0]);
+    return { drag, container };
+  }
+
+  it("uses a NON-passive touchmove, or preventDefault cannot stop the list scroll", () => {
+    // A touchmove listener on window is passive in Chrome: the drag handlers ran,
+    // but the list scrolled under the finger as well, so the row being aimed at
+    // moved away with it.
+    const add = vi.spyOn(window, "addEventListener");
+    const { drag, container } = startTouchDrag();
+    const call = add.mock.calls.find(([type]) => type === "touchmove");
+    expect(call).toBeDefined();
+    expect((call![2] as AddEventListenerOptions).passive).toBe(false);
+    add.mockRestore();
+    drag.cancelDrag();
+    container.remove();
+  });
+
+  it("removes the listener again when the drag ends", () => {
+    const remove = vi.spyOn(window, "removeEventListener");
+    const { drag, container } = startTouchDrag();
+    const touch = new Event("touchstart") as TouchEvent;
+    Object.defineProperty(touch, "touches", { value: [{ clientX: 10, clientY: 40 }] });
+    drag.onPointerMove(touch); // crosses the drag threshold
+    drag.cancelDrag();
+    const call = remove.mock.calls.find(([type]) => type === "touchmove");
+    expect(call).toBeDefined();
+    remove.mockRestore();
+    container.remove();
+  });
+
+  it("does not attach a touch listener for a mouse drag", () => {
+    const add = vi.spyOn(window, "addEventListener");
+    const { drag, tracksStore } = createDrag();
+    const container = document.createElement("div");
+    const rows = document.createElement("div");
+    rows.innerHTML = '<div class="row-wrapper"></div>';
+    container.appendChild(rows);
+    document.body.appendChild(container);
+    drag.refs.scrollContainer = container;
+    drag.refs.listBodyContainer = rows;
+    drag.onDragInit(new MouseEvent("mousedown"), 0, get(tracksStore)[0]);
+    expect(add.mock.calls.some(([type]) => type === "touchmove")).toBe(false);
+    add.mockRestore();
+    drag.cancelDrag();
+    container.remove();
+  });
+});
+
 describe("cancelDrag", () => {
   it("resets drag state", () => {
     const { drag } = createDrag();

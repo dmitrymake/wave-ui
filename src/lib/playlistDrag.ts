@@ -87,6 +87,25 @@ export function createPlaylistDrag<T>({ tracksStore, onMoveTrack }: PlaylistDrag
 
   let scrollInterval: number | null = null;
 
+  // Chrome registers touchmove listeners on window/document/body as PASSIVE by
+  // default, which makes preventDefault() a no-op there: the list scrolled under
+  // the finger while a track was being dragged, so the row you were aiming at
+  // kept moving away. The engine therefore owns the touch listener itself and
+  // opts out of the default for the length of a touch drag only.
+  let touchListenerAttached = false;
+
+  function attachTouchListener(): void {
+    if (touchListenerAttached) return;
+    window.addEventListener("touchmove", onPointerMove, { passive: false });
+    touchListenerAttached = true;
+  }
+
+  function detachTouchListener(): void {
+    if (!touchListenerAttached) return;
+    window.removeEventListener("touchmove", onPointerMove);
+    touchListenerAttached = false;
+  }
+
   function onDragInit(event: MouseEvent | TouchEvent, index: number, track: T): void {
     if ('button' in event && event.button === 2) return;
     if (window.getSelection) window.getSelection()?.removeAllRanges();
@@ -107,6 +126,7 @@ export function createPlaylistDrag<T>({ tracksStore, onMoveTrack }: PlaylistDrag
     isDown = true;
     isDragging.set(false);
     isDropping.set(false);
+    if ("touches" in event) attachTouchListener();
 
     startX = clientX;
     startY = clientY;
@@ -197,6 +217,7 @@ export function createPlaylistDrag<T>({ tracksStore, onMoveTrack }: PlaylistDrag
   function onPointerUp(e: MouseEvent | TouchEvent): void {
     if (!isDown) return;
     isDown = false;
+    detachTouchListener();
 
     if (!get(isDragging)) {
       cancelDrag();
@@ -298,6 +319,7 @@ export function createPlaylistDrag<T>({ tracksStore, onMoveTrack }: PlaylistDrag
 
   function cancelDrag(): void {
     isDown = false;
+    detachTouchListener();
     resetDragState();
   }
 

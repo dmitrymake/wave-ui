@@ -30,6 +30,14 @@
   -webkit-overflow-scrolling: touch;
 }
 
+/* While a drag is in progress the list must not scroll or select text under the
+   finger: the gesture belongs to the drag, not to the page. */
+.base-list-scroll-container.dragging {
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
 .content-padded {
   padding: var(--space-4);
 }

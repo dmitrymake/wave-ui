@@ -116,10 +116,11 @@
   }
 </script>
 
+<!-- No ontouchmove here: a touchmove listener on window is passive in Chrome, so
+     the engine attaches its own non-passive one while a touch drag runs. -->
 <svelte:window
   onmousemove={dragEngine.onPointerMove}
   onmouseup={dragEngine.onPointerUp}
-  ontouchmove={dragEngine.onPointerMove}
   ontouchend={dragEngine.onPointerUp}
   ontouchcancel={dragEngine.onPointerUp}
 />
