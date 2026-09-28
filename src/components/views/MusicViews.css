@@ -195,12 +195,11 @@
   opacity: 1;
 }
 
-/* Touchscreen: :hover never fires, so the "tap to play" hint was invisible on
-   every card except the active one. Same pattern the playlist card menu uses. */
+/* Touchscreen: :hover never fires, so the play overlay is revealed by the press
+   itself and nothing more. Leaving it at rest dimmed put a play triangle on top
+   of every single card — and a tap on a card opens a playlist, so the glyph was
+   promising the wrong action anyway. */
 @media (hover: none) {
-  .music-card .play-overlay {
-    opacity: var(--opacity-dim);
-  }
   .music-card:active .play-overlay {
     opacity: 1;
   }
@@ -308,6 +307,19 @@
   align-items: center;
   justify-content: center;
   position: relative;
+}
+
+/* The glyph that stands in for artwork in a header (queue, playlist). Was
+   written out in both views, with a different colour in each. */
+.header-icon-wrap {
+  width: 64px;
+  height: 64px;
+  color: var(--c-text-primary);
+}
+.header-icon-wrap svg {
+  width: 100%;
+  height: 100%;
+  stroke-width: var(--icon-stroke-width);
 }
 
 .header-info {

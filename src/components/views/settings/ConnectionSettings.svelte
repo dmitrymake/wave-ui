@@ -78,27 +78,4 @@
     padding-left: var(--space-1);
   }
 
-  .row {
-    display: flex;
-    align-items: center;
-    gap: var(--space-3);
-  }
-
-  .row-label {
-    font-size: var(--text-base);
-    color: var(--c-text-secondary);
-    font-weight: var(--weight-semibold);
-  }
-
-  .input-group {
-    display: flex;
-    gap: var(--space-2);
-    flex: 1;
-  }
-
-  .hint {
-    font-size: var(--text-sm);
-    color: var(--c-text-muted);
-    margin: var(--space-1) 0 0;
-  }
 </style>

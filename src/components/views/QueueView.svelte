@@ -226,16 +226,6 @@
 <style>
 
 
-  .header-icon-wrap {
-    width: 64px;
-    height: 64px;
-    color: var(--c-text-secondary);
-  }
-  .header-icon-wrap :global(svg) {
-    width: 100%;
-    height: 100%;
-    stroke-width: var(--icon-stroke-width);
-  }
 
   .daemon-active {
     color: var(--c-accent-btn);

@@ -1,0 +1,58 @@
+/* SPDX-License-Identifier: MIT */
+/* Copyright (c) 2025 dmitrymake */
+/*
+  Shared rules for the settings sections (Services / Alarm / Appearance /
+  Connection / About). Every section is a stack of Cards, and every Card is the
+  same three parts: a row with a label on the left and a control on the right, an
+  optional second line of grouped controls, an optional hint, and a separator.
+
+  These were written out five times, byte for byte. They live here, under
+  `.settings` (the wrapper SettingsView puts around the sections) because the
+  name `.row` is taken: TrackRow's own row is a different role with the same
+  name, and an unscoped `.row { gap }` would have added a gap to every track row
+  in the app.
+*/
+
+.settings .row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+/* Full-width row: label on the left, control pushed to the right edge. */
+.settings .row.space-between {
+  justify-content: space-between;
+  width: 100%;
+}
+
+/* Two controls that belong to one setting (a field and its unit button). */
+.settings .row-gap {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.settings .row-label {
+  font-size: var(--text-base);
+  color: var(--c-text-secondary);
+  font-weight: var(--weight-semibold);
+}
+
+.settings .input-group {
+  display: flex;
+  gap: var(--space-2);
+  flex: 1;
+}
+
+.settings .hint {
+  font-size: var(--text-sm);
+  color: var(--c-text-muted);
+  margin: var(--space-1) 0 0;
+}
+
+.settings .separator {
+  height: var(--space-px);
+  background: var(--c-border);
+  opacity: var(--opacity-faint);
+  margin: var(--space-1) 0;
+}

@@ -21,7 +21,7 @@
 
   // No "ghost": the outlined icon button it existed for is now IconButton
   // variant="filled" (a neutral surface), which matches the pills next to it.
-  type Variant = "primary" | "secondary" | "danger";
+  type Variant = "primary" | "secondary";
   type Size = "sm" | "md" | "lg";
 
   interface Props {
@@ -148,14 +148,6 @@
   }
   .btn--secondary:active:not(:disabled) {
     background: var(--c-surface-active);
-  }
-
-  .btn--danger {
-    background: transparent;
-    color: var(--c-accent-btn);
-  }
-  .btn--danger:hover:not(:disabled) {
-    background: var(--c-surface-hover);
   }
 
   /* ---- Icon-only mode (square, centered glyph) ---- */

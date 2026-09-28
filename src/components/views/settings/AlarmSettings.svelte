@@ -134,16 +134,6 @@
     padding-left: var(--space-1);
   }
 
-  .row {
-    display: flex;
-    align-items: center;
-    gap: var(--space-3);
-  }
-  .row.space-between {
-    justify-content: space-between;
-    width: 100%;
-  }
-
   label,
   .label-text {
     font-size: var(--text-base);
@@ -178,13 +168,6 @@
     border-radius: var(--radius-sm);
     font-size: var(--text-base);
     font-weight: var(--weight-bold);
-  }
-
-  .separator {
-    height: var(--space-px);
-    background: var(--c-border);
-    opacity: var(--opacity-faint);
-    margin: var(--space-1) var(--space-0);
   }
 
   .select-wrapper {

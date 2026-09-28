@@ -63,8 +63,6 @@
   --text-xl: 18px;      /* title: settings/section headers */
   --text-2xl: 20px;     /* title-lg: page headers */
   --text-3xl: 24px;     /* display-sm: FullPlayer title */
-  --text-4xl: 28px;     /* display — OFF-SCALE candidate (single, 24<->32) */
-  --text-5xl: 32px;     /* display: SettingsView header */
   --text-6xl: 40px;     /* display-xl: hero numbers */
   --text-8xl: 60px;     /* display-3xl: empty-state icon — OFF-SCALE candidate */
 
@@ -83,7 +81,6 @@
   /* ===========================================================================
      5. FONT WEIGHT — 'bold' normalized to 700 (visually identical)
      ======================================================================== */
-  --weight-regular: 400;   /* normal body default */
   --weight-medium: 500;    /* track titles, sort-item.selected */
   --weight-semibold: 600;  /* most common accent weight (18x) */
   --weight-bold: 700;      /* 700 x11 + 'bold' x4 -> 700 */
@@ -222,7 +219,6 @@
   --switch-knob: 20px;  /* .toggle-circle; travel = w - knob - 2x1px inset */
 
   /* circular icon buttons */
-  --circle-btn-sm: var(--circle-btn-md); /* 32px (was 28) — .tiny-dots, .card-menu-btn */
   --circle-btn-md: 32px;  /* default small circular button */
 
   /* circular play buttons */

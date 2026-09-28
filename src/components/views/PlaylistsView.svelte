@@ -443,15 +443,6 @@
 
 <style>
 
-  .header-icon-wrap {
-    width: 64px;
-    height: 64px;
-    color: var(--c-text-primary);
-  }
-  .header-icon-wrap :global(svg) {
-    width: 100%;
-    height: 100%;
-  }
 
   .search-input-container {
     display: flex;

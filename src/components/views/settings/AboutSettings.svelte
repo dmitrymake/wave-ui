@@ -62,10 +62,4 @@
     font-size: var(--text-sm);
   }
 
-  .separator {
-    height: var(--space-px);
-    background: var(--c-border);
-    opacity: var(--opacity-faint);
-    margin: var(--space-1) var(--space-0);
-  }
 </style>

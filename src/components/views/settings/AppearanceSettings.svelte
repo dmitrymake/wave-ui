@@ -58,21 +58,6 @@
     padding-left: var(--space-1);
   }
 
-  .row {
-    display: flex;
-    align-items: center;
-    gap: var(--space-3);
-  }
-  .row.space-between {
-    justify-content: space-between;
-    width: 100%;
-  }
-  .row-gap {
-    display: flex;
-    align-items: center;
-    gap: var(--space-2);
-  }
-
   .value {
     color: var(--c-text-secondary);
     font-size: var(--text-base);

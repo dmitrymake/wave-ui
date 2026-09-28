@@ -407,12 +407,6 @@
   @import "../../styles/SortMenu.css";
 
 
-  .header-subtitle-row {
-    display: flex;
-    align-items: center;
-    gap: var(--space-2);
-    margin: var(--space-0) var(--space-0) var(--space-2) var(--space-0);
-  }
 
 
   .icon-fallback {

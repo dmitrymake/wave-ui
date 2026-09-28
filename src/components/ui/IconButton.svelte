@@ -90,6 +90,10 @@
     width: var(--control-h-lg);
     height: var(--control-h-lg);
     padding: 0;
+    /* Every other control in a row is sized by its content and cannot shrink
+       below it. This one is sized by `width`, so without this it was the only
+       item a tight row could squeeze — and a squeezed box distorts the glyph. */
+    flex-shrink: 0;
     background: transparent;
     border: none;
     border-radius: var(--radius-circle);
