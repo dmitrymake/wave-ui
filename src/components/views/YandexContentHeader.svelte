@@ -3,6 +3,7 @@
 <script lang="ts">
   import { ICONS } from "../../lib/icons";
   import ImageLoader from "../ImageLoader.svelte";
+  import MediaCard from "../MediaCard.svelte";
   import Skeleton from "../Skeleton.svelte";
   import Button from "../ui/Button.svelte";
   import type { Writable } from "svelte/store";
@@ -148,20 +149,18 @@
     onwheel={handleHorizontalScroll}
   >
     {#each $albumsStore as album}
-      <div class="music-card" role="button" tabindex="0" onclick={() => openAlbum(album)} onkeydown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); openAlbum(album); }}}>
-        <div class="card-img-container">
+      <MediaCard title={album.title} onactivate={() => openAlbum(album)}>
+        {#snippet cover()}
           <ImageLoader
             src={album.image ?? ""}
             alt={album.title}
             radius="8px"
           />
-          <div class="play-overlay">
-            <span class="overlay-icon">{@html ICONS.PLAY}</span>
-          </div>
-        </div>
-        <div class="card-title" title={album.title}>{album.title}</div>
-        <div class="card-sub">{album.year}</div>
-      </div>
+        {/snippet}
+        {#snippet sub()}
+          <div class="card-sub">{album.year}</div>
+        {/snippet}
+      </MediaCard>
     {/each}
   </div>
   <h3 class="header-label">Popular Tracks</h3>

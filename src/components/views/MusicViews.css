@@ -139,6 +139,12 @@
   margin-bottom: var(--space-1);
 }
 
+/* Artist/vibe cards read as a column under a round cover, so their title is
+   centred. Was a local copy in each of the two views that use it. */
+.music-card .card-title.center {
+  text-align: center;
+}
+
 .card-sub-row {
   display: flex;
   align-items: center;

@@ -3,6 +3,7 @@
 <script lang="ts">
   import { ICONS } from "../../lib/icons";
   import ImageLoader from "../ImageLoader.svelte";
+  import MediaCard from "../MediaCard.svelte";
   import SkeletonGrid from "../SkeletonGrid.svelte";
   import Skeleton from "../Skeleton.svelte";
   import type { YandexPlaylist } from "../../lib/types/yandex";
@@ -31,14 +32,16 @@
     onwheel={handleHorizontalScroll}
   >
     {#each vibeCards as item}
-      <div class="music-card" role="button" tabindex="0" onclick={() => openPlaylist(item)} onkeydown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); openPlaylist(item); }}}>
-        <div
-          class="card-img-container"
-          class:is-vibe={item.kind === "my_vibe"}
-          style={item.bgColor && item.kind !== "my_vibe"
-            ? `background: ${item.bgColor}`
-            : ""}
-        >
+      <MediaCard
+        title={item.title}
+        titleCenter
+        coverClass={item.kind === "my_vibe" ? "is-vibe" : ""}
+        coverStyle={item.bgColor && item.kind !== "my_vibe"
+          ? `background: ${item.bgColor}`
+          : ""}
+        onactivate={() => openPlaylist(item)}
+      >
+        {#snippet cover()}
           {#if item.kind === "my_vibe"}
             <div class="icon-wrap pulse-anim">{@html ICONS.RADIO}</div>
           {:else if item.cover}
@@ -50,13 +53,8 @@
           {:else}
             <div class="icon-wrap">{@html ICONS.RADIO}</div>
           {/if}
-
-          <div class="play-overlay">
-            <span class="overlay-icon">{@html ICONS.PLAY}</span>
-          </div>
-        </div>
-        <div class="card-title center">{item.title}</div>
-      </div>
+        {/snippet}
+      </MediaCard>
     {/each}
   </div>
 
@@ -68,13 +66,12 @@
     >
       {#each collectionCards as pl}
         {@const isFav = pl.kind === "favorites"}
-        <div class="music-card" role="button" tabindex="0" onclick={() => openPlaylist(pl)} onkeydown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); openPlaylist(pl); }}}>
-          <div
-            class="card-img-container"
-            style={isFav
-              ? "background: var(--grad-favorites);"
-              : ""}
-          >
+        <MediaCard
+          title={pl.title}
+          coverStyle={isFav ? "background: var(--grad-favorites);" : ""}
+          onactivate={() => openPlaylist(pl)}
+        >
+          {#snippet cover()}
             {#if isFav}
               <div class="icon-wrap">{@html ICONS.HEART_FILLED}</div>
             {:else if pl.cover}
@@ -86,15 +83,13 @@
             {:else}
               <div class="icon-wrap">{@html ICONS.PLAYLISTS}</div>
             {/if}
-            <div class="play-overlay">
-              <span class="overlay-icon">{@html ICONS.PLAY}</span>
-            </div>
-          </div>
-          <div class="card-title">{pl.title}</div>
-          {#if pl.trackCount}<div class="card-sub">
+          {/snippet}
+          {#snippet sub()}
+            {#if pl.trackCount}<div class="card-sub">
               {pl.trackCount} tracks
             </div>{/if}
-        </div>
+          {/snippet}
+        </MediaCard>
       {/each}
     </div>
   {/if}
@@ -102,14 +97,12 @@
 
 <style>
 
-  .card-img-container.is-vibe {
+  /* :global() — the cover and its icon are rendered by MediaCard, not here. */
+  :global(.card-img-container.is-vibe) {
     background: var(--grad-vibe);
   }
-  .card-img-container.is-vibe .icon-wrap {
+  :global(.card-img-container.is-vibe .icon-wrap) {
     color: var(--c-text-inverse);
-  }
-  .card-title.center {
-    text-align: center;
   }
 
   .pulse-anim :global(svg) {
@@ -140,7 +133,9 @@
     height: 40px;
   }
 
-  .music-card .card-img-container {
+  /* :global() — MediaCard renders the cover, so this view's own fallback fill
+     has to reach into it. */
+  :global(.music-card .card-img-container) {
     background-color: var(--c-bg-placeholder);
   }
 </style>

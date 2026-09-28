@@ -6,6 +6,7 @@
   import { db } from "../../lib/db";
   import TrackRow from "../TrackRow.svelte";
   import ImageLoader from "../ImageLoader.svelte";
+  import MediaCard from "../MediaCard.svelte";
   import { playTrackOptimistic } from "../../lib/playerActions";
   import { ICONS } from "../../lib/icons";
   import { navigateTo, getTrackThumbUrl, searchQuery } from "../../lib/store";
@@ -153,8 +154,8 @@
               onwheel={handleHorizontalScroll}
             >
               {#each foundAlbums as album (album._uid)}
-                <div class="music-card" role="button" tabindex="0" onclick={() => goToAlbum(album)} onkeydown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); goToAlbum(album); }}}>
-                  <div class="card-img-container">
+                <MediaCard title={album.name} onactivate={() => goToAlbum(album)}>
+                  {#snippet cover()}
                     <ImageLoader
                       src={getTrackThumbUrl(album, "md")}
                       alt={album.name}
@@ -164,15 +165,8 @@
                         <div class="icon-fallback">💿</div>
                       {/snippet}
                     </ImageLoader>
-
-                    <div class="play-overlay">
-                      <span class="overlay-icon">{@html ICONS.PLAY}</span>
-                    </div>
-                  </div>
-
-                  <div class="card-title" title={album.name}>{album.name}</div>
-
-                  <div class="card-sub-row">
+                  {/snippet}
+                  {#snippet sub()}
                     <div class="card-sub text-ellipsis">{album.artist}</div>
 
                     {#if album.year && String(album.year) !== "0"}
@@ -184,8 +178,8 @@
                         {album.qualityBadge.split(" ")[0]}
                       </div>
                     {/if}
-                  </div>
-                </div>
+                  {/snippet}
+                </MediaCard>
               {/each}
             </div>
           {/if}

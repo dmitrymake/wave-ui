@@ -23,7 +23,7 @@ describe("longpress action", () => {
     const handler = vi.fn();
     node.addEventListener("longpress", handler);
 
-    action = longpress(node, 500);
+    action = longpress(node, { duration: 500 });
 
     node.dispatchEvent(new MouseEvent("mousedown", { button: 0 }));
     expect(handler).not.toHaveBeenCalled();
@@ -36,7 +36,7 @@ describe("longpress action", () => {
     const handler = vi.fn();
     node.addEventListener("longpress", handler);
 
-    action = longpress(node, 500);
+    action = longpress(node, { duration: 500 });
 
     node.dispatchEvent(new MouseEvent("mousedown", { button: 0 }));
     vi.advanceTimersByTime(200);
@@ -50,7 +50,7 @@ describe("longpress action", () => {
     const handler = vi.fn();
     node.addEventListener("longpress", handler);
 
-    action = longpress(node, 500);
+    action = longpress(node, { duration: 500 });
 
     node.dispatchEvent(new MouseEvent("mousedown", { button: 2 }));
     vi.advanceTimersByTime(600);
@@ -61,7 +61,7 @@ describe("longpress action", () => {
     const handler = vi.fn();
     node.addEventListener("longpress", handler);
 
-    action = longpress(node, 500);
+    action = longpress(node, { duration: 500 });
 
     node.dispatchEvent(new MouseEvent("mousedown", { button: 0 }));
     vi.advanceTimersByTime(200);
@@ -75,7 +75,7 @@ describe("longpress action", () => {
     const handler = vi.fn();
     node.addEventListener("longpress", handler);
 
-    action = longpress(node, 500);
+    action = longpress(node, { duration: 500 });
 
     node.dispatchEvent(new TouchEvent("touchstart", { touches: [{} as Touch] }));
     vi.advanceTimersByTime(200);
@@ -92,7 +92,7 @@ describe("longpress action", () => {
     slider.setAttribute("role", "slider");
     node.appendChild(slider);
 
-    action = longpress(node, 500);
+    action = longpress(node, { duration: 500 });
 
     slider.dispatchEvent(new MouseEvent("mousedown", { button: 0, bubbles: true }));
     vi.advanceTimersByTime(600);
@@ -105,7 +105,7 @@ describe("longpress action", () => {
     const btn = document.createElement("button");
     node.appendChild(btn);
 
-    action = longpress(node, 500);
+    action = longpress(node, { duration: 500 });
 
     btn.dispatchEvent(new MouseEvent("mousedown", { button: 0, bubbles: true }));
     vi.advanceTimersByTime(600);
@@ -118,7 +118,7 @@ describe("longpress action", () => {
     const child = document.createElement("div");
     node.appendChild(child);
 
-    action = longpress(node, 500);
+    action = longpress(node, { duration: 500 });
 
     child.dispatchEvent(new MouseEvent("mousedown", { button: 0, bubbles: true }));
     vi.advanceTimersByTime(500);
@@ -130,7 +130,7 @@ describe("longpress action", () => {
     const handler = vi.fn();
     node.addEventListener("longpress", handler);
 
-    action = longpress(node, 500);
+    action = longpress(node, { duration: 500 });
 
     node.dispatchEvent(new MouseEvent("mousedown", { button: 0 }));
     vi.advanceTimersByTime(500);
@@ -160,7 +160,7 @@ describe("longpress action", () => {
     node.addEventListener("longpress", longpressHandler);
     node.addEventListener("click", clickHandler);
 
-    action = longpress(node, 500);
+    action = longpress(node, { duration: 500 });
 
     node.dispatchEvent(new MouseEvent("mousedown", { button: 0 }));
     vi.advanceTimersByTime(500);
@@ -174,7 +174,7 @@ describe("longpress action", () => {
     const clickHandler = vi.fn();
     node.addEventListener("click", clickHandler);
 
-    action = longpress(node, 500);
+    action = longpress(node, { duration: 500 });
 
     node.dispatchEvent(new MouseEvent("mousedown", { button: 0 }));
     node.dispatchEvent(new MouseEvent("mouseup"));
@@ -186,7 +186,7 @@ describe("longpress action", () => {
     const clickHandler = vi.fn();
     node.addEventListener("click", clickHandler);
 
-    action = longpress(node, 500);
+    action = longpress(node, { duration: 500 });
 
     node.dispatchEvent(new MouseEvent("mousedown", { button: 0 }));
     vi.advanceTimersByTime(500);
@@ -196,7 +196,7 @@ describe("longpress action", () => {
   });
 
   it("cleans up listeners on destroy", () => {
-    action = longpress(node, 500);
+    action = longpress(node, { duration: 500 });
     action.destroy();
 
     const handler = vi.fn();
@@ -205,5 +205,29 @@ describe("longpress action", () => {
     node.dispatchEvent(new MouseEvent("mousedown", { button: 0 }));
     vi.advanceTimersByTime(600);
     expect(handler).not.toHaveBeenCalled();
+  });
+
+  it("never arms, so the click that follows a long press is not swallowed", () => {
+    // The shared media card wires a context menu to only some of its callers.
+    // An unarmed long press still swallowed the click (handleClick only looks at
+    // `fired`), which would have made a 600ms press on every other card do
+    // nothing at all.
+    const node = document.createElement("div");
+    const handler = vi.fn();
+    node.addEventListener("longpress", handler);
+    const action = longpress(node, { enabled: false });
+
+    node.dispatchEvent(new MouseEvent("mousedown", { bubbles: true }));
+    vi.advanceTimersByTime(2000);
+    expect(handler).not.toHaveBeenCalled();
+
+    const click = new MouseEvent("click", { bubbles: true, cancelable: true });
+    const cardClick = vi.fn();
+    node.addEventListener("click", cardClick);
+    node.dispatchEvent(click);
+    expect(cardClick).toHaveBeenCalledTimes(1);
+    expect(click.defaultPrevented).toBe(false);
+
+    action.destroy();
   });
 });

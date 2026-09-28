@@ -8,8 +8,17 @@
  * the context menu and play the track (or immediately close the menu it opened).
  * The default duration is the single value for the whole app — long enough not
  * to fire while scrolling, short enough to feel deliberate on a touchscreen.
+ *
+ * `enabled` exists for the shared media card, which only some callers wire a
+ * context menu to: an unarmed long press would still swallow the click that
+ * follows it (handleClick below), so the gesture has to be switchable rather
+ * than merely unused.
  */
-export function longpress(node: HTMLElement, duration = 600): { destroy(): void } {
+export function longpress(
+  node: HTMLElement,
+  options: { duration?: number; enabled?: boolean } = {},
+): { destroy(): void } {
+  const { duration = 600, enabled = true } = options;
   let timer: ReturnType<typeof setTimeout>;
   let fired = false;
 
@@ -32,6 +41,7 @@ export function longpress(node: HTMLElement, duration = 600): { destroy(): void 
   };
 
   const handleStart = (e: MouseEvent | TouchEvent): void => {
+    if (!enabled) return;
     if (e.type === "mousedown" && (e as MouseEvent).button !== 0) return;
     if (startsOnInteractive(e.target)) return;
     fired = false;

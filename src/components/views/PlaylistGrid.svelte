@@ -7,6 +7,7 @@
   import { FAVORITES_PLAYLIST } from "../../lib/constants";
   import type { Playlist } from "../../lib/types";
   import IconButton from "../ui/IconButton.svelte";
+  import MediaCard from "../MediaCard.svelte";
 
   let { playlists = [], currentTheme = "", onOpenPlaylist, onContextMenu, onNewPlaylist }: {
     playlists?: Playlist[];
@@ -26,32 +27,26 @@
 </script>
 
 <div class="music-grid playlists-grid-override">
-  <div class="music-card" role="button" tabindex="0" onclick={() => onNewPlaylist?.()} onkeydown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onNewPlaylist?.(); }}}>
-    <div class="card-img-container dashed-cover">
+  <MediaCard title="New Playlist" coverClass="dashed-cover" playable={false} onactivate={() => onNewPlaylist?.()}>
+    {#snippet cover()}
       <div class="icon-wrap">{@html ICONS.ADD}</div>
-    </div>
-    <div class="card-title">New Playlist</div>
-  </div>
+    {/snippet}
+  </MediaCard>
 
   {#each playlists as playlist (playlist.name)}
     {@const isFav = playlist.name === FAVORITES_PLAYLIST}
-    <div
-      class="music-card"
-      role="button"
-      tabindex="0"
-      onclick={() => onOpenPlaylist?.(playlist)}
-      onkeydown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onOpenPlaylist?.(playlist); }}}
-      use:longpress
-      onlongpress={(e) => handleContext(e.detail.originalEvent, playlist)}
+    <MediaCard
+      title={playlist.name}
+      coverStyle={resolveCardStyle(playlist)}
+      onactivate={() => onOpenPlaylist?.(playlist)}
       oncontextmenu={(e) => handleContext(e, playlist)}
     >
-      <div
-        class="card-img-container"
-        style={resolveCardStyle(playlist)}
-      >
+      {#snippet cover()}
         <div class="icon-wrap">
           {@html isFav ? ICONS.HEART_FILLED : ICONS.PLAYLISTS}
         </div>
+      {/snippet}
+      {#snippet coverExtra()}
         {#if !isFav}
           <IconButton
             class="card-menu-btn"
@@ -62,26 +57,24 @@
             onclick={(e) => handleContext(e, playlist)}
           />
         {/if}
-        <div class="play-overlay">
-          <span class="overlay-icon">{@html ICONS.PLAY}</span>
-        </div>
-      </div>
-      <div class="card-title" title={playlist.name}>{playlist.name}</div>
-      <div class="card-sub-row">
+      {/snippet}
+      {#snippet sub()}
         <div class="card-sub">
           {playlist.lastModified
             ? new Date(playlist.lastModified).toLocaleDateString()
             : "Playlist"}
         </div>
-      </div>
-    </div>
+      {/snippet}
+    </MediaCard>
   {/each}
 </div>
 
 <style>
 
 
-  .dashed-cover {
+  /* The cover is rendered by MediaCard, so these reach through the grid with
+     :global() — anchored on the local grid so they stay this view's rules. */
+  .playlists-grid-override :global(.card-img-container.dashed-cover) {
     border: var(--border-width-thick) dashed var(--c-border);
     background: transparent !important;
     /* Same corners as the cover it stands in for. */
@@ -101,7 +94,7 @@
     height: 100%;
   }
 
-  .card-img-container :global(.card-menu-btn) {
+  .playlists-grid-override :global(.card-menu-btn) {
     position: absolute;
     top: var(--space-2);
     right: var(--space-2);
@@ -110,7 +103,7 @@
     opacity: var(--opacity-hidden);
     z-index: var(--z-overlay-local);
   }
-  .music-card:hover :global(.card-menu-btn) {
+  .playlists-grid-override :global(.music-card:hover .card-menu-btn) {
     opacity: var(--opacity-visible);
   }
 
@@ -118,7 +111,7 @@
 
   @media (hover: none) {
     /* No hover on a touch screen: the chip is simply always there. */
-    .card-img-container :global(.card-menu-btn) {
+    .playlists-grid-override :global(.card-menu-btn) {
       opacity: var(--opacity-visible);
     }
   }

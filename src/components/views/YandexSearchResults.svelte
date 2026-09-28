@@ -3,6 +3,7 @@
 <script lang="ts">
   import { ICONS } from "../../lib/icons";
   import ImageLoader from "../ImageLoader.svelte";
+  import MediaCard from "../MediaCard.svelte";
   import type { YandexSearchResults as YandexSearchResultsType, YandexArtist, YandexAlbum } from "../../lib/types/yandex";
 
   let { searchResults = { tracks: [], albums: [], artists: [] }, isLoading = false, onOpenArtist, onOpenAlbum }: {
@@ -31,16 +32,20 @@
       onwheel={handleHorizontalScroll}
     >
       {#each searchResults.artists as artist}
-        <div class="music-card" role="button" tabindex="0" onclick={() => openArtist(artist)} onkeydown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); openArtist(artist); }}}>
-          <div class="card-img-container">
+        <MediaCard
+          title={artist.title}
+          titleCenter
+          playable={false}
+          onactivate={() => openArtist(artist)}
+        >
+          {#snippet cover()}
             <ImageLoader
               src={artist.image ?? ""}
               alt={artist.title}
               radius="8px"
             />
-          </div>
-          <div class="card-title center" title={artist.title}>{artist.title}</div>
-        </div>
+          {/snippet}
+        </MediaCard>
       {/each}
     </div>
   {/if}
@@ -51,25 +56,19 @@
       onwheel={handleHorizontalScroll}
     >
       {#each searchResults.albums as album}
-        <div class="music-card" role="button" tabindex="0" onclick={() => openAlbum(album)} onkeydown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); openAlbum(album); }}}>
-          <div class="card-img-container">
+        <MediaCard title={album.title} onactivate={() => openAlbum(album)}>
+          {#snippet cover()}
             <ImageLoader
               src={album.image ?? ""}
               alt={album.title}
               radius="8px"
             />
-          </div>
-          <div class="card-title" title={album.title}>{album.title}</div>
-          <div class="card-sub">{album.artist}</div>
-        </div>
+          {/snippet}
+          {#snippet sub()}
+            <div class="card-sub">{album.artist}</div>
+          {/snippet}
+        </MediaCard>
       {/each}
     </div>
   {/if}
 {/if}
-
-<style>
-
-  .card-title.center {
-    text-align: center;
-  }
-</style>

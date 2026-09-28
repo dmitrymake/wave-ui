@@ -21,6 +21,7 @@
   import { playAllTracks, addAllToQueue, playTrackOptimistic } from "../../lib/playerActions";
   import { ICONS } from "../../lib/icons";
   import ImageLoader from "../ImageLoader.svelte";
+  import MediaCard from "../MediaCard.svelte";
   import BaseList from "./BaseList.svelte";
   import Button from "../ui/Button.svelte";
   import type { Track, NavigationEntry, LibraryItem } from "../../lib/types";
@@ -354,14 +355,11 @@
                 {item.title}
               </div>
             {:else}
-              <div
-                class="music-card"
-                onclick={() => handleItemClick(item)}
-                role="button"
-                tabindex="0"
-                onkeydown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); handleItemClick(item); } }}
+              <MediaCard
+                title={item.displayName}
+                onactivate={() => handleItemClick(item)}
               >
-                <div class="card-img-container">
+                {#snippet cover()}
                   <ImageLoader
                     src={getTrackThumbUrl(item, "md")}
                     alt={item.displayName}
@@ -377,14 +375,8 @@
                       </div>
                     {/snippet}
                   </ImageLoader>
-
-                  <div class="play-overlay">
-                    <span class="overlay-icon">{@html ICONS.PLAY}</span>
-                  </div>
-                </div>
-
-                <div class="card-title" title={item.displayName}>{item.displayName}</div>
-                <div class="card-sub-row">
+                {/snippet}
+                {#snippet sub()}
                   {#if item.artist}
                     <div class="card-sub text-ellipsis">{item.artist}</div>
                   {/if}
@@ -398,8 +390,8 @@
                       {item.qualityBadge.split(" ")[0]}
                     </div>
                   {/if}
-                </div>
-              </div>
+                {/snippet}
+              </MediaCard>
             {/if}
           {:else}
             <div class="empty-text">No results found</div>

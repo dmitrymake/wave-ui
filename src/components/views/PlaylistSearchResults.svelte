@@ -27,6 +27,7 @@
   }
 
   import { horizontalWheelScroll as handleHorizontalScroll } from "../../lib/horizontalScroll";
+  import MediaCard from "../MediaCard.svelte";
 </script>
 
 {#if matchedPlaylists.length > 0}
@@ -37,20 +38,17 @@
   >
     {#each matchedPlaylists as playlist (playlist.name)}
       {@const isFav = playlist.name === FAVORITES_PLAYLIST}
-      <div class="music-card" role="button" tabindex="0" onclick={() => onOpenPlaylist?.(playlist)} onkeydown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onOpenPlaylist?.(playlist); }}}>
-        <div
-          class="card-img-container"
-          style={resolveCardStyle(playlist)}
-        >
+      <MediaCard
+        title={playlist.name}
+        coverStyle={resolveCardStyle(playlist)}
+        onactivate={() => onOpenPlaylist?.(playlist)}
+      >
+        {#snippet cover()}
           <div class="icon-wrap">
             {@html isFav ? ICONS.HEART_FILLED : ICONS.PLAYLISTS}
           </div>
-          <div class="play-overlay">
-            <span class="overlay-icon">{@html ICONS.PLAY}</span>
-          </div>
-        </div>
-        <div class="card-title" title={playlist.name}>{playlist.name}</div>
-      </div>
+        {/snippet}
+      </MediaCard>
     {/each}
   </div>
 {/if}

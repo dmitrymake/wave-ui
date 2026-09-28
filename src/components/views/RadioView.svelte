@@ -13,6 +13,7 @@
   import { getStationImageUrl } from "../../lib/radio";
   import { ICONS } from "../../lib/icons";
   import ImageLoader from "../ImageLoader.svelte";
+  import MediaCard from "../MediaCard.svelte";
   import Skeleton from "../Skeleton.svelte";
   import Input from "../ui/Input.svelte";
 
@@ -59,37 +60,29 @@
             $currentSong.file === streamUrl}
           {@const imgUrl = getStationImageUrl(station)}
 
-          <div
-            class="music-card"
-            class:is-active={isActive}
-            role="button"
-            tabindex="0"
-            onclick={() => playStation(station)}
-            onkeydown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); playStation(station); }}}
+          <MediaCard
+            title={station.name}
+            active={isActive}
+            playable={!isActive}
+            onactivate={() => playStation(station)}
           >
-            <div class="card-img-container">
+            {#snippet cover()}
               <ImageLoader src={imgUrl ?? ""} alt={station.name} radius="var(--radius-md)">
                 {#snippet fallback()}
                   <div class="icon-fallback">📻</div>
                 {/snippet}
               </ImageLoader>
-
-              <div class="play-overlay" style={isActive ? "opacity: var(--opacity-visible)" : ""}>
-                {#if isActive}
-                  {#if $status.state === "play"}
-                    <div class="status-badge playing">PLAYING</div>
-                  {:else}
-                    <div class="status-badge paused">PAUSED</div>
-                  {/if}
+            {/snippet}
+            {#snippet coverExtra()}
+              {#if isActive}
+                {#if $status.state === "play"}
+                  <div class="status-badge playing">PLAYING</div>
                 {:else}
-                  <span class="overlay-icon">{@html ICONS.PLAY}</span>
+                  <div class="status-badge paused">PAUSED</div>
                 {/if}
-              </div>
-            </div>
-
-            <div class="card-title" title={station.name}>{station.name}</div>
-
-            <div class="card-sub-row">
+              {/if}
+            {/snippet}
+            {#snippet sub()}
               {#if station.genre}
                 <div class="card-sub">{station.genre}</div>
               {/if}
@@ -99,8 +92,8 @@
                   {qualityLabel}
                 </div>
               {/if}
-            </div>
-          </div>
+            {/snippet}
+          </MediaCard>
         {/each}
       </div>
 
