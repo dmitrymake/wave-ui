@@ -102,16 +102,19 @@
     </div>
   {:else}
     <div class="view-header">
+      <!-- A STATION's tile is the same flat brand art as its dashboard card, at
+           200px instead of 140 — so it gets the same crop + scrim, or opening a
+           station would undo the treatment the row applied. Album and artist
+           tiles are photographs and are left alone. -->
       <div
-        class="header-art"
+        class="header-art {headerData.kind === 'station' ? 'yandex-art' : ''}"
         style={headerData.kind === "favorites"
           ? "background: var(--grad-favorites);"
           : ""}
       >
         {#if headerData.kind === "favorites"}
           <!-- .icon-wrap: the app's one emblem role (the card glyph, and the
-               queue + playlist headers). This view had its own copy at
-               100%/40px, then a 40% .header-icon-wrap of its own. -->
+               queue + playlist headers). -->
           <div class="icon-wrap">{@html ICONS.HEART_FILLED}</div>
         {:else}
           <ImageLoader

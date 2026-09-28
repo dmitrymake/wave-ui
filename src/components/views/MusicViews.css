@@ -240,24 +240,40 @@
 /* THE emblem: the glyph that stands in for artwork on a tinted cover. One role
    for four surfaces — the three card grids (playlists, playlist search, the
    Yandex dashboard) and every view header's art block (queue, playlist,
-   Yandex favourites). 30% of the square, the glyph filling it, soft white.
-   Sized as a share of the art rather than in pixels, so a 218px phone header, a
-   64px Pi header and a 180px card all get the same proportion and the same
-   optical weight; a fixed px glyph filled a 64px art completely and read as a
-   giant hamburger rather than a cover. There used to be a second
-   `.header-icon-wrap` at 40%, which is what made a playlist header and a
-   playlist card look like two different products. */
+   Yandex favourites). There used to be a second `.header-icon-wrap` at 40%,
+   which is what made a playlist header and a playlist card look like two
+   different products. */
 .icon-wrap {
-  width: 30%;
-  height: 30%;
+  /* A FIXED size, and --icon-size-xl like every other large glyph in the app
+     (the FullPlayer transport). It used to be 30% of the cover, which is the
+     one thing a glyph must not be: the same file of Tabler icons then drew at
+     65px on a 216px playlist cover, 54px on a 180px grid card, 42px on a 140px
+     phone card and 19px in the 64px Pi header — nothing else in the app is
+     ever 65px, so the emblem read as decoration, and "the icons are too big"
+     was really "the icons are not on the size ramp". A percentage also made the
+     cover's own size the emblem's type scale, so the same placeholder was a
+     different object on every surface. Fixed, it is one glyph at one size
+     everywhere: 20% of a 140px phone card, 16% of a 180px grid card, 44% of the
+     Pi's 64px header square — and in the header it lands within a pixel of what
+     the 30% rule gave on a phone, so the phone header is unchanged. */
+  width: var(--icon-size-xl);
+  height: var(--icon-size-xl);
   display: flex;
   align-items: center;
   justify-content: center;
   color: var(--c-white-90);
 }
+/* The stroke, pinned like everywhere else in the app. Every Tabler file ships
+   stroke-width="2" in a 24-unit viewBox, and a CSS length on the <svg> element
+   is a length in the viewBox's own units, so 2 units renders as
+   2 / 24 * rendered_px: 4.5px on the 54px emblem it used to be, which is a
+   wireframe drawing rather than an icon. var(--icon-stroke-width) is 1.5 units
+   — the same relative weight as the 24px IconButton glyph (1.5px on screen) and
+   1.75px at 28px, which is the correct optical step for a larger glyph. */
 .icon-wrap svg {
   width: 100%;
   height: 100%;
+  stroke-width: var(--icon-stroke-width);
 }
 
 .icon-fallback {
@@ -271,12 +287,18 @@
   color: var(--c-icon-faint);
 }
 
-/* A glyph inside the fallback. Without a size of its own it kept the 24px of its
-   <svg> attributes, so the same placeholder read at two sizes in the app. */
+/* A glyph inside the fallback — the app's "there is no picture here" tile, a
+   different role from the emblem above: it fills a tile standing in for ALL the
+   artwork (a whole group header band, a 64px thumb), not a cover that is merely
+   tinted. It stays one step quieter on the same ramp, at --icon-size-lg. It was
+   a raw 40px — off the ramp, 3.33px of stroke, and 62% of the 64px Pi header
+   square. FullPlayer (a 400px hero) and MiniPlayer (a 64px thumb) each size
+   their own copy, which is why this one is only the default. */
 .icon-fallback svg {
-  width: 40px;
-  height: 40px;
+  width: var(--icon-size-lg);
+  height: var(--icon-size-lg);
   opacity: var(--opacity-faint);
+  stroke-width: var(--icon-stroke-width);
 }
 
 .dashed-cover {
@@ -291,6 +313,52 @@
 .music-card:hover .dashed-cover {
   border-color: var(--c-border-dashed-hover);
   background: var(--c-surface-active) !important;
+}
+
+/* =========================================
+   YANDEX BRAND ART — the one artwork the app does not control
+   =========================================
+   Yandex draws its radio-station and collection covers itself: a flat ground
+   colour and one big flat disc, centred, with a hard edge. At cover size that
+   is not a picture, it is a BUTTON — and a row of them read as another app
+   sitting inside the grid, next to photographic covers and next to the app's
+   own gradient tiles.
+
+   Two things turn it back into artwork, and neither touches the pixels:
+
+   1. CROP, so the disc's edge leaves the frame. Yandex's disc is ~79% of the
+      square, so anything above 1 / 0.79 = 1.27 cuts it; 1.3 is the first round
+      value that does. A shape that runs off the edge reads as a fragment of
+      something bigger — a photograph — instead of a complete circle floating
+      in a box, and it stops four adjacent cards being four identical
+      centred shapes. `object-fit: cover` already crops to the square; this
+      crops inside the square, and it costs nothing on load.
+
+      The crop is on the <img>, which is absolutely positioned and clipped by
+      the cover's own `overflow: hidden`, so it cannot escape the frame and it
+      moves nothing: every card, cover and title box measures the same to the
+      pixel before and after.
+
+   2. SCRIM, one flat --c-black-20 over the top, so the row sits at the same
+      brightness as every other cover in the app. Flat, not a gradient: the
+      artwork is flat, and a gradient would invent a light source that is not
+      in the art — measured, a top-to-bottom scrim read as a lighting effect
+      on a tile that has none.
+
+      Flat and even is also what makes it hold on the bright tiles. These
+      artworks are the only covers in the app that can be near-white (a white
+      disc on a pale ground), and they are the only ones the app's own
+      overlays sit on: the play overlay is --c-overlay-dim, a 50% black, and
+      50% black over the scrimmed white is #666 against a #fff triangle —
+      5.7:1, where 50% black straight onto that white gave 2.3:1. The dark
+      and the chartreuse tiles gain nothing from this and lose nothing.
+
+   SCOPE: only the Yandex views set this class, and only on covers that hold
+   Yandex's own brand art (stations, collections). Album and artist covers
+   are real photographs and are left completely alone — dulling every album in
+   the app to fix a row of six tiles would be the wrong trade. */
+.yandex-art img {
+  transform: scale(1.3);
 }
 
 

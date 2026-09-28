@@ -28,6 +28,13 @@
     return item.bgColor ? `background: ${item.bgColor}` : "";
   }
 
+  /** Every cover here is Yandex's own brand art — a flat ground and a disc —
+      which MusicViews.css crops and scrims (`.yandex-art`) so the row reads as
+      artwork instead of a row of buttons. Set on every card in this view
+      because every card in it is brand art; the album/artist covers elsewhere
+      in the Yandex views are photographs and deliberately do not get it. */
+  const ART_CLASS = "yandex-art";
+
   /** The sub line under a card title. Stations say what they are (they have no
       count); My Vibe is the personal station, the rest are themed ones. */
   function vibeSub(item: YandexPlaylist): string {
@@ -57,6 +64,7 @@
       <MediaCard
         title={item.title}
         titleCenter
+        coverClass={ART_CLASS}
         coverStyle={coverStyle(item)}
         onactivate={() => openPlaylist(item)}
       >
@@ -94,6 +102,7 @@
         {@const isFav = pl.kind === "favorites"}
         <MediaCard
           title={pl.title}
+          coverClass={ART_CLASS}
           coverStyle={isFav ? "background: var(--grad-favorites);" : ""}
           onactivate={() => openPlaylist(pl)}
         >
@@ -121,17 +130,17 @@
 
 <style>
 
-  /* The glyph that stands in for artwork on a tinted cover — the app's one role
-     for it (PlaylistGrid, PlaylistSearchResults): 30% of the square, the glyph
-     fills it, soft white. This view and YandexContentHeader each carried a
-     second copy at width/height:100% with a fixed 40px glyph in
-     --c-text-primary, and that mismatch is what made the Yandex cards read as
-     another app. Still a local copy because MusicViews.css does not own the
-     class yet. */
+  /* The glyph on a tinted cover and the treatment on Yandex's brand art are
+     both MusicViews.css rules now (.icon-wrap, .yandex-art) — this view only
+     says WHICH cards they apply to. Before, the emblem was restated here at
+     30% with a 40px glyph in --c-text-primary, and that local copy is what
+     made the Yandex cards read as another app: the same role drawn twice, at
+     two sizes, in two colours. */
 
 
   /* Vibes are IDENTITY cards: the title is centred, so the sub line centres with
-     it. :global() — MediaCard renders .card-sub-row. */
+     it. :global() — MediaCard renders .card-sub-row, and this view is the only
+     one that centres it. */
   .identity-grid :global(.card-sub-row) {
     justify-content: center;
   }

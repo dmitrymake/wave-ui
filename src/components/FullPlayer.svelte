@@ -373,7 +373,10 @@
     width: 100%; height: 100%; display: flex; align-items: center; justify-content: center;
     color: var(--c-icon-faint);
   }
-  .icon-fallback :global(svg) { width: 100px; height: 100px; opacity: var(--opacity-faint); }
+  /* The hero tile is up to 400px, so this one keeps its own step rather than
+     the shared fallback's — but it needs the stroke pinned like the rest, or
+     it is the one glyph in the app drawn at 8.3px of stroke (2 / 24 * 100). */
+  .icon-fallback :global(svg) { width: 100px; height: 100px; opacity: var(--opacity-faint); stroke-width: var(--icon-stroke-width); }
 
   .controls-area {
     display: flex; flex-direction: column; gap: var(--space-5); flex-shrink: 0; width: 100%;
