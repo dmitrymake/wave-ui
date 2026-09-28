@@ -226,7 +226,6 @@
 <style>
 
 
-
   .daemon-active {
     color: var(--c-accent-btn);
     animation: pulse-text 2s infinite;
@@ -249,6 +248,32 @@
     }
     100% {
       opacity: var(--opacity-visible);
+    }
+  }
+
+  /* The queue title pulses for as long as a stream runs, which is unbounded. */
+  @media (prefers-reduced-motion: reduce) {
+    .daemon-active {
+      animation: none;
+    }
+  }
+
+  /* ---- Phone only. The breakpoint is the codebase's --bp-md: 800px would match
+     the Pi screen exactly and move its approved layout. ---- */
+  @media (max-width: 768px) {
+    /* The phone header art is a hero square, and the queue has nothing to put in
+       one — its block is a grey box holding a hamburger glyph, and an empty
+       164px square is worse than no square. The Pi keeps its 64px anchor. */
+    .header-art {
+      display: none;
+    }
+
+    /* The red DAEMON ACTIVE badge and the red STOP STREAM pill already say the
+       stream is live, so the title itself goes neutral: red eyebrow + red title
+       + red badge + red pill was a wall of accent with nothing to look at. The
+       pulse stays — it is the liveness signal, and it is now the only one. */
+    .daemon-active {
+      color: var(--c-text-primary);
     }
   }
 </style>

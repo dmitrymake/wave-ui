@@ -328,6 +328,9 @@
   width: 100%;
 }
 
+/* The artwork block. Two jobs on the Pi (square, left of the text) and one on a
+   phone (a hero square on top of it) — the phone block at the end of this file
+   resizes it and never touches the radius or the shadow. */
 .header-art {
   width: 200px;
   aspect-ratio: 1;
@@ -449,6 +452,9 @@
    label/title/badges/actions), leaving room for exactly ONE 64px track row of
    the 480px screen. Hiding the artwork and tightening the gaps brings it to
    ~215px = 4 rows. The artwork was decoration: the same cover is on every row.
+
+   That block is therefore the PI layout and is frozen: it also covers 769-800px,
+   where the two-column header still fits. The phone has its own block below.
    ========================================= */
 @media (max-width: 800px) {
   .view-header {
@@ -487,6 +493,92 @@
     justify-content: flex-start;
     width: 100%;
     margin-top: var(--space-2);
+  }
+}
+
+/* =========================================
+   PHONE — the one layout a narrow viewport gets.
+
+   Why 768px and not the 800px block above: the Pi screen IS 800px wide, so
+   `max-width: 800px` matches it exactly. Anything put there moves the approved
+   Pi layout. 768px is the codebase's documented primary mobile breakpoint
+   (--bp-md; MainScreen's hamburger, BaseList's skeletons and the card grids all
+   switch there), so this block covers phones in portrait and nothing else.
+
+   The direction is a COLUMN: the cover becomes a hero square on top and the
+   text block sits under it — at 390px the Pi's 64px art next to a 282px text
+   column left the artwork as a grey box beside truncated text, and the cover is
+   the one part of these screens that is worth the width.
+
+   Cover size = min(100%, 42vw, 28vh), derived from the space the header may
+   have at all. A 390x640 phone has 640 - 64 (top bar) - 90 (mini player) =
+   486px of list area, and the header may not eat more than half the viewport
+   (~320px) or fewer than 3 track rows (--row-h 56px) remain visible. The chrome
+   around the cover — 16px of .content-padded, the 16px gap, the title+badges+
+   actions block (~100px) and the 16px header margin — is ~148px, which leaves
+   ~172px for the cover: 28vh of a 640px screen. 42vw then keeps it at 164px on
+   a 390px phone and stops it growing on a tablet-width phone, and 100% is the
+   belt-and-braces cap against a viewport narrower than the .view-header itself.
+   ========================================= */
+@media (max-width: 768px) {
+  .view-header {
+    flex-direction: column;
+    /* Centres the cover; .header-info below it is width:100%, so it still spans
+       the full measure and its ellipsis/title line has the room to work. */
+    align-items: center;
+    text-align: left;
+    gap: var(--space-4);
+    height: auto;
+    margin-bottom: var(--space-4);
+  }
+
+  /* Hero square. The radius, the shadow and the emblem sizing come from the
+     base block and are deliberately NOT repeated here. 56vw = 218px on a 390px
+     phone: with the text block (~100px), the 16px gap and the 16px margin the
+     header lands at ~370px, which still leaves three 56px track rows on an
+     820px screen. 30vh caps it on a short phone, 100% on one narrower than the
+     header itself. */
+  .header-art {
+    width: min(100%, 56vw, 30vh);
+  }
+
+  .header-info {
+    width: 100%;
+    min-width: 0;
+    align-items: flex-start;
+    justify-content: flex-start;
+    /* The 4px nudge lined the text up with the art's optical edge; with the art
+       above instead of beside there is nothing to align to. */
+    padding-top: var(--space-0);
+  }
+
+  .header-title {
+    /* Same 20px as the Pi header and as MainScreen's .view-title: one page
+       title per screen, one size. Still clamped to two lines, and the views
+       keep the `title` attribute, so a long playlist name never loses its text. */
+    font-size: var(--text-2xl);
+    line-height: var(--leading-snug);
+    -webkit-line-clamp: 2;
+  }
+
+  .header-subtitle-row {
+    justify-content: flex-start;
+  }
+
+  /* The artist/description line matches the card sub role (--text-base) rather
+     than the 20px title it sits under. */
+  .header-sub-text {
+    font-size: var(--text-base);
+  }
+
+  /* Actions sit under the text block, anchored to its left edge. The gap between
+     the meta row and this row is the badge row's own 8px margin, so the header
+     rhythm is a flat 8px instead of 8 + 8. */
+  .header-actions {
+    justify-content: flex-start;
+    width: 100%;
+    gap: var(--space-2);
+    margin-top: var(--space-0);
   }
 }
 
