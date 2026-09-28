@@ -19,6 +19,7 @@
   import VolumeSlider from "./VolumeSlider.svelte";
   import PlayModeButton from "./PlayModeButton.svelte";
   import LikeButton from "./LikeButton.svelte";
+  import IconButton from "./ui/IconButton.svelte";
 
   let { isDocked = false }: { isDocked?: boolean } = $props();
 
@@ -232,17 +233,13 @@
       <div class="buttons-row">
         <LikeButton track={$currentSong} />
 
-        <button class="btn-icon side-btn" onclick={() => nav("previous")} aria-label="Previous track" title="Previous">
-          {@html ICONS.PREVIOUS}
-        </button>
+        <IconButton size="lg" ariaLabel="Previous track" title="Previous" icon={ICONS.PREVIOUS} onclick={() => nav("previous")} />
 
         <button class="play-btn-large flex-center" bind:this={playBtn} onclick={togglePlay} aria-label={$status.state === "play" ? "Pause" : "Play"} title={$status.state === "play" ? "Pause" : "Play"}>
           {@html $status.state === "play" ? ICONS.PAUSE : ICONS.PLAY}
         </button>
 
-        <button class="btn-icon side-btn" onclick={() => nav("next")} aria-label="Next track" title="Next">
-          {@html ICONS.NEXT}
-        </button>
+        <IconButton size="lg" ariaLabel="Next track" title="Next" icon={ICONS.NEXT} onclick={() => nav("next")} />
 
         {#if !isRadio}
           <PlayModeButton compact={isDocked} />
@@ -438,14 +435,9 @@
   }
   .is-docked .buttons-row { gap: var(--space-0); }
 
-  .side-btn { padding: var(--icon-btn-pad-lg); color: var(--c-text-secondary); transition: color var(--dur-fast); }
-  .side-btn:active { opacity: var(--opacity-dim); }
-  .side-btn :global(svg) { width: var(--icon-size-lg); height: var(--icon-size-lg); }
   /* Docked rail = the ONLY playback control on the 800x480 screen, so every
      target here has to clear the 44px platform minimum: padding-sm (6px) around
      a 20px glyph was 32px. */
-  .is-docked .side-btn { padding: var(--icon-btn-pad); }
-  .is-docked .side-btn :global(svg) { width: var(--icon-size-lg); height: var(--icon-size-lg); }
 
   .play-btn-large {
     width: var(--circle-play-lg); height: var(--circle-play-lg); border-radius: var(--radius-circle);

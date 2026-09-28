@@ -200,9 +200,14 @@
             <div class="title text-ellipsis" title={displayTitle}>
               {displayTitle}
             </div>
-            <button class="btn-icon tiny-dots" onclick={handleContext} aria-label={`More actions for ${displayTitle}`} title="More actions">
-              {@html ICONS.DOTS}
-            </button>
+            <IconButton
+              class="tiny-dots"
+              size="sm"
+              ariaLabel={`More actions for ${displayTitle}`}
+              title="More actions"
+              icon={ICONS.DOTS}
+              onclick={handleContext}
+            />
           </div>
           <div class="artist-row">
             <div class="artist text-ellipsis" title={displayArtist}>
@@ -335,13 +340,12 @@
   .artist-row { display: flex; align-items: center; gap: var(--space-2); }
   .artist { font-size: var(--text-base); color: var(--c-text-secondary); }
 
-  .tiny-dots {
-    width: var(--circle-btn-sm); height: var(--circle-btn-sm); min-width: var(--circle-btn-sm); padding: var(--space-0);
-    border-radius: var(--radius-circle); color: var(--c-text-secondary);
-    background: transparent; border: none; cursor: pointer;
-    display: flex; align-items: center; justify-content: center; opacity: var(--opacity-dim);
+  /* The dock's secondary action stays quieter than its neighbours until the
+     finger is on it; the button itself is the shared primitive. */
+  .title-row :global(.tiny-dots) {
+    opacity: var(--opacity-dim);
   }
-  .tiny-dots:hover { color: var(--c-text-primary); background: var(--c-white-10); opacity: var(--opacity-visible); }
+  .title-row :global(.tiny-dots:hover) { opacity: var(--opacity-visible); }
 
   .controls { display: flex; align-items: center; gap: var(--space-5); }
 
@@ -362,7 +366,7 @@
     .grid { grid-template-columns: 1fr max-content; padding: var(--space-0) var(--space-4); }
     .play-btn { width: var(--control-h-lg); height: var(--control-h-lg); }
     .art { width: var(--thumb-md); height: var(--thumb-md); }
-    .tiny-dots { display: none; }
+    .title-row :global(.tiny-dots) { display: none; }
     .meta-tag { display: none; }
   }
 </style>

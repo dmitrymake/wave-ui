@@ -5,6 +5,7 @@
   import TrackThumb from "./TrackThumb.svelte";
   import Skeleton from "./Skeleton.svelte";
   import LikeButton from "./LikeButton.svelte";
+  import IconButton from "./ui/IconButton.svelte";
   import TrackPlaybackIndicator from "./TrackPlaybackIndicator.svelte";
   import { togglePlay } from "../lib/playerActions";
   import { ICONS } from "../lib/icons";
@@ -227,21 +228,26 @@
       </span>
     {/if}
 
-    <button class="btn-icon small context-menu-btn" onclick={handleMenuClick} aria-label={`More actions for ${displayTitle ?? "track"}`} title="More actions">
-      {@html ICONS.DOTS}
-    </button>
+    <IconButton
+      class="context-menu-btn"
+      size="sm"
+      ariaLabel={`More actions for ${displayTitle ?? "track"}`}
+      title="More actions"
+      icon={ICONS.DOTS}
+      onclick={handleMenuClick}
+    />
 
     <LikeButton {track} compact />
 
     {#if isEditable}
-      <button
-        class="btn-icon small remove"
-        onclick={(e) => { e.stopPropagation(); onremove?.({ index }); }}
-        aria-label={`Remove ${displayTitle ?? "track"} from list`}
+      <IconButton
+        class="remove"
+        size="sm"
+        ariaLabel={`Remove ${displayTitle ?? "track"} from list`}
         title="Remove"
-      >
-        {@html ICONS.REMOVE}
-      </button>
+        icon={ICONS.REMOVE}
+        onclick={(e) => { e.stopPropagation(); onremove?.({ index }); }}
+      />
     {:else}
       <div class="dur">{duration}</div>
     {/if}
@@ -393,14 +399,10 @@
     align-items: center;
     gap: var(--space-2);
   }
-  .small { padding: var(--space-5px); }
-  .small :global(svg) {
-    width: var(--icon-size-sm);
-    height: var(--icon-size-sm);
-    stroke-width: var(--icon-stroke-width);
-  }
-  .remove { color: var(--c-text-muted); }
-  .remove:hover { color: var(--c-accent-btn); }
+  /* Destructive action: the × is muted at rest and red under the finger. The
+     button itself is the shared primitive. */
+  .right :global(.remove) { color: var(--c-text-muted); }
+  .right :global(.remove:hover) { color: var(--c-accent-btn); }
   /* Timecode role: --text-sm / --weight-medium / tabular-nums, shared with the
      player's time row. Was 14px/400 here, 12px/600 there, 10px/600 in the dock and
      11px/700 in the tooltip — four values for one role. */
@@ -417,8 +419,9 @@
     flex-shrink: 0;
     text-align: right;
   }
-  .context-menu-btn { opacity: var(--opacity-muted); transition: opacity var(--dur-fast); }
-  .context-menu-btn:hover { opacity: var(--opacity-visible); color: var(--c-text-primary); }
+  /* The row's secondary action stays quiet until the finger is on it. */
+  .right :global(.context-menu-btn) { opacity: var(--opacity-muted); }
+  .right :global(.context-menu-btn:hover) { opacity: var(--opacity-visible); }
 
   .brand-icon-inline {
     width: var(--icon-size-xs);

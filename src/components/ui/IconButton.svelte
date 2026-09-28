@@ -1,37 +1,41 @@
 <!--
-  IconButton — design-system primitive (Wave UI)
+  IconButton — the one icon-only button in Wave UI (naked / filled / overlay).
 
-  Naked / filled / overlay icon button replacing .btn-icon, .btn-icon.small,
-  .side-btn, .vol-btn, .mode-btn, .like-btn, .tiny-dots, .card-menu-btn,
-  .collapse-btn, .hamburger-btn, .clear-icon-btn, .clear-btn, .num-box,
-  .context-menu-btn.
+  Replaces the hand-rolled copies it was written for: .btn-icon and
+  .btn-icon.small (shared.css / MusicViews.css), .side-btn, .vol-btn, .mode-btn,
+  .like-btn, .tiny-dots, .card-menu-btn, .hamburger-btn, .clear-icon-btn,
+  .field__clear and .context-menu-btn.
 
-  Visual parity with shared.css:167-194 (.btn-icon: radius50%, pad 8px, svg 24px,
-  :hover surface-hover, :active scale .95) and the per-component transport buttons.
+  Two ideas make the call sites shorter AND the look identical everywhere:
+  - `size` names the TAP TARGET, not the glyph. Before, the box was an accident
+    of "glyph + 2 x padding", so a 32px chip and a 40px row action came out of
+    the same markup and read as different controls. Targets are now 40px, with
+    32px (xs) reserved for the chips that sit on top of media.
+  - `icon` takes an ICONS.* constant directly, so a plain glyph is one line of
+    markup. `children` stays for the rare case that is not a single glyph
+    (PlayModeButton's active dot).
 
-  ariaLabel is REQUIRED (icon-only control has no readable text).
-  Glyph is passed as the slot/children (an <svg>) and sized via --icon-size-* tokens,
-  removing the legacy `svg { width: ... !important }` hacks.
+  ariaLabel is REQUIRED: an icon-only control has no readable text.
+  Callers that only need layout (position, hidden-until-hover) pass `class`.
 -->
 <script lang="ts">
   import type { Snippet } from "svelte";
 
-  type Size = "sm" | "md" | "lg";
-  type Shape = "circle" | "square";
+  type Size = "xs" | "sm" | "md" | "lg";
   type Variant = "naked" | "filled" | "overlay";
   type Tone = "default" | "accent" | "heart";
 
   interface Props {
     /** Required accessible label — there is no visible text. */
     ariaLabel: string;
+    /** SVG markup, normally an ICONS.* constant. Ignored when `children` is given. */
+    icon?: string;
     size?: Size;
-    shape?: Shape;
     variant?: Variant;
     tone?: Tone;
     /** Pressed/selected state (e.g. active play-mode, liked). */
     active?: boolean;
     disabled?: boolean;
-    type?: "button" | "submit";
     title?: string;
     class?: string;
     onclick?: (event: MouseEvent) => void;
@@ -40,13 +44,12 @@
 
   let {
     ariaLabel,
+    icon,
     size = "lg",
-    shape = "circle",
     variant = "naked",
     tone = "default",
     active = false,
     disabled = false,
-    type = "button",
     title,
     class: className = "",
     onclick,
@@ -64,8 +67,8 @@
 </script>
 
 <button
-  {type}
-  class="ibtn ibtn--{size} ibtn--{shape} ibtn--{variant} ibtn--tone-{tone} {className}"
+  type="button"
+  class="ibtn ibtn--{size} ibtn--{variant} ibtn--tone-{tone} {className}"
   class:is-active={active}
   aria-label={ariaLabel}
   aria-pressed={active}
@@ -73,7 +76,7 @@
   {disabled}
   onclick={handleClick}
 >
-  {@render children?.()}
+  {#if children}{@render children()}{:else}{@html icon}{/if}
 </button>
 
 <style>
@@ -82,26 +85,37 @@
     align-items: center;
     justify-content: center;
     box-sizing: border-box;
+    /* 40px, the app's tap target (>= WCAG 2.5.8) — the same height as the
+       labelled pills, so a bare glyph never looks smaller than its neighbour. */
+    width: var(--control-h-lg);
+    height: var(--control-h-lg);
+    padding: 0;
     background: transparent;
     border: none;
+    border-radius: var(--radius-circle);
     color: var(--c-text-secondary);
     cursor: pointer;
-    padding: var(--icon-btn-pad); /* 8px — legacy .btn-icon */
-    transition: all var(--trans-fast);
+    transition:
+      color var(--trans-fast),
+      background var(--trans-fast),
+      transform var(--trans-fast);
   }
 
-  /* ---- Shape ---- */
-  .ibtn--circle {
-    border-radius: var(--radius-circle);
-  }
-  .ibtn--square {
-    border-radius: var(--radius-md);
-  }
-
-  /* ---- Glyph sizing (drives the slotted svg, no !important needed) ---- */
+  /* ---- Glyph: sized for optical balance inside the target, and stroked with
+     the same --icon-stroke-width everywhere (a 24px Tabler stroke rendered at
+     18px without this reads as a thick glyph in a thin circle). ---- */
   .ibtn :global(svg) {
     display: block;
     stroke-width: var(--icon-stroke-width);
+  }
+  .ibtn--xs {
+    /* 32px chip: sits on a cover, so it must not cover it. */
+    width: var(--control-h-sm);
+    height: var(--control-h-sm);
+  }
+  .ibtn--xs :global(svg) {
+    width: var(--icon-size-xs); /* 16px */
+    height: var(--icon-size-xs);
   }
   .ibtn--sm :global(svg) {
     width: var(--icon-size-sm); /* 18px */
@@ -112,7 +126,7 @@
     height: var(--icon-size-md);
   }
   .ibtn--lg :global(svg) {
-    width: var(--icon-size-lg); /* 24px — most common transport/nav glyph */
+    width: var(--icon-size-lg); /* 24px — transport, nav, close */
     height: var(--icon-size-lg);
   }
 
@@ -122,21 +136,17 @@
     background: var(--c-surface-hover);
   }
 
-  /* The filled variant is the header's icon button: a neutral surface with a
-     white glyph, the same family as the secondary pill beside it. min-* aligns it
-     to --control-h-lg (the pill height) while the glyph stays at size "md" —
-     IconButton sizes the GLYPH, the box is glyph + 2 x padding. */
+  /* filled: the header's icon button — a neutral surface with a white glyph,
+     the same family as the secondary pill beside it. */
   .ibtn--filled {
     background: var(--c-surface-button);
     color: var(--c-text-primary);
-    min-width: var(--control-h-lg);
-    min-height: var(--control-h-lg);
   }
   .ibtn--filled:hover:not(:disabled) {
     background: var(--c-surface-button-hover);
   }
 
-  /* overlay: semi-transparent chip revealed over media (e.g. card-menu-btn) */
+  /* overlay: a chip revealed on top of media (e.g. the card menu). */
   .ibtn--overlay {
     background: var(--c-black-20);
     color: var(--c-text-primary);
@@ -145,8 +155,8 @@
     background: var(--c-black-50);
   }
 
-  /* ---- Tones / active ---- */
-  /* A tone marks the ACTIVE state only. On hover the variant rules change the
+  /* ---- Tones ----
+     A tone marks the ACTIVE state only. On hover the variant rules change the
      surface and nothing else: an accent glyph that turned red under the finger
      read as a state change that was not actually there. */
   .ibtn--tone-accent.is-active {
@@ -154,6 +164,24 @@
   }
   .ibtn--tone-heart.is-active {
     color: var(--c-heart);
+  }
+  /* The heart acknowledges the tap: one short swell, no motion elsewhere. */
+  .ibtn--tone-heart.is-active :global(svg) {
+    animation: ibtn-heart-pop var(--dur-base) var(--ease-emphasized);
+  }
+  @keyframes ibtn-heart-pop {
+    0%,
+    100% {
+      transform: scale(1);
+    }
+    50% {
+      transform: scale(1.2);
+    }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .ibtn--tone-heart.is-active :global(svg) {
+      animation: none;
+    }
   }
   .ibtn--tone-default.is-active {
     color: var(--c-text-primary);

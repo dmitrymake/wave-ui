@@ -14,6 +14,13 @@
 -->
 <script lang="ts">
   import type { Snippet } from "svelte";
+  import IconButton from "./IconButton.svelte";
+
+  // The trailing cross, inlined rather than added to the ICONS map: it is the
+  // one glyph that belongs to the field, not to a view.
+  const CLEAR_ICON =
+    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true">' +
+    '<line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>';
 
   type Size = "sm" | "md";
 
@@ -116,17 +123,13 @@
   {/if}
 
   {#if showClear}
-    <button
-      type="button"
+    <IconButton
       class="field__clear"
-      aria-label="Clear"
+      size="xs"
+      ariaLabel="Clear"
+      icon={CLEAR_ICON}
       onclick={handleClear}
-    >
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true">
-        <line x1="18" y1="6" x2="6" y2="18" />
-        <line x1="6" y1="6" x2="18" y2="18" />
-      </svg>
-    </button>
+    />
   {/if}
 </div>
 
@@ -220,30 +223,17 @@
   }
 
   /* ---- Trailing clear button ---- */
-  .field__clear {
-    display: flex;
-    align-items: center;
-    justify-content: center;
+  /* The clear glyph spans the field's height like the text baseline does, so
+     only that stretch is local — the control itself is the shared primitive. */
+  .field :global(.field__clear) {
     flex-shrink: 0;
-    width: var(--switch-h); /* 24px — legacy .clear-icon-btn */
+    width: var(--switch-h); /* 24px */
     height: 100%;
-    padding: var(--space-0);
     margin-left: var(--space-1); /* 4px */
-    background: transparent;
-    border: none;
-    /* Icon-only control: circle, like every other icon button in the app. */
-    border-radius: var(--radius-circle);
     color: var(--c-text-muted);
-    cursor: pointer;
-    transition: color var(--trans-fast);
   }
-  .field__clear:hover {
+  .field :global(.field__clear:hover) {
     color: var(--c-text-primary);
-  }
-  .field__clear svg {
-    width: var(--icon-size-xs); /* 16px */
-    height: var(--icon-size-xs);
-    stroke-width: var(--icon-stroke-width);
   }
   /* ---- States ---- */
   /* Text fields show a brighter gray border instead of a plate (the field is

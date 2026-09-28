@@ -429,45 +429,6 @@
 }
 
 /* =========================================
-   4. ICON BUTTONS IN LISTS/HEADERS
-   ========================================= */
-
-/* Small icons in search/lists */
-.btn-icon.small {
-  /* 32px was under the 44px tap minimum, and these (⋯, remove) repeat on every
-     track row, so the cost multiplied by the list length. */
-  width: var(--control-h-lg);
-  height: var(--control-h-lg);
-  padding: var(--space-0);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: transparent;
-  border: none;
-  border-radius: var(--radius-circle);
-  color: var(--c-text-secondary);
-  cursor: pointer;
-  transition:
-    background var(--dur-fast),
-    color var(--dur-fast);
-}
-
-.btn-icon.small:hover {
-  background: var(--c-surface-hover);
-  color: var(--c-text-primary);
-}
-
-/* Force icons in small buttons to 18px. The stroke is scaled with the glyph
-   (--icon-stroke-width), otherwise a 24px Tabler stroke at 18px reads heavy —
-   the "thick glyph in a thin circle" look. */
-.btn-icon.small :global(svg) {
-  width: var(--icon-size-sm) !important;
-  height: var(--icon-size-sm) !important;
-  stroke-width: var(--icon-stroke-width);
-}
-
-
-/* =========================================
    5. SEARCH INPUT
    ========================================= */
 .search-input-container {

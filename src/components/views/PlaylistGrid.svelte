@@ -6,6 +6,7 @@
   import { getPlaylistCoverStyle } from "../../lib/playlistColor";
   import { FAVORITES_PLAYLIST } from "../../lib/constants";
   import type { Playlist } from "../../lib/types";
+  import IconButton from "../ui/IconButton.svelte";
 
   let { playlists = [], currentTheme = "", onOpenPlaylist, onContextMenu, onNewPlaylist }: {
     playlists?: Playlist[];
@@ -52,13 +53,14 @@
           {@html isFav ? ICONS.HEART_FILLED : ICONS.PLAYLISTS}
         </div>
         {#if !isFav}
-          <button
+          <IconButton
             class="card-menu-btn"
-            aria-label="More actions for {playlist.name}"
+            variant="overlay"
+            size="xs"
+            ariaLabel="More actions for {playlist.name}"
+            icon={ICONS.DOTS}
             onclick={(e) => handleContext(e, playlist)}
-          >
-            {@html ICONS.DOTS}
-          </button>
+          />
         {/if}
         <div class="play-overlay">
           <span class="overlay-icon">{@html ICONS.PLAY}</span>
@@ -99,42 +101,25 @@
     height: 100%;
   }
 
-  .card-menu-btn {
+  .card-img-container :global(.card-menu-btn) {
     position: absolute;
     top: var(--space-2);
     right: var(--space-2);
-    background: var(--c-black-20);
-    border: none;
-    border-radius: var(--radius-circle);
-    width: var(--circle-btn-sm);
-    height: var(--circle-btn-sm);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    color: var(--c-text-primary);
+    /* Quiet until the card is touched (opacity, not background, so a mouse user
+       gets a hint too). */
     opacity: var(--opacity-hidden);
-    transition:
-      opacity var(--dur-fast),
-      background var(--dur-fast);
     z-index: var(--z-overlay-local);
-    cursor: pointer;
   }
-  .music-card:hover .card-menu-btn {
+  .music-card:hover :global(.card-menu-btn) {
     opacity: var(--opacity-visible);
   }
-  .card-menu-btn:hover {
-    background: var(--c-black-50);
-  }
-  .card-menu-btn :global(svg) {
-    width: var(--icon-size-xs);
-    height: var(--icon-size-xs);
-    stroke-width: var(--icon-stroke-width);
-  }
+
+
 
   @media (hover: none) {
-    .card-menu-btn {
+    /* No hover on a touch screen: the chip is simply always there. */
+    .card-img-container :global(.card-menu-btn) {
       opacity: var(--opacity-visible);
-      background: var(--c-black-50);
     }
   }
   @media (max-width: 768px) {

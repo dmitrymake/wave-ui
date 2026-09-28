@@ -162,3 +162,23 @@ describe("TrackRow — now-playing highlight via source capability", () => {
     expect(row).not.toHaveClass("striped");
   });
 });
+
+describe("TrackRow — row actions are the shared icon button", () => {
+  it("uses the icon-button primitive for the overflow menu and the remove control", () => {
+    const { getByLabelText } = render(TrackRow, {
+      props: {
+        track: baseTrack({ file: "Music/a.flac", title: "Hello", artist: "World" }),
+        index: 1,
+        isEditable: true,
+      },
+    });
+    const more = getByLabelText("More actions for Hello");
+    const remove = getByLabelText("Remove Hello from list");
+    // A hand-rolled copy is exactly what this migration removed: the class is the
+    // guard against a plain <button class="btn-icon small …"> creeping back in.
+    for (const button of [more, remove]) {
+      expect(button.className).toContain("ibtn");
+      expect(button.className).toContain("ibtn--sm");
+    }
+  });
+});

@@ -204,7 +204,7 @@
      ======================================================================== */
 
   /* control row heights */
-  --control-h-sm: 32px;  /* .btn-icon.small, compact vol-btn */
+  --control-h-sm: 32px;  /* IconButton xs chip, compact volume button */
   --control-h-md: 36px;  /* .btn-action mobile, .btn-primary.small */
   --control-h-lg: 40px;  /* default/large control height */
   --control-h-xl: 48px;  /* search input, MiniPlayer play, nav-item, back-btn-area */
@@ -215,9 +215,6 @@
   --control-pad-x-md: 20px; /* = --space-5 */
 
   /* naked icon-button paddings */
-  --icon-btn-pad: 8px;     /* .btn-icon, .vol-btn (~40px target around 24px glyph) */
-  --icon-btn-pad-lg: var(--icon-btn-pad); /* 8px (was 10) — transport buttons (hit-area 40px > WCAG 2.5.8) */
-  --icon-btn-pad-sm: 6px;  /* compact (docked) icon-buttons */
 
   /* toggle switch */
   --switch-w: 44px;     /* .toggle-btn track width */
@@ -237,7 +234,7 @@
      16. ICON SIZE (svg glyphs)
      ======================================================================== */
   --icon-size-xs: 16px; /* TrackRow .small, clear-icon-btn, sort-trigger-icon */
-  --icon-size-sm: 18px; /* .btn-action, .btn-icon.small, list search-icon */
+  --icon-size-sm: 18px; /* IconButton sm, list search-icon */
   --icon-size-md: 20px; /* compact transport, ContextMenu .icon, settings chevron */
   --icon-size-lg: 24px; /* default transport/nav glyph (most common) */
   --icon-size-xl: 28px; /* FullPlayer .play-btn-large glyph */

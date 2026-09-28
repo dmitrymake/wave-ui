@@ -14,6 +14,7 @@
   import { isYandexEnabled } from "../lib/stores/yandex";
   import { ApiActions } from "../lib/api";
   import { FAVORITES_PLAYLIST } from "../lib/constants";
+  import IconButton from "./ui/IconButton.svelte";
 
   let { isOpen = false, onClose }: { isOpen?: boolean; onClose?: () => void } = $props();
 
@@ -126,9 +127,12 @@
       </div>
     </div>
 
-    <button class="btn-icon mobile-close" onclick={() => onClose?.()}>
-      {@html ICONS.CLOSE}
-    </button>
+    <IconButton
+      class="mobile-close"
+      ariaLabel="Close menu"
+      icon={ICONS.CLOSE}
+      onclick={() => onClose?.()}
+    />
   </div>
 
   <div class="scroll-area">
@@ -325,7 +329,7 @@
     stroke: none;
   }
 
-  .mobile-close {
+  .header :global(.mobile-close) {
     display: none;
     position: absolute;
     right: var(--space-4);
@@ -457,8 +461,8 @@
     .side-menu.mobile-open {
       transform: translateX(0);
     }
-    .mobile-close {
-      display: flex;
+    .header :global(.mobile-close) {
+      display: inline-flex;
     }
     .backdrop {
       position: fixed;

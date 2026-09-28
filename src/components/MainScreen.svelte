@@ -17,6 +17,7 @@
   } from "../lib/store";
 
   import LibraryView from "./views/LibraryView.svelte";
+  import IconButton from "./ui/IconButton.svelte";
   import RadioView from "./views/RadioView.svelte";
   import PlaylistsView from "./views/PlaylistsView.svelte";
   import SearchView from "./views/SearchView.svelte";
@@ -82,12 +83,12 @@
 
     <main class="content-area">
       <header class="top-bar">
-        <button
+        <IconButton
           class="hamburger-btn"
+          ariaLabel="Open menu"
+          icon={ICONS.MENU}
           onclick={() => (isMobileMenuOpen = true)}
-        >
-          {@html ICONS.MENU}
-        </button>
+        />
 
         {#if $navigationStack.length > 1}
           <button class="back-btn" onclick={goBack}>
@@ -296,19 +297,14 @@
     width: 100%;
   }
 
-  .hamburger-btn {
+  /* Shown only in the narrow layout (see the media query below). The rule is
+     :global() because the class travels through a component prop, and
+     .top-bar-prefixed so it outranks the primitive's own `display`. */
+  .top-bar :global(.hamburger-btn) {
     display: none;
-    background: none;
-    border: none;
     color: var(--c-text-primary);
-    cursor: pointer;
-    /* Icon-only control: circle, like every other icon button in the app. */
-    border-radius: var(--radius-circle);
   }
-  .hamburger-btn :global(svg) {
-    width: var(--icon-size-lg);
-    height: var(--icon-size-lg);
-  }
+
 
   .back-btn {
     background: none;
@@ -360,8 +356,8 @@
   }
 
   @media (max-width: 768px) {
-    .hamburger-btn {
-      display: block;
+    .top-bar :global(.hamburger-btn) {
+      display: inline-flex;
     }
     .top-bar {
       padding: var(--space-0) var(--space-4);

@@ -184,12 +184,11 @@
                 variant="filled"
                 size="md"
                 ariaLabel="Save Queue"
-                onclick={handleSaveQueue}
                 title="Save Queue"
+                icon={ICONS.SAVE}
+                onclick={handleSaveQueue}
                 disabled={$queue.length === 0}
-              >
-                {@html ICONS.SAVE}
-              </IconButton>
+              />
 
               <IconButton
                 variant="filled"
@@ -197,12 +196,11 @@
                 tone="accent"
                 active={isEditMode}
                 ariaLabel={isEditMode ? "Finish Editing" : "Edit Queue"}
-                onclick={toggleEditMode}
                 title={isEditMode ? "Finish Editing" : "Edit Queue"}
+                icon={isEditMode ? ICONS.ACCEPT : ICONS.EDIT}
+                onclick={toggleEditMode}
                 disabled={$queue.length === 0}
-              >
-                {@html isEditMode ? ICONS.ACCEPT : ICONS.EDIT}
-              </IconButton>
+              />
             </div>
           </div>
         </div>

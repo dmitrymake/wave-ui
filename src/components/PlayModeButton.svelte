@@ -5,6 +5,7 @@
   import { status } from "../lib/store.js";
   import { ICONS } from "../lib/icons";
   import { getPlayMode, cyclePlayMode } from "../lib/playerHelpers";
+  import IconButton from "./ui/IconButton.svelte";
 
   interface Props {
     compact?: boolean;
@@ -18,47 +19,43 @@
   let modeLabel = $derived(
     currentMode === 2 ? "Repeat: on" : currentMode === 1 ? "Shuffle: on" : "Play mode: off",
   );
+  let isOn = $derived(currentMode > 0);
 
-  function toggle(e?: MouseEvent) {
-    if (e) e.stopPropagation();
+  function toggle(e: MouseEvent) {
+    e.stopPropagation();
     cyclePlayMode($status, PlayMode);
   }
 </script>
 
-<button
-  class="btn-icon mode-btn {className}"
-  class:active={currentMode > 0}
-  class:compact
+<!-- The one icon button that is not a single glyph: the active dot is extra
+     markup, so the content goes through `children` instead of `icon`. -->
+<IconButton
+  class="{isOn ? 'mode-on ' : ''}{compact ? 'mode-docked ' : ''}{className}"
+  size="lg"
+  tone="accent"
+  active={isOn}
+  ariaLabel={modeLabel}
   onclick={toggle}
-  aria-label={modeLabel}
-  aria-pressed={currentMode > 0}
 >
-  {#if currentMode === 2}
-    {@html ICONS.REPEAT}
-  {:else}
-    {@html ICONS.SHUFFLE}
-  {/if}
-  {#if currentMode > 0}<span class="dot"></span>{/if}
-</button>
+  {@html currentMode === 2 ? ICONS.REPEAT : ICONS.SHUFFLE}
+  {#if isOn}<span class="dot"></span>{/if}
+</IconButton>
 
 <style>
-  .mode-btn {
-    position: relative;
-    color: var(--c-text-secondary);
-    transition: color var(--dur-fast);
-    padding: var(--icon-btn-pad-lg);
+  /* :global() because the classes travel through the primitive's class prop, and
+     prefixed because a global ".on"/".docked" would be a magnet for every other
+     element in the app. */
+  :global(.mode-on) {
+    position: relative; /* the dot below hangs off the button */
   }
-  .mode-btn.active {
-    color: var(--c-accent-btn);
-  }
-  .mode-btn:active { opacity: var(--opacity-dim); }
-  .mode-btn :global(svg) { width: var(--icon-size-lg); height: var(--icon-size-lg); }
 
-  /* Compact == the docked rail on 800x480: padding-sm (6px) + a 20px glyph was
-     a 32px target, under the 44px minimum. */
-  .compact { padding: var(--icon-btn-pad); opacity: var(--opacity-dim); }
-  .compact.active { opacity: var(--opacity-visible); }
-  .compact :global(svg) { width: var(--icon-size-lg); height: var(--icon-size-lg); }
+  /* The docked rail keeps the button quiet until a mode is on. */
+  :global(.mode-docked) {
+    opacity: var(--opacity-dim);
+  }
+  :global(.mode-docked.mode-on) {
+    opacity: var(--opacity-visible);
+  }
 
   .dot {
     position: absolute;
@@ -70,5 +67,4 @@
     left: 50%;
     transform: translateX(-50%);
   }
-  .compact .dot { bottom: var(--space-0_5); width: var(--space-3px); height: var(--space-3px); }
 </style>

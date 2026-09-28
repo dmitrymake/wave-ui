@@ -5,6 +5,7 @@
   import { ICONS } from "../lib/icons";
   import { favorites } from "../lib/store.js";
   import { isTrackLiked, toggleLike, sourceLikesVersion } from "../lib/playerHelpers";
+  import IconButton from "./ui/IconButton.svelte";
 
   interface Props {
     track: Track;
@@ -43,51 +44,16 @@
   }
 </script>
 
-<button
-  class="btn-icon like-btn {className}"
-  class:liked
-  class:compact
-  onclick={handleClick}
+<!-- compact == the row/dock heart: a 20px glyph in the primitive's 40px target.
+     The glyph is the smaller one on purpose — growing it to 24px made it read as
+     a blob in a row, while the target (not the picture) is what a miss costs. -->
+<IconButton
+  class={className}
+  size={compact ? "md" : "lg"}
+  tone="heart"
+  active={liked}
   disabled={pending}
-  aria-label={liked ? `Unlike ${track.title || "this track"}` : `Like ${track.title || "this track"}`}
-  aria-pressed={liked}
->
-  {@html liked ? ICONS.HEART_FILLED : ICONS.HEART}
-</button>
-
-<style>
-  .like-btn {
-    padding: var(--icon-btn-pad-lg);
-    color: var(--c-text-secondary);
-    transition: color var(--dur-fast);
-  }
-  .like-btn:active { opacity: var(--opacity-dim); }
-  .like-btn.liked { color: var(--c-heart); }
-  .like-btn :global(svg) { width: var(--icon-size-lg); height: var(--icon-size-lg); }
-  .like-btn.liked :global(svg) {
-    animation: like-pop var(--dur-base) var(--ease-emphasized);
-  }
-
-  /* Row variant: 6px pad + a 20px glyph = a 32px target, which is under the
-     44px tap minimum — and this button is in EVERY row, so a miss is a miss on
-     every row. The fix is the target, not the picture: min-width/min-height grow
-     the tappable box to 40px while the heart keeps the 20px glyph it always had
-     (growing the glyph to 24px made it read as a big blob in the row). */
-  .compact {
-    padding: var(--icon-btn-pad-sm);
-    min-width: var(--control-h-lg);
-    min-height: var(--control-h-lg);
-  }
-  .compact :global(svg) { width: var(--icon-size-md); height: var(--icon-size-md); }
-
-  @keyframes like-pop {
-    0%, 100% { transform: scale(1); }
-    50% { transform: scale(1.2); }
-  }
-
-  @media (prefers-reduced-motion: reduce) {
-    .like-btn.liked :global(svg) {
-      animation: none;
-    }
-  }
-</style>
+  ariaLabel={liked ? `Unlike ${track.title || "this track"}` : `Like ${track.title || "this track"}`}
+  icon={liked ? ICONS.HEART_FILLED : ICONS.HEART}
+  onclick={handleClick}
+/>

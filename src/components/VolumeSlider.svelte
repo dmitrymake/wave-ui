@@ -6,6 +6,7 @@
   import { status } from "../lib/store.js";
   import { ICONS } from "../lib/icons";
   import { getVolumeIcon, getPct } from "../lib/playerHelpers";
+  import IconButton from "./ui/IconButton.svelte";
 
   interface Props {
     compact?: boolean;
@@ -78,9 +79,13 @@
 </script>
 
 <div class="volume-row" class:compact onclick={(e) => e.stopPropagation()} onkeydown={(e) => e.stopPropagation()} role="presentation">
-  <button class="vol-btn" onclick={toggleMute} title="Mute/Unmute" aria-label={$status.volume > 0 ? "Mute" : "Unmute"}>
-    {@html volumeIcon}
-  </button>
+  <IconButton
+    size={compact ? "xs" : "lg"}
+    ariaLabel={$status.volume > 0 ? "Mute" : "Unmute"}
+    title="Mute/Unmute"
+    icon={volumeIcon}
+    onclick={toggleMute}
+  />
 
   <div
     class="volume-hit-area"
@@ -121,25 +126,6 @@
     justify-content: flex-end;
   }
 
-  .vol-btn {
-    background: transparent;
-    border: none;
-    color: var(--c-text-secondary);
-    padding: var(--icon-btn-pad);
-    cursor: pointer;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    border-radius: var(--radius-circle);
-    transition: color var(--dur-fast), background var(--dur-fast);
-  }
-  .vol-btn:hover {
-    color: var(--c-text-primary);
-    background: var(--c-white-10);
-  }
-  .vol-btn :global(svg) { width: var(--icon-size-lg); height: var(--icon-size-lg); }
-  .compact .vol-btn { padding: var(--space-1); width: var(--control-h-sm); height: var(--control-h-sm); }
-  .compact .vol-btn :global(svg) { width: var(--icon-size-md); height: var(--icon-size-md); }
 
   .volume-hit-area {
     flex: 1;

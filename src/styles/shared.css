@@ -159,38 +159,8 @@ button {
    GENERIC COMPONENTS
    ========================= */
 
-/* 1. Naked Icon Button (No background by default) */
-.btn-icon {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: var(--c-text-secondary);
-  border-radius: var(--radius-circle);
-  padding: var(--icon-btn-pad);
-  transition:
-    color var(--dur-fast) var(--ease-default),
-    background var(--dur-fast) var(--ease-default),
-    transform var(--dur-instant) var(--ease-default);
-}
-
-.btn-icon:hover {
-  color: var(--c-text-primary);
-  background: var(--c-surface-hover);
-}
-
-.btn-icon:active {
-  transform: scale(0.95);
-}
-
-.btn-icon.active, 
-.btn-icon.liked {
-  color: var(--c-heart);
-}
-
-.btn-icon svg {
-  width: var(--icon-size-lg);
-  height: var(--icon-size-lg);
-}
+/* 1. Icon buttons live in components/ui/IconButton.svelte (naked / filled /
+      overlay, sizes named by tap target). Nothing defines an icon button here. */
 
 /* Keyboard focus (WCAG 2.4.7) — ONE indicator for the whole app and nothing
    else: a flat gray FILL on the control, no ring, no accent color, and the

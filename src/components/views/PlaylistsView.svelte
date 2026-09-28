@@ -302,17 +302,18 @@
           oninput={handleSearchInput}
         />
         {#if searchTerm}
-          <button
+          <IconButton
             class="clear-icon-btn"
+            size="xs"
+            ariaLabel="Clear search"
+            icon={ICONS.CLOSE}
             onclick={() => {
               searchTerm = "";
               matchedPlaylists = [];
               searchResultsGrouped = [];
               isDeepSearching = false;
             }}
-          >
-            {@html ICONS.CLOSE}
-          </button>
+          />
         {/if}
         {#if isDeepSearching}
           <div class="spinner"></div>
@@ -384,10 +385,9 @@
                   active={isEditMode}
                   ariaLabel={isEditMode ? "Finish Editing" : "Edit Playlist"}
                   title={isEditMode ? "Finish Editing" : "Edit Playlist"}
+                  icon={isEditMode ? ICONS.ACCEPT : ICONS.EDIT}
                   onclick={toggleEditMode}
-                >
-                  {@html isEditMode ? ICONS.ACCEPT : ICONS.EDIT}
-                </IconButton>
+                />
               </div>
             </div>
           </div>
@@ -491,25 +491,17 @@
     color: var(--c-text-muted);
   }
 
-  .clear-icon-btn {
-    background: transparent;
-    border: none;
+  /* This field is hand-rolled (it also holds a spinner), so its clear control
+     keeps only the 24px strip it needs; the button is the shared primitive. */
+  .search-input-container :global(.clear-icon-btn) {
+    width: var(--switch-h); /* 24px */
+    height: var(--switch-h);
+    flex-shrink: 0;
     color: var(--c-text-muted);
-    width: var(--switch-h);
-    height: 100%;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    cursor: pointer;
-    padding: var(--space-0);
-    /* Icon-only control: circle, like every other icon button in the app. */
-    border-radius: var(--radius-circle);
     margin-right: var(--space-1);
   }
-  .clear-icon-btn :global(svg) {
-    width: var(--icon-size-xs);
-    height: var(--icon-size-xs);
-    stroke-width: var(--icon-stroke-width);
+  .search-input-container :global(.clear-icon-btn:hover) {
+    color: var(--c-text-primary);
   }
 
 
