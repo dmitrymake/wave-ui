@@ -23,10 +23,11 @@
     onOpenAlbum?.(album);
   }
 
-  /** Sub line of an artist card. The search response carries no genre or album
-      count, so the one line of context there is — the bio — falls back to the
-      role ("Artist") when Yandex sends none, which is what an artist card with
-      no sub row used to be. */
+  /** Sub line of an artist card. A search row carries nothing but the name, the
+      picture and (sometimes) the bio, so the bio is the sub when it is there and
+      the role is the fallback — the same "type label" sub PlaylistGrid falls back
+      to ("Playlist") when a playlist has no date. An artist card used to have no
+      sub row at all. */
   function artistSub(artist: YandexArtist): string {
     return artist.description || "Artist";
   }
@@ -84,7 +85,9 @@
             </ImageLoader>
           {/snippet}
           {#snippet sub()}
-            <div class="card-sub text-ellipsis">{album.artist ?? "Album"}</div>
+            <!-- Same album card as the library + search views: artist as the
+                 sub, year as the badge. .card-sub already truncates. -->
+            <div class="card-sub">{album.artist ?? "Album"}</div>
             {#if album.year}
               <div class="card-badge">{album.year}</div>
             {/if}

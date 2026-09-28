@@ -27,7 +27,7 @@
 </script>
 
 <div class="content-padded no-bottom-pad">
-  <div class="search-margin">
+  <div class="search-block">
     <SearchBar
       bind:value
       placeholder="Search Yandex Music..."
@@ -39,7 +39,4 @@
 </div>
 
 <style>
-  .search-margin {
-    margin-bottom: var(--space-3);
-  }
 </style>

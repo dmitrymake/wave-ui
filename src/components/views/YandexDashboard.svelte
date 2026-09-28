@@ -50,7 +50,7 @@
 {:else}
   <h2 class="header-label">Vibes</h2>
   <div
-    class="music-grid horizontal section-mb vibe-grid"
+    class="music-grid horizontal section-mb identity-grid"
     onwheel={handleHorizontalScroll}
   >
     {#each vibeCards as item}
@@ -62,7 +62,7 @@
       >
         {#snippet cover()}
           {#if item.kind === "my_vibe"}
-            <div class="icon-wrap is-vivid">{@html ICONS.RADIO}</div>
+            <div class="icon-wrap">{@html ICONS.RADIO}</div>
           {:else if item.cover}
             <ImageLoader
               src={item.cover}
@@ -121,40 +121,18 @@
 
 <style>
 
-  /* The icon that stands in for a cover. ONE definition, shared with
-     PlaylistGrid / PlaylistSearchResults: 30% of the square, glyph fills it, and
-     the app's soft white. These two views had a second copy at
-     width/height:100% with a fixed 40px glyph in --c-text-primary, which is what
-     made every Yandex card read as a different app. It is still a local copy
-     because MusicViews.css does not own the class yet. */
-  .icon-wrap {
-    width: 30%;
-    height: 30%;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    color: var(--c-white-90);
-  }
-  .icon-wrap :global(svg) {
-    width: 100%;
-    height: 100%;
-  }
+  /* The glyph that stands in for artwork on a tinted cover — the app's one role
+     for it (PlaylistGrid, PlaylistSearchResults): 30% of the square, the glyph
+     fills it, soft white. This view and YandexContentHeader each carried a
+     second copy at width/height:100% with a fixed 40px glyph in
+     --c-text-primary, and that mismatch is what made the Yandex cards read as
+     another app. Still a local copy because MusicViews.css does not own the
+     class yet. */
 
-  /* My Vibe is the one cover where the soft white does not work: --grad-vibe is
-     --c-warn -> --c-error, i.e. #ffcc00 -> #ff4444 in the default theme and
-     #fabd2f -> #fe5b4a in gruvbox, bright at BOTH stops. White measures 1.51:1
-     on the yellow stop (unreadable), so the label goes dark here and only here:
-     --c-text-inverse is the app's "label on a vivid fill" token (#000 / #282828)
-     and measures 13.9:1 -> 6.2:1 across the gradient in BOTH themes.
-     Kept as a colour override rather than a second size: a bigger, darker glyph
-     on a bright tile is what read as a foreign UI in the first place. */
-  .icon-wrap.is-vivid {
-    color: var(--c-text-inverse);
-  }
 
-  /* Vibe cards centre their title, so the sub line centres with it. :global() —
-     MediaCard renders .card-sub-row. */
-  .vibe-grid :global(.card-sub-row) {
+  /* Vibes are IDENTITY cards: the title is centred, so the sub line centres with
+     it. :global() — MediaCard renders .card-sub-row. */
+  .identity-grid :global(.card-sub-row) {
     justify-content: center;
   }
 </style>

@@ -167,7 +167,7 @@
                     </ImageLoader>
                   {/snippet}
                   {#snippet sub()}
-                    <div class="card-sub text-ellipsis">{album.artist}</div>
+                    <div class="card-sub">{album.artist}</div>
 
                     {#if album.year && String(album.year) !== "0"}
                       <div class="meta-tag">{album.year}</div>

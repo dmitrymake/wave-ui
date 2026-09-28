@@ -153,7 +153,15 @@
      10b. GRADIENTS (composite) — invariant geometry + per-theme color via var().
           Replace the hardcoded Yandex tile gradients (favorites/vibe). */
   --grad-favorites: linear-gradient(135deg, var(--c-accent), color-mix(in srgb, var(--c-accent) 65%, #000));
-  --grad-vibe: linear-gradient(135deg, var(--c-warn), var(--c-error));
+  /* The yellow/red pair was bright at BOTH stops: white measured 1.5:1 on the
+     yellow one, which is why the vibe card needed a dark glyph of its own. Mixed
+     down towards black it stays a warm orange-red and the shared white emblem
+     clears 3:1 (the non-text threshold) everywhere. */
+  --grad-vibe: linear-gradient(
+    135deg,
+    color-mix(in srgb, var(--c-warn) 62%, #000),
+    color-mix(in srgb, var(--c-error) 78%, #000)
+  );
 
   /* ===========================================================================
      11. Z-INDEX — global bands + a small local scale. Full set defined here

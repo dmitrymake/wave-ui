@@ -81,18 +81,6 @@
     border-radius: var(--radius-md);
   }
 
-  .icon-wrap {
-    width: 30%;
-    height: 30%;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    color: var(--c-white-90);
-  }
-  .icon-wrap :global(svg) {
-    width: 100%;
-    height: 100%;
-  }
 
   .playlists-grid-override :global(.card-menu-btn) {
     position: absolute;

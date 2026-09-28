@@ -76,7 +76,7 @@
   {#if isLoading && !headerData.cover && !headerImage}
     <div class="view-header">
       <div class="header-art">
-        <Skeleton width="100%" height="100%" radius="8px" />
+        <Skeleton width="100%" height="100%" radius="var(--radius-md)" />
       </div>
       <div class="header-info">
         <Skeleton
@@ -204,7 +204,8 @@
           </ImageLoader>
         {/snippet}
         {#snippet sub()}
-          <div class="card-sub text-ellipsis">{album.artist ?? "Album"}</div>
+          <!-- The app's album card: artist as the sub, year as the badge. -->
+          <div class="card-sub">{album.artist ?? "Album"}</div>
           {#if album.year}
             <div class="card-badge">{album.year}</div>
           {/if}

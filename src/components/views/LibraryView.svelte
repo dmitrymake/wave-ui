@@ -378,7 +378,7 @@
                 {/snippet}
                 {#snippet sub()}
                   {#if item.artist}
-                    <div class="card-sub text-ellipsis">{item.artist}</div>
+                    <div class="card-sub">{item.artist}</div>
                   {/if}
 
                   {#if item.year && item.year !== "0"}
@@ -416,11 +416,6 @@
     width: 100%;
     color: var(--c-icon-faint);
     background: var(--c-bg-placeholder);
-  }
-  .icon-fallback :global(svg) {
-    width: 40px;
-    height: 40px;
-    opacity: var(--opacity-faint);
   }
 
   .group-header {

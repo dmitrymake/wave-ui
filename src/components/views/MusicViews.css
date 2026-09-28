@@ -219,6 +219,23 @@
   filter: drop-shadow(0 2px 4px var(--c-black-50));
 }
 
+/* The glyph that stands in for artwork on a tinted cover. One definition for the
+   three grids that use it (playlists, playlist search, the Yandex dashboard) —
+   the copy that made the Yandex cards read as another app was 100%/100% with a
+   fixed 40px glyph in --c-text-primary. */
+.icon-wrap {
+  width: 30%;
+  height: 30%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--c-white-90);
+}
+.icon-wrap svg {
+  width: 100%;
+  height: 100%;
+}
+
 .icon-fallback {
   width: 100%;
   height: 100%;
@@ -228,6 +245,14 @@
   font-size: var(--text-6xl);
   background: var(--c-bg-placeholder);
   color: var(--c-icon-faint);
+}
+
+/* A glyph inside the fallback. Without a size of its own it kept the 24px of its
+   <svg> attributes, so the same placeholder read at two sizes in the app. */
+.icon-fallback svg {
+  width: 40px;
+  height: 40px;
+  opacity: var(--opacity-faint);
 }
 
 .dashed-cover {
@@ -351,6 +376,14 @@
 /* Eyebrow / section heading — ONE rendering for all 17 uses. The margin is
    explicit because 8 of them are <h2>/<h3>, whose UA margin-block-start
    (~11.6px) silently added ~12px on top of whatever we set here. */
+/* A section label that is not the first thing in a scroll area needs the extra
+   gap. It has to be named with .header-label on purpose: .header-label sets its
+   margin with a shorthand further down this file, which silently reset
+   .section-spacing's margin-top whenever the two were combined. */
+.header-label.section-spacing {
+  margin-top: var(--space-3);
+}
+
 .header-label {
   font-size: var(--text-base);
   font-weight: var(--weight-semibold);
