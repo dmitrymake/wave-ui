@@ -468,6 +468,15 @@
   margin-top: var(--space-4);
 }
 
+/* Phone only: the step above the buttons matches the step under the cover, so
+   the header has exactly two large steps — artwork, words, actions — instead of
+   a hero and then a series of 8px nudges. */
+@media (max-width: 768px) {
+  .header-text-group + .header-actions {
+    margin-top: var(--space-6);
+  }
+}
+
 .header-actions {
   display: flex;
   align-items: center;
@@ -516,9 +525,6 @@
   .header-text-group {
     align-items: flex-start;
   }
-  .header-subtitle-row {
-    justify-content: flex-start;
-  }
   .header-title {
     font-size: var(--text-2xl);
     line-height: var(--leading-snug);
@@ -564,23 +570,29 @@
 @media (max-width: 768px) {
   .view-header {
     flex-direction: column;
-    /* Centres the cover; .header-info below it is width:100%, so it still spans
-       the full measure and its ellipsis/title line has the room to work. */
-    align-items: center;
+    /* stretch, NOT center: the cover has to start on the same left edge as the
+       text under it. Centring it gave the screen two left edges and left a void
+       beside the square, which is what read as broken. */
+    align-items: stretch;
     text-align: left;
-    gap: var(--space-4);
+    /* The step under the hero is the largest one on the screen — it separates the
+       artwork from the words about it, everything below is tighter than this. */
+    gap: var(--space-6);
     height: auto;
     margin-bottom: var(--space-4);
   }
 
-  /* Hero square. The radius, the shadow and the emblem sizing come from the
-     base block and are deliberately NOT repeated here. 56vw = 218px on a 390px
-     phone: with the text block (~100px), the 16px gap and the 16px margin the
-     header lands at ~370px, which still leaves three 56px track rows on an
-     820px screen. 30vh caps it on a short phone, 100% on one narrower than the
-     header itself. */
+  /* Hero square. The radius, the shadow and the emblem sizing come from the base
+     block and are deliberately not repeated here.
+
+     76vw = 296px of the 358px content column on a 390px phone: the square reads
+     as the poster of the page instead of a tile floating in it. 36vh caps it on
+     a short phone (230px of a 640px screen) and 100% covers a viewport narrower
+     than the column itself. With the text block (~150px) and the 24px hero gap
+     the header is ~470px, which still leaves four 56px track rows above the
+     dock on an 820px screen. */
   .header-art {
-    width: min(100%, 56vw, 30vh);
+    width: min(100%, 72vw, 34vh);
   }
 
   .header-info {
@@ -602,8 +614,22 @@
     -webkit-line-clamp: 2;
   }
 
+  /* Rhythm of the block under the cover. The eyebrow is a caption ON the title,
+     and the performer belongs to the name, so those two steps are 4px; the
+     badge row is the next group at 12px. Measured: 24 / 4 / 4 / 12 / 24, so the
+     header has exactly two large steps — artwork, words, actions — instead of a
+     hero followed by a series of 8px nudges. Scoped through .view-header
+     because .header-label is also the app's section heading in 14 other places,
+     and those keep the 8px they are approved at. */
+  .view-header .header-label {
+    margin-bottom: var(--space-1);
+  }
+  .view-header .header-title {
+    margin-bottom: var(--space-1);
+  }
   .header-subtitle-row {
     justify-content: flex-start;
+    margin-bottom: var(--space-3);
   }
 
   /* The artist/description line matches the card sub role (--text-base) rather
