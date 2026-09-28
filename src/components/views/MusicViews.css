@@ -468,9 +468,9 @@
   margin-top: var(--space-4);
 }
 
-/* Phone only: the step above the buttons matches the step under the cover, so
-   the header has exactly two large steps — artwork, words, actions — instead of
-   a hero and then a series of 8px nudges. */
+/* Phone only: one large step in the header — the 24px between the words and the
+   buttons. The step above the artwork is gone: the square is beside the text on
+   one line, not above it. */
 @media (max-width: 768px) {
   .header-text-group + .header-actions {
     margin-top: var(--space-6);
@@ -569,81 +569,64 @@
    ========================================= */
 @media (max-width: 768px) {
   .view-header {
-    flex-direction: column;
-    /* stretch, NOT center: the cover has to start on the same left edge as the
-       text under it. Centring it gave the screen two left edges and left a void
-       beside the square, which is what read as broken. */
-    align-items: stretch;
+    /* A grid, not a column: the artwork and the words sit on ONE line, the
+       actions on the next. `.header-info` is a box with no styling of its own on
+       a phone, so `display: contents` promotes its two children to grid items and
+       the whole thing becomes three items without touching a single view's
+       markup. Column 1 sizes itself to the square, column 2 takes the rest, and
+       the actions span both — so the buttons are as wide as the header and the
+       text never has to be squeezed by them. */
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    column-gap: var(--space-4);
+    /* Row 2's step is the actions' own margin-top (24px, one owner). A row-gap
+       here would stack on top of it. */
+    row-gap: var(--space-0);
+    align-items: center;
     text-align: left;
-    /* The step under the hero is the largest one on the screen — it separates the
-       artwork from the words about it, everything below is tighter than this. */
-    gap: var(--space-6);
     height: auto;
     margin-bottom: var(--space-4);
   }
 
-  /* Hero square. The radius, the shadow and the emblem sizing come from the base
-     block and are deliberately not repeated here.
-
-     76vw = 296px of the 358px content column on a 390px phone: the square reads
-     as the poster of the page instead of a tile floating in it. 36vh caps it on
-     a short phone (230px of a 640px screen) and 100% covers a viewport narrower
-     than the column itself. With the text block (~150px) and the 24px hero gap
-     the header is ~470px, which still leaves four 56px track rows above the
-     dock on an 820px screen. */
-  .header-art {
-    width: min(100%, 72vw, 34vh);
-  }
-
   .header-info {
-    width: 100%;
+    display: contents;
+  }
+
+  /* 96px: the Pi's 64px anchor was the one thing on a phone that read as an
+     afterthought, and a square this size leaves 246px for the words on a 390px
+     screen — enough for a two-line title. */
+  .header-art {
+    width: 96px;
+    /* The radius, the shadow and the emblem sizing come from the base block. */
+  }
+
+  .header-text-group {
+    align-self: center;
     min-width: 0;
-    align-items: flex-start;
-    justify-content: flex-start;
-    /* The 4px nudge lined the text up with the art's optical edge; with the art
-       above instead of beside there is nothing to align to. */
-    padding-top: var(--space-0);
   }
 
-  .header-title {
-    /* Same 20px as the Pi header and as MainScreen's .view-title: one page
-       title per screen, one size. Still clamped to two lines, and the views
-       keep the `title` attribute, so a long playlist name never loses its text. */
-    font-size: var(--text-2xl);
-    line-height: var(--leading-snug);
-    -webkit-line-clamp: 2;
-  }
-
-  /* Rhythm of the block under the cover. The eyebrow is a caption ON the title,
-     and the performer belongs to the name, so those two steps are 4px; the
-     badge row is the next group at 12px. Measured: 24 / 4 / 4 / 12 / 24, so the
-     header has exactly two large steps — artwork, words, actions — instead of a
-     hero followed by a series of 8px nudges. Scoped through .view-header
-     because .header-label is also the app's section heading in 14 other places,
-     and those keep the 8px they are approved at. */
+  /* Airier than the Pi's 8/8/8: on a phone this block is the page's only text,
+     so the eyebrow and the title are 8px apart and the metadata 12px below. */
   .view-header .header-label {
-    margin-bottom: var(--space-1);
+    margin-bottom: var(--space-2);
   }
   .view-header .header-title {
-    margin-bottom: var(--space-1);
+    font-size: var(--text-3xl); /* 24px — at 20px it matched the PLAY ALL label
+                                   below it, which is what made the pair read as
+                                   a form field and its button. */
+    line-height: var(--leading-snug);
+    -webkit-line-clamp: 2;
+    margin-bottom: var(--space-2);
   }
-  .header-subtitle-row {
-    justify-content: flex-start;
+  .view-header .header-subtitle-row {
     margin-bottom: var(--space-3);
   }
-
-  /* The artist/description line matches the card sub role (--text-base) rather
-     than the 20px title it sits under. */
   .header-sub-text {
     font-size: var(--text-base);
   }
 
-  /* Actions sit under the text block, anchored to its left edge, one 16px step
-     below it (the same step as the gap under the cover above). The gap has one
-     owner — `.header-text-group + .header-actions` — so a header reads the same
-     with a badge row, with an empty one and with none at all. `margin-top: 0`
-     below applies to the same skeleton-header exception as in the block above. */
   .header-actions {
+    grid-column: 1 / -1;
     justify-content: flex-start;
     width: 100%;
     gap: var(--space-2);
