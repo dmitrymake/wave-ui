@@ -122,8 +122,9 @@
     if (source?.navigateToArtist && track.artist) {
       source.navigateToArtist(track);
     } else if (!isRadio && track.artist) {
+      // Canonical navigation: tab + reset + navigateTo. The hash follows via
+      // the Router.updateUrl callback in App.svelte — no direct history.* here.
       activeMenuTab.set("artists");
-      if (window.location.hash !== "#/artists") history.pushState(null, "", "#/artists");
       resetNavigation();
       navigateTo("albums_by_artist", { name: track.artist });
     }
@@ -131,6 +132,10 @@
   }
 </script>
 
+<!-- Row is a listitem with row-level activation (Enter/Space plays) plus nested
+     action buttons (menu/like/remove). Nested-interactive-in-listitem is
+     intentional (Spotify-style); inner buttons stay tabbable and labelled. -->
+<!-- svelte-ignore a11y_no_noninteractive_tabindex, a11y_no_noninteractive_element_interactions -->
 <div
   class="row"
   class:active={isExactActive}
@@ -142,21 +147,23 @@
   onmouseleave={() => (isHovering = false)}
   use:longpress
   onlongpress={handleLongPress}
-  role="button"
+  role="listitem"
   tabindex="0"
+  aria-label={`${displayTitle ?? "Track"} by ${track.artist || "Unknown Artist"}`}
+  aria-current={isExactActive ? "true" : undefined}
 >
   <div class="left">
     {#if isEditable}
-      <div
+      <button
         class="drag-handle"
         onmousedown={(e) => onstartdrag?.(e)}
         ontouchstart={(e) => onstartdrag?.(e)}
         onclick={(e) => e.stopPropagation()}
         title="Drag to reorder"
-        role="presentation"
+        aria-label="Drag to reorder {displayTitle ?? 'track'}"
       >
         <div class="icon-small">{@html ICONS.DRAG_HANDLE}</div>
-      </div>
+      </button>
     {:else}
       <TrackPlaybackIndicator
         {index}
@@ -190,15 +197,13 @@
 
     {#if track.artist}
       {#if !isRadio || isStreamTrack}
-        <div
+        <button
           class="artist text-ellipsis link"
           onclick={handleArtistClick}
-          onkeydown={(e) => { if (e.key === "Enter") handleArtistClick(e); }}
-          role="link"
-          tabindex="0"
+          aria-label={`Go to artist ${track.artist}`}
         >
           {track.artist}
-        </div>
+        </button>
       {:else}
         <div class="artist text-ellipsis">
           {track.artist}
@@ -218,7 +223,7 @@
       </span>
     {/if}
 
-    <button class="btn-icon small context-menu-btn" onclick={handleMenuClick}>
+    <button class="btn-icon small context-menu-btn" onclick={handleMenuClick} aria-label={`More actions for ${displayTitle ?? "track"}`} title="More actions">
       {@html ICONS.DOTS}
     </button>
 
@@ -228,6 +233,8 @@
       <button
         class="btn-icon small remove"
         onclick={(e) => { e.stopPropagation(); onremove?.({ index }); }}
+        aria-label={`Remove ${displayTitle ?? "track"} from list`}
+        title="Remove"
       >
         {@html ICONS.REMOVE}
       </button>
@@ -256,6 +263,11 @@
   }
   .row:hover { background: var(--c-surface-hover); }
   .row.active { background: var(--c-surface-active); }
+  .row:focus-visible {
+    outline: var(--border-width-thick) solid transparent;
+    outline-offset: -2px;
+    box-shadow: var(--shadow-focus-ring);
+  }
 
   .row.striped::before {
     content: "";
@@ -277,6 +289,9 @@
     0% { background-position: 0 0; }
     100% { background-position: 28.28px 0; }
   }
+  @media (prefers-reduced-motion: reduce) {
+    .row.striped::before { animation: none; }
+  }
 
   .left, .info, .right { position: relative; z-index: 1; }
   .left {
@@ -295,10 +310,19 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    width: 24px;
-    height: 24px;
+    width: 32px;
+    height: 32px;
+    background: none;
+    border: none;
+    padding: 0;
+    border-radius: var(--radius-sm);
   }
   .drag-handle:active { cursor: grabbing; color: var(--c-text-primary); }
+  .drag-handle:focus-visible {
+    outline: var(--border-width-thick) solid transparent;
+    outline-offset: 0;
+    box-shadow: var(--shadow-focus-ring);
+  }
 
   .icon-small {
     width: var(--icon-size-xs);
@@ -344,11 +368,22 @@
     color: var(--c-text-secondary);
     width: fit-content;
     max-width: 100%;
+    background: none;
+    border: none;
+    padding: 0;
+    text-align: left;
+    font-family: inherit;
   }
   .artist.link:hover {
     text-decoration: underline;
     color: var(--c-text-primary);
     cursor: pointer;
+  }
+  .artist.link:focus-visible {
+    outline: var(--border-width-thick) solid transparent;
+    outline-offset: 1px;
+    box-shadow: var(--shadow-focus-ring);
+    border-radius: var(--radius-xs);
   }
 
   .right {

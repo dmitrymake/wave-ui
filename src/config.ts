@@ -34,9 +34,22 @@ export const CONFIG: Config = {
   setMoodeIp(ip: string): void {
     if (typeof localStorage !== "undefined") {
       const cleanIp: string = ip ? ip.trim() : "";
-      if (cleanIp) {
+      // Accept hostname, IPv4, or bracketed IPv6 — reject control chars/spaces.
+      if (cleanIp && /^[a-zA-Z0-9.\-_:[\]%]+$/.test(cleanIp) && !/[\s%\\]/.test(cleanIp)) {
         localStorage.setItem("moode_ip", cleanIp);
       }
     }
   },
 };
+
+/**
+ * Single base-URL resolver. Replaces the three duplicated getBaseUrl() copies
+ * (constants.ts, yandex.ts, api.ts) so dev/prod/:3000 logic cannot drift.
+ */
+export function resolveBaseUrl(): string {
+  if (import.meta.env.DEV) return `http://${CONFIG.MOODE_IP}`;
+  if (typeof window !== "undefined" && window.location.port === "3000") {
+    return `http://${window.location.hostname}`;
+  }
+  return "";
+}

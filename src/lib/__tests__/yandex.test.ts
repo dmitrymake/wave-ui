@@ -3,6 +3,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
 import { YandexApi, YandexApiError, isYandexAuthError } from "../yandex.js";
+import { TimeoutError } from "../http.js";
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -75,6 +76,10 @@ describe("YandexApi convenience methods", () => {
   });
 
   it("getArtistDetails passes id", async () => {
+    (globalThis.fetch as ReturnType<typeof vi.fn>).mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve({ artist: { name: "A" }, tracks: [{ id: "1" }], albums: [] }),
+    });
     await YandexApi.getArtistDetails("12345");
     const url = (globalThis.fetch as ReturnType<typeof vi.fn>).mock.calls[0][0];
     expect(url).toContain("action=get_artist_details");
@@ -82,6 +87,10 @@ describe("YandexApi convenience methods", () => {
   });
 
   it("getAlbumDetails passes id", async () => {
+    (globalThis.fetch as ReturnType<typeof vi.fn>).mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve({ title: "Al", tracks: [{ id: "7" }] }),
+    });
     await YandexApi.getAlbumDetails("67890");
     expect((globalThis.fetch as ReturnType<typeof vi.fn>).mock.calls[0][0]).toContain("action=get_album_details");
   });
@@ -128,5 +137,77 @@ describe("YandexApi convenience methods", () => {
     await YandexApi.feedbackSkip("1", -5);
     const opts = (globalThis.fetch as ReturnType<typeof vi.fn>).mock.calls[0][1];
     expect(JSON.parse(opts.body).played_seconds).toBe(0);
+  });
+});
+
+describe("getArtistDetails/getAlbumDetails resilience", () => {
+  const fetchMock = () => globalThis.fetch as ReturnType<typeof vi.fn>;
+  const ok = (body: unknown) => ({ ok: true, json: () => Promise.resolve(body) });
+  const fullArtist = () => ({
+    artist: { name: "Artist" },
+    cover: "",
+    tracks: [{ id: "1", title: "T" }],
+    albums: [],
+  });
+
+  it("returns first-attempt data without retry", async () => {
+    fetchMock().mockResolvedValue(ok(fullArtist()));
+    const res = await YandexApi.getArtistDetails("1");
+    expect(fetchMock()).toHaveBeenCalledTimes(1);
+    expect(res.artist?.name).toBe("Artist");
+  });
+
+  it("retries once on timeout then succeeds", async () => {
+    fetchMock()
+      .mockRejectedValueOnce(new TimeoutError(1))
+      .mockResolvedValue(ok(fullArtist()));
+    const res = await YandexApi.getArtistDetails("1");
+    expect(fetchMock()).toHaveBeenCalledTimes(2);
+    expect(res.artist?.name).toBe("Artist");
+  });
+
+  it("retries once on empty-200 then succeeds", async () => {
+    fetchMock().mockResolvedValueOnce(ok({ artist: [], tracks: [], albums: [] })).mockResolvedValue(ok(fullArtist()));
+    const res = await YandexApi.getArtistDetails("1");
+    expect(fetchMock()).toHaveBeenCalledTimes(2);
+    expect(res.artist?.name).toBe("Artist");
+  });
+
+  it("retries once on 500 then succeeds", async () => {
+    fetchMock()
+      .mockResolvedValueOnce({ ok: false, status: 500 })
+      .mockResolvedValue(ok(fullArtist()));
+    const res = await YandexApi.getArtistDetails("1");
+    expect(fetchMock()).toHaveBeenCalledTimes(2);
+    expect(res.artist?.name).toBe("Artist");
+  });
+
+  it("throws after two timeouts", async () => {
+    fetchMock().mockRejectedValue(new TimeoutError(1));
+    await expect(YandexApi.getArtistDetails("1")).rejects.toBeInstanceOf(TimeoutError);
+    expect(fetchMock()).toHaveBeenCalledTimes(2);
+  });
+
+  it("throws after two empty responses without caching anything", async () => {
+    fetchMock().mockResolvedValue(ok({ artist: [], tracks: [], albums: [] }));
+    await expect(YandexApi.getArtistDetails("1")).rejects.toThrow(/empty/);
+    expect(fetchMock()).toHaveBeenCalledTimes(2);
+  });
+
+  it("does not retry 401 auth errors", async () => {
+    fetchMock().mockResolvedValue({ ok: false, status: 401 });
+    const err = (await YandexApi.getArtistDetails("1").catch((e) => e)) as YandexApiError;
+    expect(err).toBeInstanceOf(YandexApiError);
+    expect(isYandexAuthError(err)).toBe(true);
+    expect(fetchMock()).toHaveBeenCalledTimes(1);
+  });
+
+  it("getAlbumDetails retries empty then succeeds", async () => {
+    fetchMock()
+      .mockResolvedValueOnce(ok({ title: "", tracks: [] }))
+      .mockResolvedValue(ok({ title: "Album", tracks: [{ id: "7" }] }));
+    const res = await YandexApi.getAlbumDetails("9");
+    expect(fetchMock()).toHaveBeenCalledTimes(2);
+    expect(res.title).toBe("Album");
   });
 });

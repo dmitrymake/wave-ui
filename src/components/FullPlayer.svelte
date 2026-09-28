@@ -77,6 +77,25 @@
   let progressPct = $derived(seekCtl.fraction * 100);
   let qualityLabel = $derived(getQualityLabel($status));
   let artworkRadius = $derived(isDocked ? "var(--radius-md)" : "var(--radius-xl)");
+
+  function handleSeekKey(e: KeyboardEvent) {
+    e.stopPropagation();
+    if (isRadio) return;
+    const step = e.shiftKey ? 10 : 5;
+    if (e.key === "ArrowLeft") {
+      e.preventDefault();
+      seek(Math.max(0, elapsed - step));
+    } else if (e.key === "ArrowRight") {
+      e.preventDefault();
+      seek(Math.min(duration, elapsed + step));
+    } else if (e.key === "Home") {
+      e.preventDefault();
+      seek(0);
+    } else if (e.key === "End") {
+      e.preventDefault();
+      seek(duration);
+    }
+  }
 </script>
 
 <div
@@ -169,11 +188,13 @@
           ontouchmove={isDraggingBar ? seekCtl.onTouchMove : null}
           onmouseup={seekCtl.onMouseUp}
           ontouchend={seekCtl.onTouchEnd}
+          onkeydown={handleSeekKey}
           role="slider"
           aria-label="Seek"
           aria-valuemin={0}
           aria-valuemax={100}
           aria-valuenow={Math.round(progressPct)}
+          aria-valuetext={`${formatTime(seekCtl.displaySeconds)} of ${isRadio ? "live stream" : formatTime(duration)}`}
           tabindex="0"
         >
           <div class="common-track">
@@ -196,15 +217,15 @@
       <div class="buttons-row">
         <LikeButton track={$currentSong} />
 
-        <button class="btn-icon side-btn" onclick={() => nav("previous")}>
+        <button class="btn-icon side-btn" onclick={() => nav("previous")} aria-label="Previous track" title="Previous">
           {@html ICONS.PREVIOUS}
         </button>
 
-        <button class="play-btn-large flex-center" onclick={togglePlay}>
+        <button class="play-btn-large flex-center" onclick={togglePlay} aria-label={$status.state === "play" ? "Pause" : "Play"} title={$status.state === "play" ? "Pause" : "Play"}>
           {@html $status.state === "play" ? ICONS.PAUSE : ICONS.PLAY}
         </button>
 
-        <button class="btn-icon side-btn" onclick={() => nav("next")}>
+        <button class="btn-icon side-btn" onclick={() => nav("next")} aria-label="Next track" title="Next">
           {@html ICONS.NEXT}
         </button>
 

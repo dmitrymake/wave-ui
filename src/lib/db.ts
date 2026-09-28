@@ -149,6 +149,7 @@ export const db = {
         resolve();
       };
       tx.onerror = () => reject(tx.error);
+      tx.onabort = () => reject(tx.error ?? new Error("clear transaction aborted"));
     });
   },
 
@@ -163,6 +164,7 @@ export const db = {
         resolve();
       };
       tx.onerror = () => reject(tx.error);
+      tx.onabort = () => reject(tx.error ?? new Error("bulkAdd transaction aborted"));
     });
   },
 

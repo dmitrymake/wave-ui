@@ -1,20 +1,8 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2025 dmitrymake
-import { CONFIG } from "../config";
+import { resolveBaseUrl } from "../config";
 
-const getBaseUrl = (): string => {
-  const isDev = import.meta.env.DEV;
-
-  if (isDev) {
-    return `http://${CONFIG.MOODE_IP}`;
-  }
-
-  if (typeof window !== "undefined" && window.location.port === "3000") {
-    return `http://${window.location.hostname}`;
-  }
-
-  return "";
-};
+const getBaseUrl = (): string => resolveBaseUrl();
 
 // Canonical name of the special "Favorites" playlist. This is both the MPD
 // playlist identifier (listplaylistinfo / playlistadd / playlistdelete) and the
@@ -66,8 +54,13 @@ export const PLAYER_CONFIG = {
 // HTTP request timeouts (ms). REST/PHP calls can hang indefinitely on a
 // half-open TCP connection without a client-side deadline; fetchWithTimeout
 // (lib/http.ts) aborts past these. DAEMON_POLL is shorter than the 5s daemon
-// poll interval so overlapping requests cannot pile up.
+// poll interval so overlapping requests cannot pile up. DETAILS covers the
+// multi-upstream detail endpoints (artist = 3 sequential Yandex requests with
+// up to 15s curl budget each): the generic 12s default aborts a slow-but-valid
+// cold response, so these get a wider budget plus one client-side retry.
 export const HTTP_CONFIG = {
   DEFAULT_TIMEOUT: 12_000,
   DAEMON_POLL_TIMEOUT: 4_000,
+  DETAILS_TIMEOUT: 25_000,
+  DETAILS_RETRY_DELAY: 500,
 } as const;

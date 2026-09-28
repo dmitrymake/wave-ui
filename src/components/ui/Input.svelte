@@ -39,6 +39,13 @@
     onclear?: () => void;
     /** Leading icon (typically a magnifier <svg>) for search inputs. */
     icon?: Snippet;
+    /**
+     * Extra trailing content inside the field (e.g. a loading spinner),
+     * rendered after the input and before the clear button.
+     */
+    trailing?: Snippet;
+    /** Native autofocus for the inner input (e.g. the library Search view). */
+    autofocus?: boolean;
   }
 
   let {
@@ -59,6 +66,8 @@
     onkeydown,
     onclear,
     icon,
+    trailing,
+    autofocus = false,
   }: Props = $props();
 
   const effectiveType = $derived(search ? "search" : type);
@@ -82,6 +91,8 @@
     </span>
   {/if}
 
+  <!-- autofocus is opt-in (search-first views) and therefore exempt -->
+  <!-- svelte-ignore a11y_autofocus -->
   <input
     class="field__input"
     type={effectiveType}
@@ -95,7 +106,14 @@
     aria-invalid={error}
     {oninput}
     {onkeydown}
+    {autofocus}
   />
+
+  {#if trailing}
+    <span class="field__trailing" aria-hidden="true">
+      {@render trailing()}
+    </span>
+  {/if}
 
   {#if showClear}
     <button
@@ -191,6 +209,14 @@
     width: var(--icon-size-md); /* 20px */
     height: var(--icon-size-md);
     stroke-width: var(--icon-stroke-width);
+  }
+
+  /* ---- Extra trailing content (e.g. spinner) ---- */
+  .field__trailing {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
   }
 
   /* ---- Trailing clear button ---- */

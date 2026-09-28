@@ -54,13 +54,31 @@
     window.removeEventListener("touchend", onVolEnd);
   }
 
+  function handleVolKey(e: KeyboardEvent) {
+    e.stopPropagation();
+    const step = e.shiftKey ? 10 : 5;
+    if (e.key === "ArrowLeft" || e.key === "ArrowDown") {
+      e.preventDefault();
+      setVolume(Math.max(0, $status.volume - step));
+    } else if (e.key === "ArrowRight" || e.key === "ArrowUp") {
+      e.preventDefault();
+      setVolume(Math.min(100, $status.volume + step));
+    } else if (e.key === "Home") {
+      e.preventDefault();
+      setVolume(0);
+    } else if (e.key === "End") {
+      e.preventDefault();
+      setVolume(100);
+    }
+  }
+
   // If the component is unmounted mid-drag, the window listeners added in
   // handleVolStart would otherwise leak. Clear drag state and detach them.
   onDestroy(onVolEnd);
 </script>
 
 <div class="volume-row" class:compact onclick={(e) => e.stopPropagation()} onkeydown={(e) => e.stopPropagation()} role="presentation">
-  <button class="vol-btn" onclick={toggleMute} title="Mute/Unmute">
+  <button class="vol-btn" onclick={toggleMute} title="Mute/Unmute" aria-label={$status.volume > 0 ? "Mute" : "Unmute"}>
     {@html volumeIcon}
   </button>
 
@@ -69,11 +87,13 @@
     bind:this={volumeBar}
     onmousedown={(e) => { e.stopPropagation(); handleVolStart(e); }}
     ontouchstart={(e) => { e.stopPropagation(); handleVolStart(e); }}
+    onkeydown={handleVolKey}
     role="slider"
     aria-label="Volume"
     aria-valuemin={0}
     aria-valuemax={100}
     aria-valuenow={$status.volume}
+    aria-valuetext={`${$status.volume} percent`}
     tabindex="0"
   >
     <div class="common-track">

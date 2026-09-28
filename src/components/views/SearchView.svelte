@@ -9,6 +9,7 @@
   import { playTrackOptimistic } from "../../lib/playerActions";
   import { ICONS } from "../../lib/icons";
   import { navigateTo, getTrackThumbUrl, searchQuery } from "../../lib/store";
+  import SearchBar from "../ui/SearchBar.svelte";
   import BaseList from "./BaseList.svelte";
   import type { Track, SearchAlbumResult } from "../../lib/types";
 
@@ -27,9 +28,9 @@
     }
   });
 
-  function handleInput(e: Event & { currentTarget: HTMLInputElement }) {
-    searchQuery.set(e.currentTarget.value);
-
+  function handleInput() {
+    // The shared SearchBar keeps $searchQuery in sync via bind:value;
+    // here only the debounce runs.
     clearTimeout(debounceTimer);
     debounceTimer = setTimeout(() => {
       performSearch($searchQuery);
@@ -115,26 +116,16 @@
 
 <div class="view-container">
   <div class="content-padded no-bottom-pad">
-    <div class="search-input-container">
-      <span class="search-icon">{@html ICONS.SEARCH}</span>
-      <!-- svelte-ignore a11y_autofocus -->
-      <input
-        type="text"
+    <div class="search-field">
+      <SearchBar
+        bind:value={$searchQuery}
         placeholder="Artists, songs, or albums"
-        value={$searchQuery}
+        ariaLabel="Search your library"
         oninput={handleInput}
+        onClear={clearInput}
+        busy={isSearching}
         autofocus
       />
-
-      {#if $searchQuery.length > 0}
-        <button class="clear-icon-btn" onclick={clearInput}>
-          {@html ICONS.CLOSE}
-        </button>
-      {/if}
-
-      {#if isSearching}
-        <div class="spinner"></div>
-      {/if}
     </div>
   </div>
 
@@ -218,23 +209,8 @@
 </div>
 
 <style>
-
-  .clear-icon-btn {
-    background: transparent;
-    border: none;
-    color: var(--c-text-muted);
-    width: var(--switch-h);
-    height: 100%;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    cursor: pointer;
-    padding: var(--space-0);
-    margin-right: var(--space-1);
-  }
-  .clear-icon-btn :global(svg) {
-    width: var(--icon-size-xs);
-    height: var(--icon-size-xs);
+  .search-field {
+    margin-bottom: var(--space-6);
   }
 
   .section-spacing {
@@ -264,22 +240,5 @@
     font-size: var(--text-8xl);
     margin-bottom: var(--space-5);
     color: var(--c-icon-faint);
-  }
-
-  .spinner {
-    width: var(--icon-size-xs);
-    height: var(--icon-size-xs);
-    border: var(--border-width-thick) solid var(--c-border);
-    border-top-color: var(--c-accent);
-    border-radius: var(--radius-circle);
-    animation: spin 0.6s var(--ease-linear) infinite;
-    margin-left: var(--space-2);
-    flex-shrink: 0;
-  }
-
-  @keyframes spin {
-    to {
-      transform: rotate(360deg);
-    }
   }
 </style>

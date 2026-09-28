@@ -526,6 +526,9 @@
       transform: rotate(360deg);
     }
   }
+  @media (prefers-reduced-motion: reduce) {
+    .spinner { animation: none; }
+  }
 
   .playlists-grid-override {
     grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)) !important;

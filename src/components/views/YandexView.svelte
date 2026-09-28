@@ -1,7 +1,7 @@
 <!-- SPDX-License-Identifier: MIT -->
 <!-- Copyright (c) 2025 dmitrymake -->
 <script lang="ts">
-  import { onMount, onDestroy, tick, untrack } from "svelte";
+  import { onMount, onDestroy, untrack } from "svelte";
   import { fade } from "svelte/transition";
   import { writable, get } from "svelte/store";
   import { YandexApi, isYandexAuthError, type PlaylistSource } from "../../lib/yandex";
@@ -11,7 +11,9 @@
     showToast,
     navigationStack,
     navigateTo,
-    setNavigationStack,
+    navigateBack,
+    updateTopEntry,
+    navIdentityKey,
   } from "../../lib/store";
   import {
     yandexAuthStatus,
@@ -19,6 +21,7 @@
     yandexSearchTrigger,
   } from "../../lib/stores/yandex";
   import { MSG } from "../../lib/messages";
+  import { artistTarget, albumTarget } from "../../lib/yandexNav";
   import { yandexSource, yandexTrackToTrack } from "../../lib/sources/yandexSource";
   import TrackRow from "../TrackRow.svelte";
   import BaseList from "./BaseList.svelte";
@@ -74,6 +77,10 @@
 
   let uniqueViewKey = $state("");
 
+  // Monotonic load token: async detail loads capture it and drop the result
+  // when a newer navigation has started (fixes "opened B, see A" overwrites).
+  let viewSeq = 0;
+
   // --- Navigation Cache ---
   interface ViewCacheEntry {
     tracks: YandexTrack[];
@@ -84,8 +91,6 @@
     canLoadMore?: boolean;
   }
   const viewCache = new ViewCache<ViewCacheEntry>(20);
-  const getCacheKey = (mode: string, data: Record<string, unknown> | null) =>
-    viewCache.key(mode, data);
   const saveToCache = (key: string, entry: ViewCacheEntry) =>
     viewCache.set(key, entry);
 
@@ -100,19 +105,19 @@
       canLoadMore = cached.canLoadMore ?? false;
     }
     if (cached.headerData) {
-      const stack = get(navigationStack);
-      const active = stack[stack.length - 1];
-      if (active) {
-        active.data = { ...active.data, ...cached.headerData };
-        setNavigationStack(stack);
-      }
+      updateTopEntry(cached.headerData as Record<string, unknown>);
     }
+    // Restored content is final: clear any spinner left by a superseded load
+    // (its seq-guarded finally skips the reset).
+    isLoading = false;
+    isLoadingMore = false;
     return true;
   }
 
   $effect(() => {
     const mode = getModeFromStack(currentView);
-    const newKey = mode + JSON.stringify(currentView?.data || {});
+    // Stable identity: header merges (name/cover/…) must not retrigger loads.
+    const newKey = navIdentityKey(mode, (currentView?.data ?? null) as Record<string, unknown> | null);
 
     if (newKey !== uniqueViewKey) {
       uniqueViewKey = newKey;
@@ -129,16 +134,17 @@
   });
 
   async function handleViewChange(mode: string, data: Record<string, unknown> | null) {
+    const seq = ++viewSeq;
     // Save current view to cache before switching
     const prevKey = untrack(() => {
       const prevMode = viewMode;
       if (prevMode && prevMode !== mode && prevMode !== "dashboard") {
-        return getCacheKey(prevMode, $navigationStack[$navigationStack.length - 2]?.data ?? null);
+        return navIdentityKey(prevMode, ($navigationStack[$navigationStack.length - 2]?.data ?? null) as Record<string, unknown> | null);
       }
       return null;
     });
 
-    if (prevKey && prevKey !== getCacheKey(mode, data)) {
+    if (prevKey && prevKey !== navIdentityKey(mode, data)) {
       saveToCache(prevKey, {
         tracks: get(tracksStore),
         albums: get(albumsStore),
@@ -149,7 +155,7 @@
     }
 
     // Try restore from cache
-    const cacheKey = getCacheKey(mode, data);
+    const cacheKey = navIdentityKey(mode, data);
 
     if (mode !== "dashboard") {
       if (mode !== "search") tracksStore.set([]);
@@ -169,15 +175,15 @@
       }
     } else if (mode === "playlist") {
       if (!restoreFromCache(cacheKey)) {
-        await loadPlaylistData(data ?? {});
+        await loadPlaylistData(data ?? {}, seq);
       }
     } else if (mode === "artist_details") {
       if (!restoreFromCache(cacheKey)) {
-        await loadArtistData(data ?? {});
+        await loadArtistData(data ?? {}, seq);
       }
     } else if (mode === "album_details") {
       if (!restoreFromCache(cacheKey)) {
-        await loadAlbumData(data ?? {});
+        await loadAlbumData(data ?? {}, seq);
       }
     }
   }
@@ -316,7 +322,7 @@
     navigateTo("yandex_playlist", pl);
   }
 
-  async function loadPlaylistData(data: Record<string, unknown>) {
+  async function loadPlaylistData(data: Record<string, unknown>, seq: number) {
     isLoading = true;
     canLoadMore = true;
     let uid = (data.uid as string | null) ?? null;
@@ -330,19 +336,36 @@
     }
     currentPlaylistContext = { uid, kind, offset: 0, type: "playlist" };
     try {
-      await loadPlaylistTracks(uid, kind, 0);
+      await loadPlaylistTracks(uid, kind, 0, seq);
     } catch (e) {
+      if (seq !== viewSeq) return;
       reportError("Playlist", e, MSG.YANDEX_FAILED_PLAYLIST);
     } finally {
-      isLoading = false;
+      if (seq === viewSeq) isLoading = false;
     }
   }
 
-  async function loadArtistData(data: Record<string, unknown>) {
+  async function loadArtistData(data: Record<string, unknown>, seq: number) {
+    if (data.id === undefined || data.id === null || data.id === "") {
+      logger.error("[YandexView] artist_details without id, refusing to fetch 'undefined'");
+      reportError("Artist", new Error("missing artist id"), MSG.YANDEX_FAILED_ARTIST);
+      isLoading = false;
+      return;
+    }
     isLoading = true;
     canLoadMore = false;
     try {
       const res = await YandexApi.getArtistDetails(String(data.id));
+      if (seq !== viewSeq) return; // superseded — a newer view is active
+
+      // Nameless + contentless = backend fluke, not an artist: reject it so a
+      // blank header is never merged and the empty page is never cached.
+      const hasIdentity = !!res?.artist?.name;
+      const hasContent = (res?.tracks?.length ?? 0) > 0 || (res?.albums?.length ?? 0) > 0;
+      if (!hasIdentity && !hasContent) {
+        reportError("Artist", new Error("empty artist response"), MSG.YANDEX_FAILED_ARTIST);
+        return;
+      }
 
       const headerData = {
         name: res?.artist?.name ?? "",
@@ -353,33 +376,45 @@
 
       const stack = get(navigationStack);
       const active = stack[stack.length - 1];
-      if (active?.view === "yandex_artist_details") {
-        active.data = { ...active.data, ...headerData };
-        setNavigationStack(stack);
+      if (active?.view === "yandex_artist_details" && headerData.title) {
+        updateTopEntry(headerData as Record<string, unknown>);
       }
 
       tracksStore.set(res?.tracks ?? []);
       albumsStore.set(res?.albums ?? []);
 
-      // Cache immediately after load
-      const key = getCacheKey("artist_details", data);
+      const key = navIdentityKey("artist_details", data);
       saveToCache(key, {
         tracks: res?.tracks ?? [],
         albums: res?.albums ?? [],
         headerData,
       });
     } catch (e) {
+      if (seq !== viewSeq) return;
       reportError("Artist", e, MSG.YANDEX_FAILED_ARTIST);
     } finally {
-      isLoading = false;
+      if (seq === viewSeq) isLoading = false;
     }
   }
 
-  async function loadAlbumData(data: Record<string, unknown>) {
+  async function loadAlbumData(data: Record<string, unknown>, seq: number) {
+    if (data.id === undefined || data.id === null || data.id === "") {
+      logger.error("[YandexView] album_details without id, refusing to fetch 'undefined'");
+      reportError("Album", new Error("missing album id"), MSG.YANDEX_FAILED_ALBUM);
+      isLoading = false;
+      return;
+    }
     isLoading = true;
     canLoadMore = false;
     try {
       const res = await YandexApi.getAlbumDetails(String(data.id));
+      if (seq !== viewSeq) return; // superseded — a newer view is active
+
+      // Titleless + trackless = fluke (same guard as artists).
+      if (!res?.title && !(res?.tracks?.length ?? 0)) {
+        reportError("Album", new Error("empty album response"), MSG.YANDEX_FAILED_ALBUM);
+        return;
+      }
 
       const headerData = {
         name: res?.title ?? "",
@@ -390,39 +425,55 @@
 
       const stack = get(navigationStack);
       const active = stack[stack.length - 1];
-      if (active?.view === "yandex_album_details") {
-        active.data = { ...active.data, ...headerData };
-        setNavigationStack(stack);
+      if (active?.view === "yandex_album_details" && headerData.title) {
+        updateTopEntry(headerData as Record<string, unknown>);
       }
       tracksStore.set(res?.tracks ?? []);
 
-      // Cache immediately after load
-      const key = getCacheKey("album_details", data);
+      const key = navIdentityKey("album_details", data);
       saveToCache(key, {
         tracks: res?.tracks ?? [],
         albums: [],
         headerData,
       });
     } catch (e) {
+      if (seq !== viewSeq) return;
       reportError("Album", e, MSG.YANDEX_FAILED_ALBUM);
     } finally {
-      isLoading = false;
+      if (seq === viewSeq) isLoading = false;
     }
   }
 
   function openArtist(artist: YandexArtist) {
-    navigateTo("yandex_artist_details", artist);
+    // Id-less entries can't open details — fall back to a title search.
+    const target = artistTarget(artist);
+    if (target) navigateTo(target.view, target.data);
+    else {
+      logger.warn("[YandexView] openArtist with no id or title, ignoring");
+      showToast(MSG.YANDEX_FAILED_ARTIST, "error");
+    }
   }
   function openAlbum(album: YandexAlbum) {
-    navigateTo("yandex_album_details", album);
+    const target = albumTarget(album);
+    if (target) navigateTo(target.view, target.data);
+    else {
+      logger.warn("[YandexView] openAlbum with no id or title, ignoring");
+      showToast(MSG.YANDEX_FAILED_ALBUM, "error");
+    }
   }
 
-  async function loadPlaylistTracks(uid: string | null, kind: string | null, offset: number): Promise<number> {
+  async function loadPlaylistTracks(
+    uid: string | null,
+    kind: string | null,
+    offset: number,
+    seq?: number,
+  ): Promise<number> {
     if (!uid || !kind) {
       canLoadMore = false;
       return 0;
     }
     const res = await YandexApi.getPlaylistTracks(uid, kind, offset);
+    if (seq !== undefined && seq !== viewSeq) return 0; // superseded
     const tracks = res?.tracks;
     if (tracks) {
       if (offset === 0) tracksStore.set(tracks);
@@ -437,6 +488,7 @@
   async function loadMore() {
     if (isLoadingMore || !canLoadMore) return;
     isLoadingMore = true;
+    const seq = viewSeq;
     const prevOffset = currentPlaylistContext.offset;
     try {
       currentPlaylistContext.offset += 50;
@@ -445,15 +497,18 @@
           currentPlaylistContext.uid,
           currentPlaylistContext.kind,
           currentPlaylistContext.offset,
+          seq,
         );
+        if (seq !== viewSeq) return;
         if (count === 0) canLoadMore = false;
       }
     } catch (e) {
+      if (seq !== viewSeq) return;
       // Roll back the optimistic offset bump so a retry doesn't skip a page.
       currentPlaylistContext.offset = prevOffset;
       reportError("Load more", e, MSG.YANDEX_FAILED_PLAYLIST);
     } finally {
-      isLoadingMore = false;
+      if (seq === viewSeq) isLoadingMore = false;
     }
   }
 
@@ -463,18 +518,15 @@
     clearTimeout(searchDebounceTimer);
     if (val.length >= 2) {
       searchDebounceTimer = setTimeout(() => {
-        if (viewMode !== "search") {
-          navigateTo("yandex_search", { query: val });
-        } else {
-          // Keep the active stack entry's query in sync so the view-cache key matches
-          // the current term (otherwise back-navigation can restore stale results).
-          const stack = get(navigationStack);
-          const active = stack[stack.length - 1];
-          if (active) {
-            active.data = { ...active.data, query: val };
-            setNavigationStack(stack);
-          }
+        // The bar lives in dashboard + search views. If the user opened a
+        // detail view while debouncing, abandon instead of yanking them back.
+        const mode = getModeFromStack(get(navigationStack)[get(navigationStack).length - 1]);
+        if (mode === "search") {
+          // Keep the entry query in sync so the cache key matches the term.
+          updateTopEntry({ query: val });
           performSearch();
+        } else if (mode === "dashboard") {
+          navigateTo("yandex_search", { query: val });
         }
       }, 600);
     }
@@ -584,7 +636,7 @@
         oninput={handleSearchInput}
         onClear={() => {
           searchQuery = "";
-          if (viewMode === "search") window.history.back();
+          if (viewMode === "search") navigateBack();
         }}
       />
     {/if}
@@ -678,6 +730,9 @@
     100% {
       transform: rotate(360deg);
     }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .spinner { animation: none; }
   }
 
 </style>

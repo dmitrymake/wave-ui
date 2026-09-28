@@ -182,8 +182,9 @@ button {
 
 /* Keyboard focus ring for naked/raw interactive controls (WCAG 2.4.7).
    Zero specificity (:where) so component rules can still override. The
-   transparent outline keeps a visible focus indicator under forced-colors. */
-:where(.btn-icon, .menu-row, .sort-item, .vol-btn, .side-btn, .play-btn-large):focus-visible {
+   transparent outline keeps a visible focus indicator under forced-colors.
+   .row/.music-card/.nav-item covered so keyboard nav is not blind. */
+:where(.btn-icon, .menu-row, .sort-item, .vol-btn, .side-btn, .play-btn-large, .row, .music-card, .nav-item, .drag-handle):focus-visible {
   outline: var(--border-width-thick) solid transparent;
   outline-offset: var(--space-0_5);
   box-shadow: var(--shadow-focus-ring);

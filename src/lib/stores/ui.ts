@@ -2,7 +2,7 @@
 // Copyright (c) 2025 dmitrymake
 import { writable } from "svelte/store";
 import { THEMES } from "../theme";
-import type { ToastMessage, ModalState, ContextMenuState, ContextMenuContext, Track } from "../types";
+import type { ToastMessage, ModalState, ContextMenuState, ContextMenuContext, Track, MenuTab } from "../types";
 
 
 let savedTheme = "default";
@@ -89,7 +89,7 @@ export function closeModal(): void {
 
 
 export const isFullPlayerOpen = writable<boolean>(false);
-export const activeMenuTab = writable<string>("library");
+export const activeMenuTab = writable<MenuTab>("library");
 export const connectionStatus = writable<string>("Disconnected");
 
 let storedSidebar = false;

@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2025 dmitrymake
-import { CONFIG } from "../config";
-import { fetchWithTimeout } from "./http";
+import { resolveBaseUrl } from "../config";
+import { fetchWithTimeout, TimeoutError } from "./http";
+import { HTTP_CONFIG } from "./constants";
 import type {
   YandexTrack,
   YandexPlaylist,
@@ -15,19 +16,7 @@ import type {
   YandexMutationResponse,
 } from "./types/yandex";
 
-const getBaseUrl = (): string => {
-  const isDev = import.meta.env.DEV;
-
-  if (isDev) {
-    return `http://${CONFIG.MOODE_IP}`;
-  }
-
-  if (typeof window !== "undefined" && window.location.port === "3000") {
-    return `http://${window.location.hostname}`;
-  }
-
-  return "";
-};
+const getBaseUrl = (): string => resolveBaseUrl();
 
 /** Yandex daemon API endpoint. Lives in the Yandex domain (was in shared constants). */
 export const YANDEX_ENDPOINT = {
@@ -62,11 +51,30 @@ export function isYandexAuthError(e: unknown): boolean {
   return e instanceof YandexApiError && (e.status === 401 || e.status === 403);
 }
 
+/**
+ * True when a failed detail fetch is worth one automatic retry: timeouts,
+ * rate-limit (429) and upstream 5xx are transient by nature. Auth errors and
+ * other 4xx are permanent for this token/request — retrying would only add
+ * load and latency.
+ */
+function isRetryable(e: unknown): boolean {
+  if (e instanceof TimeoutError) return true;
+  if (e instanceof YandexApiError) {
+    return e.status === 429 || e.status >= 500;
+  }
+  return false;
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 interface YandexApiType {
   // Low-level escape hatch for actions without a typed wrapper (status, play_track,
   // add_tracks, …). The caller names the parsed shape via the type parameter; the
   // default of `unknown` keeps untyped callers honest about narrowing first.
-  request<T = unknown>(action: string, params?: Record<string, unknown>, method?: string): Promise<T>;
+  // `timeoutMs` overrides the generic 12s deadline for heavy endpoints.
+  request<T = unknown>(action: string, params?: Record<string, unknown>, method?: string, timeoutMs?: number): Promise<T>;
   search(query: string): Promise<YandexSearchResponse>;
   getUserPlaylists(): Promise<YandexPlaylist[]>;
   getLanding(): Promise<YandexLandingResponse>;
@@ -84,8 +92,41 @@ interface YandexApiType {
   feedbackSkip(trackId: string | number, playedSeconds: number): Promise<YandexMutationResponse>;
 }
 
+/**
+ * Detail endpoints (artist/album) with a wider deadline and one automatic retry.
+ * These fan out to several sequential upstream requests on the backend, so a
+ * cold first attempt can exceed the generic 12s budget or catch a transient
+ * 429/5xx/empty-200 — exactly the "first open fails, second works" symptom.
+ * The retry lives in the API layer so every caller benefits; the view-level
+ * empty-response guard stays as the backstop for a twice-failed fetch.
+ */
+async function requestDetails<T>(
+  action: string,
+  params: Record<string, unknown>,
+  isEmpty: (data: T) => boolean,
+): Promise<T> {
+  let lastError: unknown = null;
+  for (let attempt = 0; attempt < 2; attempt++) {
+    if (attempt > 0) await sleep(HTTP_CONFIG.DETAILS_RETRY_DELAY);
+    try {
+      const data = await YandexApi.request<T>(action, params, "GET", HTTP_CONFIG.DETAILS_TIMEOUT);
+      if (!isEmpty(data)) return data;
+      lastError = new Error(`empty ${action} response`);
+    } catch (e) {
+      lastError = e;
+      if (!isRetryable(e)) throw e;
+    }
+  }
+  throw lastError;
+}
+
 export const YandexApi: YandexApiType = {
-  async request<T = unknown>(action: string, params: Record<string, unknown> = {}, method = "GET"): Promise<T> {
+  async request<T = unknown>(
+    action: string,
+    params: Record<string, unknown> = {},
+    method = "GET",
+    timeoutMs?: number,
+  ): Promise<T> {
     const baseUrl = YANDEX_ENDPOINT.URL;
     const url = new URL(baseUrl, window.location.origin);
 
@@ -104,7 +145,7 @@ export const YandexApi: YandexApiType = {
       options.headers = { "Content-Type": "application/json" };
     }
 
-    const res = await fetchWithTimeout(url.toString(), options);
+    const res = await fetchWithTimeout(url.toString(), options, timeoutMs);
     if (!res.ok) throw new YandexApiError(res.status);
     // res.json() is `any`; the caller's type parameter is the single point where we
     // assert the parsed payload's shape (the daemon's contract is external).
@@ -128,11 +169,19 @@ export const YandexApi: YandexApiType = {
   },
 
   async getArtistDetails(id: string | number): Promise<YandexArtistDetailsResponse> {
-    return await this.request<YandexArtistDetailsResponse>("get_artist_details", { id });
+    return await requestDetails<YandexArtistDetailsResponse>(
+      "get_artist_details",
+      { id },
+      (d) => !d?.artist?.name && !(d?.tracks?.length ?? 0) && !(d?.albums?.length ?? 0),
+    );
   },
 
   async getAlbumDetails(id: string | number): Promise<YandexAlbumDetailsResponse> {
-    return await this.request<YandexAlbumDetailsResponse>("get_album_details", { id });
+    return await requestDetails<YandexAlbumDetailsResponse>(
+      "get_album_details",
+      { id },
+      (d) => !d?.title && !(d?.tracks?.length ?? 0),
+    );
   },
 
   async getPlaylistTracks(uid: string, kind: string, offset = 0): Promise<YandexPlaylistTracksResponse> {

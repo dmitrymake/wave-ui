@@ -6,6 +6,46 @@
 
   let isError = $state(false);
   let inputRef: HTMLInputElement;
+  let confirmRef: HTMLButtonElement;
+  let prevFocus: HTMLElement | null = null;
+  let cardEl: HTMLElement;
+
+  $effect(() => {
+    if (!$modal.isOpen) {
+      isError = false;
+    }
+  });
+
+  $effect(() => {
+    if ($modal.isOpen) {
+      prevFocus = document.activeElement as HTMLElement | null;
+      // Focus prompt input or confirm on open; restore on close.
+      queueMicrotask(() => {
+        if ($modal.type === "prompt" && inputRef) inputRef.focus();
+        else confirmRef?.focus();
+      });
+    } else if (prevFocus) {
+      prevFocus.focus?.();
+      prevFocus = null;
+    }
+  });
+
+  function trapTab(e: KeyboardEvent) {
+    if (e.key !== "Tab" || !cardEl) return;
+    const focusables = cardEl.querySelectorAll<HTMLElement>(
+      'button:not([disabled]), input:not([disabled]), [tabindex]:not([tabindex="-1"])',
+    );
+    if (!focusables.length) return;
+    const first = focusables[0];
+    const last = focusables[focusables.length - 1];
+    if (e.shiftKey && document.activeElement === first) {
+      e.preventDefault();
+      last.focus();
+    } else if (!e.shiftKey && document.activeElement === last) {
+      e.preventDefault();
+      first.focus();
+    }
+  }
 
   $effect(() => {
     if (!$modal.isOpen) {
@@ -63,14 +103,17 @@
   >
     <div
       class="modal-card"
+      bind:this={cardEl}
       transition:scale={{ start: 0.95, duration: 200 }}
       onclick={(e) => e.stopPropagation()}
       role="dialog"
+      aria-modal="true"
+      aria-label={$modal.title}
       tabindex="-1"
-      onkeydown={(e) => { if (e.key === "Escape") closeModal(); }}
+      onkeydown={(e) => { if (e.key === "Escape") closeModal(); trapTab(e); }}
     >
       <div class="modal-header">
-        <span class="modal-title">{$modal.title}</span>
+        <span class="modal-title" id="modal-title">{$modal.title}</span>
       </div>
 
       <div class="modal-body">
@@ -117,7 +160,7 @@
               {$modal.cancelLabel}
             </button>
           {/if}
-          <button class="btn confirm" onclick={handleConfirm}>
+          <button class="btn confirm" bind:this={confirmRef} onclick={handleConfirm}>
             {$modal.confirmLabel}
           </button>
         </div>

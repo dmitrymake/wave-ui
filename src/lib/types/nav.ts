@@ -2,10 +2,73 @@
 // Copyright (c) 2025 dmitrymake
 // ─── Navigation ───
 
-export interface NavigationEntry {
-  view: string;
-  data?: Record<string, unknown> | null;
+/** Menu tabs the shell can activate. Source tabs (e.g. "yandex") are registered
+ *  by TrackSources via SourceRoute.menuTab; core tabs are listed here so a typo
+ *  becomes a compile error instead of a silent fallback. */
+export type CoreMenuTab =
+  | "library"
+  | "artists"
+  | "albums"
+  | "radio"
+  | "playlists"
+  | "favorites"
+  | "search"
+  | "queue"
+  | "settings";
+export type MenuTab = CoreMenuTab | (string & {});
+
+/** Navigation views. Core views are enumerated; streaming sources (Yandex,
+ *  future YouTube Music, …) own their views via SourceRoute.viewName, so the
+ *  union stays open (`string & {}`) instead of hard-coding service literals. */
+export type CoreView =
+  | "root"
+  | "details"
+  | "albums_by_artist"
+  | "tracks_by_album"
+  | "queue"
+  | "search";
+export type ViewName = CoreView | (string & {});
+
+/** Typed payloads for core views. Source views use their own shapes
+ *  (e.g. { query }, { id }, { uid; kind }) but travel as NavData. */
+export interface AlbumParams {
+  name: string;
+  artist?: string;
+  displayName?: string;
 }
+export interface ArtistParams {
+  name: string;
+  displayName?: string;
+}
+export interface PlaylistParams {
+  name: string;
+  displayName?: string;
+}
+export interface SearchParams {
+  query: string;
+}
+
+/** Data carried by a navigation entry. Open record for source extensibility,
+ *  with the fields the router dedupes on spelled out. */
+export type NavData = Record<string, unknown> & {
+  name?: string;
+  id?: string | number;
+  uid?: string;
+  kind?: string;
+  query?: string;
+  artist?: string;
+  displayName?: string;
+  title?: string;
+};
+
+export type NavigationEntry =
+  | { view: "root"; data?: null }
+  | { view: "details"; data: PlaylistParams & Record<string, unknown> }
+  | { view: "albums_by_artist"; data: ArtistParams & Record<string, unknown> }
+  | { view: "tracks_by_album"; data: AlbumParams & Record<string, unknown> }
+  | { view: "search"; data?: (SearchParams & Record<string, unknown>) | null }
+  | { view: "queue"; data?: null }
+  | { view: ViewName; data?: NavData | null };
 
 /**
  * A source-owned route, declaring how a hash path round-trips to a navigation

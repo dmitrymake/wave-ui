@@ -5,9 +5,10 @@ import { get } from "svelte/store";
 import type { NavigationEntry } from "../types";
 
 // Real writable stores back the router so we can assert on the navigation stack
-// and active tab after a hash change. consumeRouteData is controllable per test:
-// by default it returns null, forcing the router's own URL-parsing fallback (the
-// path we actually want to cover) rather than data stashed by an earlier navigateTo.
+// and active tab after a hash change. consumeRouteDataFor is controllable per
+// test: by default it returns null, forcing the router's own URL-parsing
+// fallback (the path we actually want to cover) rather than data stashed by an
+// earlier navigateTo.
 // Hoisted so the same instances are shared by the mock factory and the assertions.
 const h = vi.hoisted(() => {
   const w = <T>(v: T) => writableImpl(v);
@@ -50,7 +51,7 @@ const h = vi.hoisted(() => {
     yandexContext: w<{ streamCache: Record<string, unknown> }>({ streamCache: {} }),
     yandexFavorites: w<Set<string>>(new Set()),
     state,
-    consumeRouteData: vi.fn(() => {
+    consumeRouteDataFor: vi.fn((_view: string, _parsed: Record<string, unknown> | null) => {
       const d = state.routeData;
       state.routeData = null;
       return d;
@@ -58,13 +59,13 @@ const h = vi.hoisted(() => {
   };
 });
 
-const { activeMenuTab, navigationStack, searchQuery, consumeRouteData } = h;
+const { activeMenuTab, navigationStack, searchQuery, consumeRouteDataFor } = h;
 
 vi.mock("../store", () => ({
   activeMenuTab: h.activeMenuTab,
   navigationStack: h.navigationStack,
   searchQuery: h.searchQuery,
-  consumeRouteData: h.consumeRouteData,
+  consumeRouteDataFor: h.consumeRouteDataFor,
   resetNavigation: () => h.navigationStack.set([{ view: "root" }]),
   setNavigationStack: (entries: NavigationEntry[]) => h.navigationStack.set(entries),
   pushNavigationEntry: (view: string, data: Record<string, unknown> | null = null) =>
@@ -92,7 +93,7 @@ function reset() {
   navigationStack.set([{ view: "root" }]);
   searchQuery.set("");
   h.state.routeData = null;
-  consumeRouteData.mockClear();
+  consumeRouteDataFor.mockClear();
   window.location.hash = "";
 }
 
@@ -227,6 +228,26 @@ describe("handleHashChange — search and yandex routes", () => {
     navigateHash("#/yandex");
     expect(get(activeMenuTab)).toBe("yandex");
     expect(get(navigationStack)).toEqual([{ view: "root" }]);
+  });
+
+  it("trailing-slash #/yandex_artist/ (empty id) is a safe no-op", () => {
+    // parseParams requires a non-empty id; an empty segment returns null, so
+    // the router has no data to push and must not create a details view that
+    // would fetch `.../undefined`.
+    const before: NavigationEntry[] = [
+      { view: "root" },
+      { view: "yandex_search", data: { query: "калинов мост" } },
+    ];
+    navigationStack.set(before);
+    expect(() => navigateHash("#/yandex_artist/")).not.toThrow();
+    expect(get(navigationStack)).toEqual(before);
+  });
+
+  it("trailing-slash #/yandex_album/ (empty id) is a safe no-op", () => {
+    const before: NavigationEntry[] = [{ view: "root" }];
+    navigationStack.set(before);
+    expect(() => navigateHash("#/yandex_album/")).not.toThrow();
+    expect(get(navigationStack)).toEqual(before);
   });
 });
 

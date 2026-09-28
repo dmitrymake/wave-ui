@@ -76,6 +76,23 @@
     openContextMenu(e, $currentSong, { type: "general", source: "miniplayer" });
   }
 
+  // The dock opens the full player on click/Enter, but control clicks must not
+  // bubble into it: Svelte 5 delegates events, so a child's stopPropagation can
+  // arrive too late. Guard on the event target instead — anything interactive
+  // (buttons, sliders, inputs) is handled by its own control.
+  function isControlEvent(e: Event): boolean {
+    const t = e.target as HTMLElement | null;
+    return !!t?.closest?.('button, a, input, [role="slider"], [role="switch"]');
+  }
+
+  function handleDockOpen(e: MouseEvent) {
+    if (!isControlEvent(e)) isFullPlayerOpen.set(true);
+  }
+
+  function handleDockKey(e: KeyboardEvent) {
+    if (e.key === "Enter" && !isControlEvent(e)) isFullPlayerOpen.set(true);
+  }
+
   function handleLongPress(e: CustomEvent<{ originalEvent: Event }>) {
     openContextMenu(e.detail.originalEvent as EventWithDetail, $currentSong, { type: "general", source: "miniplayer" });
   }
@@ -85,12 +102,13 @@
   <div
     class="dock"
     transition:fade={{ duration: 220 }}
-    onclick={() => isFullPlayerOpen.set(true)}
+    onclick={handleDockOpen}
     use:longpress={500}
     onlongpress={handleLongPress}
     role="button"
     tabindex="0"
-    onkeydown={(e) => { if (e.key === "Enter") isFullPlayerOpen.set(true); }}
+    onkeydown={handleDockKey}
+    aria-label="Open full player"
   >
     <div
       class="progress-shadow"
@@ -157,7 +175,7 @@
             <div class="title text-ellipsis" title={displayTitle}>
               {displayTitle}
             </div>
-            <button class="btn-icon tiny-dots" onclick={handleContext}>
+            <button class="btn-icon tiny-dots" onclick={handleContext} aria-label={`More actions for ${displayTitle}`} title="More actions">
               {@html ICONS.DOTS}
             </button>
           </div>
@@ -179,7 +197,7 @@
           {@html ICONS.PREVIOUS}
         </IconButton>
 
-        <button class="play-btn flex-center" onclick={stop(togglePlay)}>
+        <button class="play-btn flex-center" onclick={stop(togglePlay)} aria-label={$status.state === "play" ? "Pause" : "Play"} title={$status.state === "play" ? "Pause" : "Play"}>
           {@html $status.state === "play" ? ICONS.PAUSE : ICONS.PLAY}
         </button>
 

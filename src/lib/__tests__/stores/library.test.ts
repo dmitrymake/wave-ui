@@ -5,17 +5,18 @@ import { get } from "svelte/store";
 import {
   navigationStack,
   navigateTo,
-  consumeRouteData,
+  consumeRouteDataFor,
   navigateBack,
   handleBrowserBack,
   saveScrollPosition,
   getScrollPosition,
   scrollPositions,
   setNavigationStack,
-} from "../../stores/library.js";
+  resetNavigation,
+} from "../../stores/navigation.js";
 
 beforeEach(() => {
-  setNavigationStack([{ view: "root" }]);
+  resetNavigation();
   scrollPositions.set({});
 });
 
@@ -29,20 +30,20 @@ describe("navigateTo", () => {
 
   it("stores route data", () => {
     navigateTo("album-detail", { albumName: "Test Album" });
-    const data = consumeRouteData();
+    const data = consumeRouteDataFor("album-detail", { albumName: "Test Album" });
     expect(data).toEqual({ albumName: "Test Album" });
   });
 });
 
-describe("consumeRouteData", () => {
+describe("consumeRouteDataFor", () => {
   it("returns null when no pending data", () => {
-    expect(consumeRouteData()).toBeNull();
+    expect(consumeRouteDataFor("test", { key: "value" })).toBeNull();
   });
 
   it("returns data only once", () => {
     navigateTo("test", { key: "value" });
-    expect(consumeRouteData()).toEqual({ key: "value" });
-    expect(consumeRouteData()).toBeNull();
+    expect(consumeRouteDataFor("test", { key: "value" })).toEqual({ key: "value" });
+    expect(consumeRouteDataFor("test", { key: "value" })).toBeNull();
   });
 });
 

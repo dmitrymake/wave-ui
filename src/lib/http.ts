@@ -31,9 +31,13 @@ export async function fetchWithTimeout(
 
   // Chain an externally-provided signal into our controller.
   const external = init.signal;
+  let onExternalAbort: (() => void) | null = null;
   if (external) {
     if (external.aborted) controller.abort();
-    else external.addEventListener("abort", () => controller.abort(), { once: true });
+    else {
+      onExternalAbort = () => controller.abort();
+      external.addEventListener("abort", onExternalAbort, { once: true });
+    }
   }
 
   try {
@@ -46,5 +50,6 @@ export async function fetchWithTimeout(
     throw err;
   } finally {
     clearTimeout(timer);
+    if (external && onExternalAbort) external.removeEventListener("abort", onExternalAbort);
   }
 }

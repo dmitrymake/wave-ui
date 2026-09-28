@@ -10,6 +10,7 @@ describe("constants", () => {
   it("API_ENDPOINTS.COVER_ART builds correct URL", async () => {
     vi.doMock("../../config", () => ({
       CONFIG: { MOODE_IP: "192.168.1.100" },
+      resolveBaseUrl: () => "",
     }));
 
     // In test env (jsdom), import.meta.env.DEV is false, port is not 3000
@@ -23,6 +24,7 @@ describe("constants", () => {
   it("API_ENDPOINTS.COVER_ART strips leading slash", async () => {
     vi.doMock("../../config", () => ({
       CONFIG: { MOODE_IP: "192.168.1.100" },
+      resolveBaseUrl: () => "",
     }));
 
     const { API_ENDPOINTS } = await import("../constants.js");
@@ -33,6 +35,7 @@ describe("constants", () => {
   it("API_ENDPOINTS.THUMB_CACHE builds correct URL", async () => {
     vi.doMock("../../config", () => ({
       CONFIG: { MOODE_IP: "192.168.1.100" },
+      resolveBaseUrl: () => "",
     }));
 
     const { API_ENDPOINTS } = await import("../constants.js");
@@ -44,6 +47,7 @@ describe("constants", () => {
   it("API_ENDPOINTS.RADIO_LOGOS encodes filename", async () => {
     vi.doMock("../../config", () => ({
       CONFIG: { MOODE_IP: "192.168.1.100" },
+      resolveBaseUrl: () => "",
     }));
 
     const { API_ENDPOINTS } = await import("../constants.js");
@@ -54,6 +58,7 @@ describe("constants", () => {
   it("DATABASE constants are correct", async () => {
     vi.doMock("../../config", () => ({
       CONFIG: { MOODE_IP: "localhost" },
+      resolveBaseUrl: () => "",
     }));
 
     const { DATABASE } = await import("../constants.js");

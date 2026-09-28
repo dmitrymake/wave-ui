@@ -8,7 +8,8 @@ import {
   queue,
   showToast,
   activeMenuTab,
-  setNavigationStack,
+  resetNavigation,
+  navigateTo,
 } from "../store";
 import { yandexContext, yandexFavorites, yandexState } from "../stores/yandex";
 import { YandexApi, YANDEX_ENDPOINT } from "../yandex";
@@ -19,8 +20,12 @@ import { ICONS } from "../icons";
 import { MSG } from "../messages";
 import { logger } from "../logger";
 import { registerTrackSource, type TrackSource, type SourceRoute } from "./trackSource";
+import { trimStreamCache, lookupStreamCache } from "./streamCache";
+import { normalizeStreamMeta, isRecord } from "../validate";
 import type { Track, MpdStatus, CurrentSong } from "../types";
 import type { YandexContext, YandexTrack } from "../types/yandex";
+
+export const YANDEX_SOURCE_ID = "yandex";
 
 // Bridge a Yandex source-list row to a full Track for TrackRow. YandexTrack omits
 // the local-library fields (file/genre/track), so they get neutral defaults — the
@@ -42,28 +47,16 @@ export function yandexTrackToTrack(item: YandexTrack, service: string): Track {
   };
 }
 
-const STREAM_CACHE_MAX = 300;
-const STREAM_CACHE_TRIM_TO = 200;
-
-function trimStreamCache(
-  cache: Record<string, YandexTrack & { file: string }>,
-): Record<string, YandexTrack & { file: string }> {
-  const keys = Object.keys(cache);
-  if (keys.length <= STREAM_CACHE_MAX) return cache;
-  const trimmed: Record<string, YandexTrack & { file: string }> = {};
-  const keep = keys.slice(-STREAM_CACHE_TRIM_TO);
-  for (const k of keep) {
-    trimmed[k] = cache[k];
-  }
-  return trimmed;
-}
-
 async function getYandexMeta(url: string): Promise<Record<string, unknown> | null> {
   try {
     const res = await fetchWithTimeout(
       YANDEX_ENDPOINT.URL + "?action=get_meta&url=" + encodeURIComponent(url),
     );
-    if (res.ok) return await res.json();
+    if (res.ok) {
+      const data: unknown = await res.json();
+      if (isRecord(data)) return data;
+      logger.warn("[Yandex] Invalid meta shape for", url);
+    }
   } catch (e) {
     logger.warn("[Yandex] Failed to fetch meta:", e);
   }
@@ -80,36 +73,39 @@ async function batchGetYandexMeta(
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ urls }),
     });
-    if (res.ok) return await res.json();
+    if (res.ok) {
+      const data: unknown = await res.json();
+      if (isRecord(data)) return data as Record<string, Record<string, unknown> | null>;
+      logger.warn("[Yandex] Invalid batch meta shape");
+    }
   } catch (e) {
     logger.warn("[Yandex] Failed to batch-fetch meta:", e);
   }
   return {};
 }
 
-// Build the cache entry from raw Yandex meta (same field order/defaults as the
-// previous inline literals in fetchMetaBatch and fetchMetaForTrack). The return
-// type stays inferred so `id` is `string` (from `String(...)`), matching the old
-// inline literals — annotating it as YandexTrack would widen id to string|number
-// and break the queue row's `string | undefined` id type.
+// Build the cache entry from raw Yandex meta with runtime validation. Invalid
+// rows (wrong types, empty title+artist) return null and are skipped instead of
+// poisoning the queue — the caller logs once and degrades.
 function buildYandexCacheEntry(url: string, meta: Record<string, unknown>) {
+  const norm = normalizeStreamMeta(url, meta);
+  if (!norm) return null;
   return {
-    id: String(meta.id ?? ""),
-    title: String(meta.title ?? ""),
-    artist: String(meta.artist ?? ""),
-    album: meta.album as string | undefined,
-    image: meta.image as string | undefined,
-    time: meta.time as number | undefined,
+    id: norm.id,
+    title: norm.title,
+    artist: norm.artist,
+    album: norm.album,
+    image: norm.image,
+    time: norm.time,
     isYandex: true as const,
     file: url,
   };
 }
 
 // Shape of a Yandex stream-cache entry as produced by buildYandexCacheEntry.
-type YandexCacheEntry = ReturnType<typeof buildYandexCacheEntry>;
+type YandexCacheEntry = NonNullable<ReturnType<typeof buildYandexCacheEntry>>;
 
-// Store the entry in the stream cache under both its url and (if present) its id,
-// then trim. Identical to the prior inline yandexContext.update in both callers.
+// Store the entry in the stream cache under both its url and (if present) its id.
 function cacheYandexMeta(
   url: string,
   meta: Record<string, unknown>,
@@ -125,8 +121,7 @@ function cacheYandexMeta(
 
 // Patch any queue rows matching `url` with the cached Yandex meta. `withId`
 // controls whether the row's id is overwritten: the batch path set it
-// (`id: cacheEntry.id || t.id`); the single-track path did not. Field order and
-// truthy fallbacks otherwise match both prior inline queue.update calls exactly.
+// (`id: cacheEntry.id || t.id`); the single-track path did not.
 function applyYandexMetaToQueue(
   url: string,
   cacheEntry: YandexCacheEntry,
@@ -141,7 +136,7 @@ function applyYandexMetaToQueue(
         artist: cacheEntry.artist || t.artist,
         album: cacheEntry.album || t.album,
         image: cacheEntry.image,
-        service: "yandex",
+        service: YANDEX_SOURCE_ID,
         time: cacheEntry.time || t.time,
       };
       return withId ? { ...patched, id: cacheEntry.id || t.id } : patched;
@@ -152,9 +147,7 @@ function applyYandexMetaToQueue(
 async function fetchMetaBatch(urls: string[]): Promise<void> {
   const yCtx: YandexContext = get(yandexContext);
   const missing = urls.filter((u) => {
-    if (yCtx.streamCache && yCtx.streamCache[u]) return false;
-    const tId = getYandexIdFromUrl(u);
-    if (tId && yCtx.streamCache && yCtx.streamCache[tId]) return false;
+    if (lookupStreamCache(yCtx.streamCache, u, getYandexIdFromUrl)) return false;
     return true;
   });
   if (!missing.length) return;
@@ -164,27 +157,30 @@ async function fetchMetaBatch(urls: string[]): Promise<void> {
     const meta = results[url];
     if (!meta) continue;
     const cacheEntry = buildYandexCacheEntry(url, meta);
+    if (!cacheEntry) {
+      logger.warn("[Yandex] Skipping invalid meta for", url);
+      continue;
+    }
     cacheYandexMeta(url, meta, cacheEntry);
     applyYandexMetaToQueue(url, cacheEntry, true);
   }
 
   const song: CurrentSong = get(currentSong);
   if (song.file && results[song.file]) {
-    const m = results[song.file];
-    if (m) {
+    const norm = normalizeStreamMeta(song.file, results[song.file]);
+    if (norm) {
       currentSong.update((s) => ({
         ...s,
         // Truthy fallback so an empty Yandex title does not blank the display.
-        title: String(m.title || s.title),
-        artist: String(m.artist || s.artist),
-        album: (m.album as string | undefined) ?? s.album,
-        image: m.image as string | undefined,
-        service: "yandex",
+        title: norm.title || s.title,
+        artist: norm.artist || s.artist,
+        album: norm.album ?? s.album,
+        image: norm.image,
+        service: YANDEX_SOURCE_ID,
       }));
       status.update((s) => {
-        const t = m.time as number | undefined;
-        if (t && (s.duration === 0 || isNaN(s.duration))) {
-          return { ...s, duration: t };
+        if (norm.time && (s.duration === 0 || isNaN(s.duration))) {
+          return { ...s, duration: norm.time };
         }
         return s;
       });
@@ -194,14 +190,15 @@ async function fetchMetaBatch(urls: string[]): Promise<void> {
 
 async function fetchMetaForTrack(url: string): Promise<void> {
   const yCtx: YandexContext = get(yandexContext);
-  if (yCtx.streamCache && yCtx.streamCache[url]) return;
-
-  const tId: string | null = getYandexIdFromUrl(url);
-  if (tId && yCtx.streamCache && yCtx.streamCache[tId]) return;
+  if (lookupStreamCache(yCtx.streamCache, url, getYandexIdFromUrl)) return;
 
   const meta = await getYandexMeta(url);
   if (meta) {
     const cacheEntry = buildYandexCacheEntry(url, meta);
+    if (!cacheEntry) {
+      logger.warn("[Yandex] Skipping invalid meta for", url);
+      return;
+    }
     cacheYandexMeta(url, meta, cacheEntry);
 
     const song: CurrentSong = get(currentSong);
@@ -212,7 +209,7 @@ async function fetchMetaForTrack(url: string): Promise<void> {
         artist: cacheEntry.artist,
         album: cacheEntry.album || s.album,
         image: cacheEntry.image,
-        service: "yandex",
+        service: YANDEX_SOURCE_ID,
       }));
 
       status.update((s) => {
@@ -274,7 +271,9 @@ const yandexRoutes: SourceRoute[] = [
     viewName: "yandex_artist_details",
     menuTab: YANDEX_MENU_TAB,
     parseParams(parts) {
-      if (parts.length >= 1) return { id: parts[0], title: "Artist" };
+      // Require a non-empty id: `#/yandex_artist/` (trailing slash) must be a
+      // safe no-op, not a details view that fetches `.../undefined`.
+      if (parts.length >= 1 && parts[0]) return { id: parts[0], title: "Artist" };
       return null;
     },
     buildPath(data) {
@@ -287,7 +286,7 @@ const yandexRoutes: SourceRoute[] = [
     viewName: "yandex_album_details",
     menuTab: YANDEX_MENU_TAB,
     parseParams(parts) {
-      if (parts.length >= 1) return { id: parts[0], title: "Album" };
+      if (parts.length >= 1 && parts[0]) return { id: parts[0], title: "Album" };
       return null;
     },
     buildPath(data) {
@@ -301,7 +300,7 @@ const yandexRoutes: SourceRoute[] = [
     menuTab: YANDEX_MENU_TAB,
     parseParams(parts) {
       // old guard: route === "yandex_playlist" && parts.length >= 3 (uid + kind)
-      if (parts.length >= 2) {
+      if (parts.length >= 2 && parts[0] && parts[1]) {
         return { uid: parts[0], kind: parts[1], title: "Playlist" };
       }
       return null;
@@ -316,7 +315,7 @@ const yandexRoutes: SourceRoute[] = [
 ];
 
 export const yandexSource: TrackSource = {
-  id: "yandex",
+  id: YANDEX_SOURCE_ID,
 
   routes: yandexRoutes,
 
@@ -341,29 +340,23 @@ export const yandexSource: TrackSource = {
     const fileUrl: string = t.file || "";
     const yCtx: YandexContext = get(yandexContext);
 
-    if (yCtx.streamCache) {
-      let yMeta = yCtx.streamCache[fileUrl];
-      if (!yMeta) {
-        const tId: string | null = getYandexIdFromUrl(fileUrl);
-        if (tId) yMeta = yCtx.streamCache[String(tId)];
-      }
+    const yMeta = lookupStreamCache(yCtx.streamCache, fileUrl, getYandexIdFromUrl);
 
-      if (yMeta) {
-        const metaTime: number = parseFloat(String(yMeta.time || 0));
-        const currentT: number = parseFloat(String(t.time || 0));
+    if (yMeta) {
+      const metaTime: number = parseFloat(String(yMeta.time || 0));
+      const currentT: number = parseFloat(String(t.time || 0));
 
-        return {
-          ...t,
-          title: yMeta.title || t.title,
-          artist: yMeta.artist || t.artist,
-          album: yMeta.album || t.album,
-          image: yMeta.image,
-          service: "yandex",
-          id: String(yMeta.id),
-          time: currentT > 0 ? currentT : metaTime,
-          _uid: String(t.id ?? t.pos) + "y",
-        };
-      }
+      return {
+        ...t,
+        title: yMeta.title || t.title,
+        artist: yMeta.artist || t.artist,
+        album: yMeta.album || t.album,
+        image: yMeta.image,
+        service: YANDEX_SOURCE_ID,
+        id: String(yMeta.id),
+        time: currentT > 0 ? currentT : metaTime,
+        _uid: String(t.id ?? t.pos) + "y",
+      };
     }
 
     toFetch.push(fileUrl);
@@ -379,30 +372,19 @@ export const yandexSource: TrackSource = {
     if (!serverSong.file) return;
 
     const yCtx: YandexContext = get(yandexContext);
-    let yMeta: (YandexTrack & { file: string }) | undefined;
-    if (yCtx.streamCache) {
-      yMeta = yCtx.streamCache[serverSong.file];
-      if (!yMeta) {
-        const tId = getYandexIdFromUrl(serverSong.file);
-        if (tId) yMeta = yCtx.streamCache[String(tId)];
-      }
-    }
+    const yMeta = lookupStreamCache(yCtx.streamCache, serverSong.file, getYandexIdFromUrl);
 
     if (yMeta) {
       serverSong.title = yMeta.title;
       serverSong.artist = yMeta.artist;
       serverSong.album = yMeta.album || serverSong.album;
       serverSong.image = yMeta.image;
-      serverSong.service = "yandex";
+      serverSong.service = YANDEX_SOURCE_ID;
       serverSong.id = String(yMeta.id);
       if (serverStatus.duration === 0 || isNaN(serverStatus.duration)) {
         if (yMeta.time) serverStatus.duration = parseFloat(String(yMeta.time));
       }
-    } else if (
-      serverSong.file.includes("yandex.net") ||
-      serverSong.file.includes("get-mp3") ||
-      serverSong.file.includes("/dev/shm/yandex_music/tracks/")
-    ) {
+    } else if (this.matches(serverSong.file)) {
       fetchMetaForTrack(serverSong.file);
     }
   },
@@ -464,11 +446,13 @@ export const yandexSource: TrackSource = {
     const id = String(track.id);
     const liked = get(yandexFavorites).has(id);
     try {
-      // Optimistic favourites flip; rolled back on failure.
+      // Immutable flip: Svelte notifies only on reference change, so copy the
+      // Set instead of mutating in place (old code returned the same ref).
       yandexFavorites.update((s) => {
-        if (liked) s.delete(id);
-        else s.add(id);
-        return s;
+        const next = new Set(s);
+        if (liked) next.delete(id);
+        else next.add(id);
+        return next;
       });
       showToast(
         liked ? MSG.FAV_REMOVED_YANDEX : MSG.FAV_ADDED_YANDEX,
@@ -477,9 +461,10 @@ export const yandexSource: TrackSource = {
       await YandexApi.toggleLike(track.id, liked);
     } catch (err) {
       yandexFavorites.update((s) => {
-        if (liked) s.add(id);
-        else s.delete(id);
-        return s;
+        const next = new Set(s);
+        if (liked) next.add(id);
+        else next.delete(id);
+        return next;
       });
       showToast(MSG.FAV_ERROR_UPDATING, "error");
     }
@@ -496,9 +481,11 @@ export const yandexSource: TrackSource = {
 
   navigateToArtist(track: Track): void {
     if (!track.artist) return;
-    activeMenuTab.set("yandex");
-    if (window.location.hash !== "#/yandex") history.pushState(null, "", "#/yandex");
-    setNavigationStack([{ view: "root" }, { view: "yandex_search", data: { query: track.artist } }]);
+    // Canonical navigation (no direct history.*): the hash follows via the
+    // Router.updateUrl callback, so stack and URL cannot diverge.
+    activeMenuTab.set(YANDEX_MENU_TAB);
+    resetNavigation();
+    navigateTo("yandex_search", { query: track.artist });
   },
 
   isQueueNavigable(): boolean {

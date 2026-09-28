@@ -480,6 +480,9 @@ export const PlayerActions = {
     const safeUri: string = escapePath(uri);
     forceHardSync = true;
 
+    // Snapshot for rollback: on socket failure the UI must not stick on Loading…
+    const prevSong: CurrentSong = get(currentSong);
+    const prevStatus: MpdStatus = get(status);
     status.update((s) => ({ ...s, state: "play", elapsed: 0 }));
     currentSong.set({
       title: meta.title || "Loading...",
@@ -513,6 +516,9 @@ export const PlayerActions = {
       }
     } catch (e) {
       logger.error("Play error", e);
+      // Roll back the optimistic Loading… row so the previous track returns.
+      currentSong.set(prevSong);
+      status.set(prevStatus);
       showToast(MSG.PLAY_FAILED_TO_PLAY, "error");
     }
 

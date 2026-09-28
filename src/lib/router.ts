@@ -7,8 +7,9 @@ import {
   resetNavigation,
   pushNavigationEntry,
   searchQuery,
-  consumeRouteData,
+  consumeRouteDataFor,
 } from "./store";
+import { isSameNavEntry } from "./stores/navigation";
 import { logger } from "./logger";
 import { FAVORITES_PLAYLIST } from "./constants";
 import {
@@ -29,9 +30,16 @@ function safeDecode(s: string): string {
 }
 
 export const Router = {
-  init(): void {
+  _onHashChange: null as (() => void) | null,
+
+  init(): () => void {
     this.handleHashChange();
-    window.addEventListener("hashchange", () => this.handleHashChange());
+    this._onHashChange = () => this.handleHashChange();
+    window.addEventListener("hashchange", this._onHashChange);
+    return () => {
+      if (this._onHashChange) window.removeEventListener("hashchange", this._onHashChange);
+      this._onHashChange = null;
+    };
   },
 
   handleHashChange(): void {
@@ -51,7 +59,6 @@ export const Router = {
     const parts = raw.split("/").map(safeDecode);
     const route = parts[0];
 
-    let data = consumeRouteData();
     let viewName = route;
 
     // A content route owned by a track source (e.g. a streaming service). The
@@ -65,25 +72,33 @@ export const Router = {
     if (route === "playlist") viewName = "details";
     if (route === "favorites") viewName = "details";
 
-    if (!data) {
-      if (sourceRoute) {
-        // parseParams receives the parts AFTER the prefix.
-        data = sourceRoute.parseParams(parts.slice(1));
-      } else if (route === "album" && parts.length >= 2) {
-        data =
-          parts.length >= 3
-            ? { artist: parts[1], name: parts[2] }
-            : { name: parts[1] };
-      } else if (route === "artist" && parts.length >= 2) {
-        data = { name: parts[1] };
-      } else if (route === "playlist" && parts.length >= 2) {
-        data = { name: parts[1], displayName: parts[1] };
-      } else if (route === "favorites") {
-        data = { name: FAVORITES_PLAYLIST };
-      } else if (parts.length >= 2) {
-        data = { name: parts[1], displayName: parts[1] };
-      }
+    // Parse the URL first: it is always available and always shape-valid.
+    let parsed: Record<string, unknown> | null = null;
+    if (sourceRoute) {
+      // parseParams receives the parts AFTER the prefix.
+      parsed = sourceRoute.parseParams(parts.slice(1));
+    } else if (route === "album" && parts.length >= 2) {
+      parsed =
+        parts.length >= 3
+          ? { artist: parts[1], name: parts[2] }
+          : { name: parts[1] };
+    } else if (route === "artist" && parts.length >= 2) {
+      parsed = { name: parts[1] };
+    } else if (route === "playlist" && parts.length >= 2) {
+      parsed = { name: parts[1], displayName: parts[1] };
+    } else if (route === "favorites") {
+      parsed = { name: FAVORITES_PLAYLIST };
+    } else if (parts.length >= 2) {
+      parsed = { name: parts[1], displayName: parts[1] };
     }
+
+    // Prefer the rich in-app payload queued for THIS route over the lossy
+    // parsed one — but only when identities match. A blind head-shift used to
+    // hand a stale queued payload (e.g. a search {query}, whose replaceState
+    // never fires hashchange) to an unrelated route and push an id-less
+    // details entry ("missing artist id" dead end).
+    const queued = consumeRouteDataFor(viewName, parsed);
+    let data = queued ?? parsed;
 
     // A bare source-tab segment with no detail parts: its source owns this segment
     // as a tab root, so we activate the tab and reset to root rather than pushing a
@@ -153,23 +168,17 @@ export const Router = {
       const stack = get(navigationStack) as NavigationEntry[];
       const currentTop = stack[stack.length - 1];
 
-      const isSameView = currentTop.view === viewName;
-      let isSameData = false;
-
-      if (data && currentTop.data) {
-        const topData = currentTop.data as Record<string, unknown>;
-        if (
-          (data.name && data.name === topData.name) ||
-          (data.id && data.id === topData.id) ||
-          (data.uid && data.uid === topData.uid)
-        ) {
-          isSameData = true;
-        }
-      } else if (!data && !currentTop.data) {
-        isSameData = true;
-      }
-
-      if (isSameView && isSameData) {
+      // Deep-equal dedup: view + full data payload (covers {query} search
+      // routes that the old name/id/uid-only check duplicated every time).
+      if (
+        currentTop &&
+        isSameNavEntry(
+          currentTop.view,
+          (currentTop.data ?? null) as Record<string, unknown> | null,
+          viewName,
+          (data ?? null) as Record<string, unknown> | null,
+        )
+      ) {
         return;
       }
 
@@ -190,8 +199,14 @@ export const Router = {
     let newPath = "";
 
     // A view owned by a track source serializes its own full hash path, so the
-    // router never names a concrete service here.
+    // router never names a concrete service here (Yandex today, YT Music next).
     const sourceRoute = matchRouteByView(view);
+
+    const asName = (v: unknown): string | null => {
+      if (typeof v === "string" && v) return v;
+      if (typeof v === "number" && Number.isFinite(v)) return String(v);
+      return null;
+    };
 
     if (sourceRoute) {
       newPath = sourceRoute.buildPath(data) ?? "";
@@ -204,17 +219,20 @@ export const Router = {
         newPath = tab;
       }
     } else if (view === "details") {
-      const name = (data?.name || data) as string;
+      const name = asName(data?.name);
+      if (!name) return;
       newPath =
         name === FAVORITES_PLAYLIST
           ? "favorites"
           : `playlist/${encodeURIComponent(name)}`;
     } else if (view === "albums_by_artist") {
-      const name = (data?.name || data) as string;
+      const name = asName(data?.name);
+      if (!name) return;
       newPath = `artist/${encodeURIComponent(name)}`;
     } else if (view === "tracks_by_album") {
-      const name = (data?.name || data) as string;
-      const artist = data?.artist as string | undefined;
+      const name = asName(data?.name ?? data);
+      if (!name) return;
+      const artist = asName(data?.artist);
       if (artist) {
         newPath = `album/${encodeURIComponent(artist)}/${encodeURIComponent(name)}`;
       } else {
@@ -226,9 +244,12 @@ export const Router = {
 
     if (newPath) {
       const nextHash = `#/${newPath}`;
-      if (safeDecode(window.location.hash) !== safeDecode(nextHash)) {
+      // Compare raw hashes: decoding both sides made `%2F` inside an artist
+      // name compare equal to a `/` separator (false "same URL").
+      if (window.location.hash !== nextHash) {
         // Search-style views (the source's empty-data-allowing search route, or
-        // the local search) replace history rather than pushing a new entry.
+        // the local search) replace history rather than pushing a new entry, so
+        // browser-Back skips transient keystrokes.
         if (sourceRoute?.allowEmptyData || view === "search") {
           window.history.replaceState(null, "", nextHash);
         } else {

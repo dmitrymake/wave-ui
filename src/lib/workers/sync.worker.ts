@@ -2,6 +2,7 @@
 // Copyright (c) 2025 dmitrymake
 import { db } from "../db";
 import { mapRawTrack, type RawTrackData } from "../trackMapper";
+import { isRawTrackData } from "../validate";
 import type { DbTrack } from "../types";
 
 let apiUrl: string;
@@ -80,7 +81,16 @@ async function startSync(): Promise<void> {
       count: (rawData as RawTrackData[]).length,
     });
 
-    const tracks: DbTrack[] = (rawData as RawTrackData[]).map(mapRawTrack);
+    // Filter invalid rows: a single null/number element must not abort the whole
+    // sync via mapRawTrack's `item.file` TypeError.
+    const rawList = rawData as unknown[];
+    const validRaw: RawTrackData[] = [];
+    for (const item of rawList) {
+      if (isRawTrackData(item)) validRaw.push(item as RawTrackData);
+      else console.warn("[sync] Skipping invalid library row:", item);
+    }
+
+    const tracks: DbTrack[] = validRaw.map(mapRawTrack);
 
     self.postMessage({
       type: "PROGRESS",

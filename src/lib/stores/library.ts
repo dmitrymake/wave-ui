@@ -3,25 +3,10 @@
 import { writable } from "svelte/store";
 import type { Station, Playlist, Track } from "../types";
 
-// Navigation concerns now live in ./navigation. Re-exported here so existing
-// direct imports from ./stores/library keep resolving unchanged (barrel-preserving).
-export {
-  navigationStack,
-  ignoreNextPopState,
-  searchQuery,
-  scrollPositions,
-  setNavigationCallback,
-  navigateTo,
-  consumeRouteData,
-  navigateBack,
-  handleBrowserBack,
-  saveScrollPosition,
-  getScrollPosition,
-  resetNavigation,
-  setNavigationStack,
-  pushNavigationEntry,
-} from "./navigation";
-
+// Navigation lives in ./navigation — import from there (or via ../store).
+// Former re-exports were removed to keep the dependency graph explicit:
+// `store.ts` re-exports ./navigation directly, so importing navigation through
+// ./library hid the real origin of `navigationStack`/`navigateTo`.
 
 export const stations = writable<Station[]>([]);
 export const playlists = writable<Playlist[]>([]);

@@ -4,7 +4,6 @@
   import { onMount } from "svelte";
   import { fly } from "svelte/transition";
   import { ICONS } from "../lib/icons";
-  import { get } from "svelte/store";
   import {
     activeMenuTab,
     navigationStack,
@@ -13,7 +12,6 @@
     isFullPlayerOpen,
     toastMessage,
     connectionStatus,
-    ignoreNextPopState,
   } from "../lib/store";
 
   import LibraryView from "./views/LibraryView.svelte";
@@ -38,10 +36,8 @@
   onMount(() => {
     window.history.replaceState({ depth: $navigationStack.length }, "", "");
     const onPopState = () => {
-      if (get(ignoreNextPopState)) {
-        ignoreNextPopState.set(false);
-        return;
-      }
+      // Single owner of Back: Router stack. Overlays (ContextMenu) close
+      // themselves via their own popstate listener without flags.
       handleBrowserBack();
     };
     window.addEventListener("popstate", onPopState);
@@ -246,6 +242,9 @@
   @keyframes offline-pulse {
     0%, 100% { opacity: 0.85; }
     50% { opacity: 0.2; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .offline-dot { animation: none; }
   }
 
   .content-area {

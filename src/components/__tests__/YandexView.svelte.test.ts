@@ -58,35 +58,53 @@ const { navStack } = vi.hoisted(() => {
 // currentSong/stations/favorites/artwork/context helpers. Provide all of them as
 // controllable writables / spies. navigateTo and setNavigationStack mutate the
 // shared navStack so a programmatic navigation actually changes `viewMode`.
-vi.mock("../../lib/store", () => ({
-  // navigation domain
-  navigationStack: { subscribe: navStack.subscribe },
-  navigateTo: vi.fn((view: string, data: Record<string, unknown> | null = null) => {
-    navStack.update((s) => [...s, { view, data }]);
-  }),
-  // YandexView's loaders mutate the active stack entry's `.data` in place and then
-  // call setNavigationStack(sameArray) to publish the merged header data. Clone into
-  // a fresh array of fresh entries so the readonly-store consumer (the `currentView`
-  // $derived) observes a new top-entry reference and re-renders with the merged
-  // header — otherwise an identical reference can be memoized away in jsdom.
-  setNavigationStack: vi.fn((entries: NavigationEntry[]) =>
-    navStack.set(entries.map((e) => ({ ...e, data: e.data ? { ...e.data } : e.data }))),
-  ),
-  resetNavigation: vi.fn(() => navStack.set([{ view: "root" }])),
-  saveScrollPosition: vi.fn(),
-  getScrollPosition: () => 0,
-  // ui domain
-  showToast: vi.fn(),
-  showModal: vi.fn(),
-  activeMenuTab: writable("yandex"),
-  openContextMenu: vi.fn(),
-  // player / library / artwork (TrackRow subtree)
-  currentSong: writable<{ file: string }>({ file: "" }),
-  stations: writable([]),
-  favorites: writable<Set<string>>(new Set()),
-  getTrackThumbUrl: () => "/images/default_icon.png",
-  getTrackCoverUrl: () => "/images/default_cover.png",
-}));
+vi.mock("../../lib/store", async (importOriginal) => {
+  // Real identity helper (pure): the component's change detection must use the
+  // exact production key semantics — a local copy drifted once already and
+  // reintroduced the header-merge reload loop in tests.
+  const { navIdentityKey } = await importOriginal<typeof import("../../lib/store")>();
+  return {
+    // navigation domain
+    navigationStack: { subscribe: navStack.subscribe },
+    navIdentityKey,
+    navigateTo: vi.fn((view: string, data: Record<string, unknown> | null = null) => {
+      navStack.update((s) => [...s, { view, data }]);
+    }),
+    navigateBack: vi.fn(() => {
+      navStack.update((s) => (s.length > 1 ? s.slice(0, -1) : s));
+    }),
+    updateTopEntry: vi.fn((patch: Record<string, unknown>) => {
+      navStack.update((s) => {
+        if (!s.length) return s;
+        const top = s[s.length - 1];
+        const next = [...s];
+        next[next.length - 1] = { ...top, data: { ...(top.data ?? {}), ...patch } };
+        return next;
+      });
+      return true;
+    }),
+    // Clone into a fresh array so the readonly-store consumer observes a new
+    // top-entry reference and re-renders (an identical reference can be
+    // memoized away in jsdom).
+    setNavigationStack: vi.fn((entries: NavigationEntry[]) =>
+      navStack.set(entries.map((e) => ({ ...e, data: e.data ? { ...e.data } : e.data }))),
+    ),
+    resetNavigation: vi.fn(() => navStack.set([{ view: "root" }])),
+    saveScrollPosition: vi.fn(),
+    getScrollPosition: () => 0,
+    // ui domain
+    showToast: vi.fn(),
+    showModal: vi.fn(),
+    activeMenuTab: writable("yandex"),
+    openContextMenu: vi.fn(),
+    // player / library / artwork (TrackRow subtree)
+    currentSong: writable<{ file: string }>({ file: "" }),
+    stations: writable([]),
+    favorites: writable<Set<string>>(new Set()),
+    getTrackThumbUrl: () => "/images/default_icon.png",
+    getTrackCoverUrl: () => "/images/default_cover.png",
+  };
+});
 
 // --- Yandex store domain mock ------------------------------------------------
 // YandexView reads yandexAuthStatus/yandexFavorites/yandexSearchTrigger; the
@@ -169,6 +187,7 @@ vi.mock("../../lib/yandex", () => {
 vi.mock("../../lib/playerActions", () => ({ togglePlay: vi.fn() }));
 
 import YandexView from "../views/YandexView.svelte";
+import { showToast } from "../../lib/store";
 
 // Canned fixtures for the search + content modes.
 const SEARCH_RESULT = {
@@ -312,6 +331,112 @@ describe("YandexView — SEARCH mode", () => {
       vi.useRealTimers();
     }
   });
+
+  it("falls back to a title search when opening an artist without id", async () => {
+    // Rare API rows lack an id: opening them must not navigate into a details
+    // view that fetches `.../undefined` ("missing artist id"). Instead the
+    // view falls back to searching by title.
+    vi.useFakeTimers();
+    try {
+      yandexAuthStatus.set(true);
+      ydxSearch.mockResolvedValue({
+        tracks: [],
+        albums: [],
+        artists: [{ title: "Ghost Artist" }],
+      });
+      navStack.set([{ view: "root" }, { view: "yandex_search", data: { query: "" } }]);
+      const { container, getByText } = render(YandexView);
+      await vi.advanceTimersByTimeAsync(0);
+
+      const input = container.querySelector<HTMLInputElement>('input[type="search"]');
+      expect(input).not.toBeNull();
+      await fireEvent.input(input!, { target: { value: "ghost" } });
+      await vi.advanceTimersByTimeAsync(600);
+      await vi.advanceTimersByTimeAsync(0);
+      await Promise.resolve();
+      await vi.advanceTimersByTimeAsync(0);
+
+      expect(getByText("Ghost Artist")).toBeInTheDocument();
+
+      // Click the id-less artist card: no details fetch, search fallback instead.
+      await fireEvent.click(getByText("Ghost Artist"));
+      await vi.advanceTimersByTimeAsync(0);
+
+      expect(ydxGetArtist).not.toHaveBeenCalled();
+      let top: NavigationEntry | undefined;
+      navStack.subscribe((s: NavigationEntry[]) => {
+        top = s[s.length - 1];
+      })();
+      expect(top).toEqual({ view: "yandex_search", data: { query: "Ghost Artist" } });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});
+
+describe("YandexView — search debounce vs navigation", () => {
+  const getNavStack = (): NavigationEntry[] => {
+    let snapshot: NavigationEntry[] = [];
+    navStack.subscribe((s: NavigationEntry[]) => {
+      snapshot = s;
+    })();
+    return snapshot;
+  };
+
+  it("abandons a pending search when the user leaves for a detail view", async () => {
+    // Typed in search, opened an artist before the 600ms debounce fired: the
+    // stale timer must not yank the user back to search (clobbering the view).
+    vi.useFakeTimers();
+    try {
+      yandexAuthStatus.set(true);
+      const artist = { view: "yandex_artist_details", data: { id: "300", title: "Artist" } };
+      navStack.set([{ view: "root" }, { view: "yandex_search", data: { query: "" } }]);
+      const { container } = render(YandexView);
+      await vi.advanceTimersByTimeAsync(0);
+
+      const input = container.querySelector<HTMLInputElement>('input[type="search"]');
+      expect(input).not.toBeNull();
+      await fireEvent.input(input!, { target: { value: "ab" } });
+
+      // Leave for the artist before the debounce elapses.
+      navStack.set([{ view: "root" }, artist]);
+      await vi.advanceTimersByTimeAsync(700);
+      await vi.advanceTimersByTimeAsync(0);
+
+      const stack = getNavStack();
+      expect(stack).toHaveLength(2);
+      // Still on the artist view (the loader may have merged its header data —
+      // that is fine); the point is no extra search entry was pushed.
+      expect(stack[1].view).toBe("yandex_artist_details");
+      expect((stack[1].data as Record<string, unknown>)?.id).toBe("300");
+      expect(ydxSearch).not.toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("navigates to search when typing in dashboard mode", async () => {
+    // The bar also lives on the dashboard: typing there must still transition
+    // into search mode after the debounce.
+    vi.useFakeTimers();
+    try {
+      yandexAuthStatus.set(true);
+      navStack.set([{ view: "root" }]);
+      const { container } = render(YandexView);
+      await vi.advanceTimersByTimeAsync(0);
+
+      const input = container.querySelector<HTMLInputElement>('input[type="search"]');
+      expect(input).not.toBeNull();
+      await fireEvent.input(input!, { target: { value: "xyz" } });
+      await vi.advanceTimersByTimeAsync(700);
+      await vi.advanceTimersByTimeAsync(0);
+
+      const stack = getNavStack();
+      expect(stack[stack.length - 1]).toEqual({ view: "yandex_search", data: { query: "xyz" } });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 });
 
 describe("YandexView — CONTENT modes (artist / album / playlist)", () => {
@@ -375,5 +500,184 @@ describe("YandexView — CONTENT modes (artist / album / playlist)", () => {
     expect(getByText("Playlist Track A")).toBeInTheDocument();
     expect(getByText("Playlist Track B")).toBeInTheDocument();
     expect(container.querySelector(".base-list-scroll-container")).not.toBeNull();
+  });
+
+  it("retries instead of showing a poisoned empty cache after leaving mid-load", async () => {
+    // Regression: open A (slow) -> back before it resolves -> the pre-switch
+    // save used to cache the just-cleared (empty) stores under A's key, so
+    // reopening A restored [] forever and never retried the load.
+    yandexAuthStatus.set(true);
+    const resolvers: Record<string, (v: unknown) => void> = {};
+    let calls = 0;
+    ydxGetArtist.mockImplementation((id: string) => {
+      calls++;
+      return new Promise((r) => (resolvers[`${id}#${calls}`] = r));
+    });
+    const artistA = { view: "root" };
+    navStack.set([artistA, { view: "yandex_artist_details", data: { id: "A1", title: "Artist A" } }]);
+    const { getByText, queryByText } = render(YandexView);
+    await settle();
+    expect(ydxGetArtist).toHaveBeenCalledTimes(1);
+
+    // Leave before A resolves, then let the late response drop.
+    navStack.set([artistA]);
+    await settle();
+    resolvers["A1#1"]!({
+      artist: { name: "Artist A" },
+      cover: "",
+      tracks: [{ id: "a1", title: "A Track", artist: "Artist A", isYandex: true as const }],
+      albums: [],
+    });
+    await settle();
+
+    // Reopen A: must retry the load, not restore the poisoned empty entry.
+    navStack.set([artistA, { view: "yandex_artist_details", data: { id: "A1", title: "Artist A" } }]);
+    await settle();
+    expect(ydxGetArtist).toHaveBeenCalledTimes(2);
+    expect(queryByText("A Track")).toBeNull();
+
+    resolvers["A1#2"]!({
+      artist: { name: "Artist A" },
+      cover: "",
+      tracks: [{ id: "a1", title: "A Track", artist: "Artist A", isYandex: true as const }],
+      albums: [],
+    });
+    await settle();
+    expect(getByText("A Track")).toBeInTheDocument();
+  });
+
+  it("restores a fully loaded view from cache when backing out of a slow load", async () => {
+    // Good path that must keep working: A loaded -> open B (slow) -> back to A
+    // before B resolves -> A shows instantly from its complete cache entry,
+    // with no refetch, and B's late response is dropped.
+    yandexAuthStatus.set(true);
+    const resolvers: Record<string, (v: unknown) => void> = {};
+    ydxGetArtist.mockImplementation(
+      (id: string) =>
+        new Promise((r) => {
+          resolvers[id] = r;
+        }),
+    );
+    const root = { view: "root" };
+    const entryA = { view: "yandex_artist_details", data: { id: "A1", title: "Artist A" } };
+    navStack.set([root, entryA]);
+    const { getByText } = render(YandexView);
+    await settle();
+    resolvers["A1"]!({
+      artist: { name: "Artist A" },
+      cover: "",
+      tracks: [{ id: "a1", title: "A Track", artist: "Artist A", isYandex: true as const }],
+      albums: [],
+    });
+    await settle();
+    expect(getByText("A Track")).toBeInTheDocument();
+    expect(ydxGetArtist).toHaveBeenCalledTimes(1);
+
+    // Open B, leave before it resolves, come back to A.
+    navStack.set([root, entryA, { view: "yandex_artist_details", data: { id: "B1", title: "Artist B" } }]);
+    await settle();
+    expect(ydxGetArtist).toHaveBeenCalledTimes(2);
+    navStack.set([root, entryA]);
+    await settle();
+    expect(getByText("A Track")).toBeInTheDocument();
+    expect(ydxGetArtist).toHaveBeenCalledTimes(2);
+
+    // B resolves late — must not paint over A.
+    resolvers["B1"]!({
+      artist: { name: "Artist B" },
+      cover: "",
+      tracks: [{ id: "b1", title: "B Track", artist: "Artist B", isYandex: true as const }],
+      albums: [],
+    });
+    await settle();
+    expect(getByText("A Track")).toBeInTheDocument();
+  });
+  it("treats a nameless contentless artist response as failure and retries on revisit", async () => {
+    // Backend fluke (empty 200) used to blank the header AND poison the cache,
+    // so every revisit restored the empty page forever.
+    yandexAuthStatus.set(true);
+    ydxGetArtist.mockResolvedValue({});
+    const root = { view: "root" };
+    const entry = { view: "yandex_artist_details", data: { id: "A1", title: "Artist A" } };
+    navStack.set([root, entry]);
+    render(YandexView);
+    await settle();
+    expect(ydxGetArtist).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(showToast)).toHaveBeenCalledWith(expect.any(String), "error");
+
+    // Nothing was cached: leaving and coming back refetches instead of
+    // restoring [].
+    navStack.set([root]);
+    await settle();
+    navStack.set([root, entry]);
+    await settle();
+    expect(ydxGetArtist).toHaveBeenCalledTimes(2);
+  });
+
+  it("does not fetch artist details when the nav entry has no id", async () => {
+    // Id-less entries must not hit the API as `.../undefined`, and two
+    // different id-less views must not collapse onto one view key (that
+    // skipped the second navigation and left the previous content on screen).
+    yandexAuthStatus.set(true);
+    const root = { view: "root" };
+    navStack.set([root, { view: "yandex_artist_details", data: { title: "Nameless" } }]);
+    render(YandexView);
+    await settle();
+    expect(ydxGetArtist).not.toHaveBeenCalled();
+    expect(vi.mocked(showToast)).toHaveBeenCalledTimes(1);
+
+    navStack.set([root, { view: "yandex_artist_details", data: { title: "Other" } }]);
+    await settle();
+    expect(ydxGetArtist).not.toHaveBeenCalled();
+    expect(vi.mocked(showToast)).toHaveBeenCalledTimes(2);
+  });
+
+  it("drops a stale artist response when navigating A -> B before A resolves", async () => {
+    // Regression: opening artist B while artist A's request was still in flight
+    // used to end with A's tracks rendered under B ("opened B, see A").
+    yandexAuthStatus.set(true);
+    let resolveA!: (v: unknown) => void;
+    let resolveB!: (v: unknown) => void;
+    ydxGetArtist.mockImplementation((id: string) => {
+      if (id === "A1") return new Promise((r) => (resolveA = r));
+      return new Promise((r) => (resolveB = r));
+    });
+    navStack.set([
+      { view: "root" },
+      { view: "yandex_artist_details", data: { id: "A1", title: "Artist A" } },
+    ]);
+    const { getByText, queryByText } = render(YandexView);
+    await settle();
+    expect(ydxGetArtist).toHaveBeenCalledWith("A1");
+
+    // Navigate to B before A resolves.
+    navStack.set([
+      { view: "root" },
+      { view: "yandex_artist_details", data: { id: "A1", title: "Artist A" } },
+      { view: "yandex_artist_details", data: { id: "B1", title: "Artist B" } },
+    ]);
+    await settle();
+    expect(ydxGetArtist).toHaveBeenCalledWith("B1");
+
+    // B resolves first and renders.
+    resolveB!({
+      artist: { name: "Artist B" },
+      cover: "",
+      tracks: [{ id: "b1", title: "B Track", artist: "Artist B", isYandex: true as const }],
+      albums: [],
+    });
+    await settle();
+    expect(getByText("B Track")).toBeInTheDocument();
+
+    // A resolves late — its result must be dropped, not painted over B.
+    resolveA!({
+      artist: { name: "Artist A" },
+      cover: "",
+      tracks: [{ id: "a1", title: "A Track", artist: "Artist A", isYandex: true as const }],
+      albums: [],
+    });
+    await settle();
+    expect(getByText("B Track")).toBeInTheDocument();
+    expect(queryByText("A Track")).toBeNull();
   });
 });

@@ -9,6 +9,7 @@ import { logger } from "./logger";
 import { isRemoteUrl } from "./utils";
 import { fetchWithTimeout } from "./http";
 import { bumpLibraryRevision } from "./db";
+import { normalizeStation, isRecord } from "./validate";
 import type { Station } from "./types.js";
 
 interface SyncWorkerMessage {
@@ -110,18 +111,16 @@ export const ApiActions = {
 
       if (!res.ok) throw new Error("Network error");
 
-      const rawData = await res.json();
-      if (rawData.error) throw new Error(rawData.error);
+      const rawData: unknown = await res.json();
+      if (isRecord(rawData) && rawData.error) throw new Error(String(rawData.error));
       if (!Array.isArray(rawData)) throw new Error("Invalid response format");
 
-      const normalized: Station[] = rawData.map((item: Record<string, unknown>) => ({
-        id: item.id as number | string,
-        name: item.name as string,
-        file: item.station as string,
-        station: item.station as string,
-        image: item.logo as string,
-        genre: (item.genre as string) || "Radio",
-      }));
+      const normalized: Station[] = [];
+      for (const item of rawData) {
+        const s = normalizeStation(item);
+        if (s) normalized.push(s);
+        else logger.warn("[API] Skipping invalid station row:", item);
+      }
 
       normalized.sort((a: Station, b: Station) =>
         a.name.localeCompare(b.name, undefined, { sensitivity: "base" }),
@@ -169,8 +168,10 @@ export const ApiActions = {
     try {
       const res = await fetchWithTimeout(`${API_ENDPOINTS.SYNC}?action=get_time`);
       if (res.ok) {
-        const data = await res.json();
-        return data.time ?? null;
+        const data: unknown = await res.json();
+        if (isRecord(data) && typeof data.time === "string") return data.time;
+        if (isRecord(data) && typeof data.time === "number") return String(data.time);
+        return null;
       }
     } catch (e) {
       logger.error("Failed to get server time", e);

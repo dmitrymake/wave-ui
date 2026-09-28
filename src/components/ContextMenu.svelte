@@ -7,7 +7,6 @@
     closeContextMenu,
     favorites,
     playlists,
-    ignoreNextPopState,
   } from "../lib/store";
   import { ICONS } from "../lib/icons";
   import * as actions from "../lib/contextMenuActions";
@@ -24,7 +23,6 @@
   let menuWidth = $state(0);
 
   let view = $state<"main" | "playlists">("main");
-  let historyPushed = $state(false);
 
   $effect(() => {
     if ($contextMenu.isOpen) {
@@ -32,24 +30,13 @@
     }
   });
 
-  $effect(() => {
-    if ($contextMenu.isOpen) {
-      if (!historyPushed && typeof history !== "undefined") {
-        history.pushState({ contextMenuOpen: true }, "");
-        historyPushed = true;
-      }
-    } else {
-      if (historyPushed && typeof history !== "undefined") {
-        ignoreNextPopState.set(true);
-        history.back();
-        historyPushed = false;
-      }
-    }
-  });
+  // Overlay closes via Escape/backdrop only — no history.* side-effects.
+  // The old pushState/back dance raced with Router popstate handling and made
+  // Back unpredictable when a menu was open during navigation.
 
   function handlePopState(_event: PopStateEvent) {
+    // Browser Back while the menu is open just closes the menu.
     if ($contextMenu.isOpen) {
-      historyPushed = false;
       closeContextMenu();
     }
   }
@@ -115,9 +102,22 @@
       style={stylePosition}
       transition:scale={{ start: 0.95, duration: 100 }}
       onclick={(e) => e.stopPropagation()}
-      role="dialog"
+      role="menu"
+      aria-label="Track actions"
       tabindex="-1"
-      onkeydown={(e) => { if (e.key === "Escape") closeContextMenu(); }}
+      onkeydown={(e) => {
+        if (e.key === "Escape") closeContextMenu();
+        if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+          e.preventDefault();
+          const items = menuEl?.querySelectorAll<HTMLButtonElement>(".menu-row");
+          if (!items?.length) return;
+          const idx = Array.from(items).indexOf(document.activeElement as HTMLButtonElement);
+          const next = e.key === "ArrowDown"
+            ? items[(idx + 1) % items.length]
+            : items[(idx - 1 + items.length) % items.length];
+          next.focus();
+        }
+      }}
     >
       <div class="menu-header">
         {#if view === "playlists"}
@@ -144,7 +144,7 @@
         {#if view === "playlists"}
           {#each $playlists as pl}
             {#if pl.name !== FAVORITES_PLAYLIST}
-              <button class="menu-row" onclick={() => actions.addToPlaylist($contextMenu.track, pl.name)}>
+              <button class="menu-row" role="menuitem" onclick={() => actions.addToPlaylist($contextMenu.track, pl.name)}>
                 <span class="icon">{@html ICONS.PLAYLISTS}</span>
                 <span>{pl.name}</span>
               </button>
@@ -154,57 +154,57 @@
             <div class="empty-msg">No custom playlists</div>
           {/if}
         {:else if isPlaylistCard}
-          <button class="menu-row" onclick={() => actions.playlistPlay($contextMenu.context)}>
+          <button class="menu-row" role="menuitem" onclick={() => actions.playlistPlay($contextMenu.context)}>
             <span class="icon">{@html ICONS.PLAY}</span>
             <span>Play Now</span>
           </button>
 
           <div class="sep"></div>
 
-          <button class="menu-row" onclick={() => actions.playlistRename($contextMenu.context)}>
+          <button class="menu-row" role="menuitem" onclick={() => actions.playlistRename($contextMenu.context)}>
             <span class="icon">{@html ICONS.EDIT}</span>
             <span>Rename</span>
           </button>
 
-          <button class="menu-row" onclick={() => actions.playlistDelete($contextMenu.context)}>
+          <button class="menu-row" role="menuitem" onclick={() => actions.playlistDelete($contextMenu.context)}>
             <span class="icon">{@html ICONS.REMOVE}</span>
             <span>Delete Playlist</span>
           </button>
         {:else}
-          <button class="menu-row" onclick={() => actions.playNext($contextMenu.track)}>
+          <button class="menu-row" role="menuitem" onclick={() => actions.playNext($contextMenu.track)}>
             <span class="icon">{@html ICONS.NEXT}</span>
             <span>Play Next</span>
           </button>
 
-          <button class="menu-row" onclick={() => actions.addToQueue($contextMenu.track)}>
+          <button class="menu-row" role="menuitem" onclick={() => actions.addToQueue($contextMenu.track)}>
             <span class="icon">{@html ICONS.MENU}</span>
             <span>Add to Queue</span>
           </button>
 
-          <button class="menu-row" onclick={showPlaylists}>
+          <button class="menu-row" role="menuitem" onclick={showPlaylists}>
             <span class="icon">{@html ICONS.ADD_TO_PLAYLIST || ICONS.ADD}</span>
             <span>Add to Playlist...</span>
           </button>
 
           {#if isYandexTrack}
             <div class="sep"></div>
-            <button class="menu-row" onclick={() => actions.radioByTrack($contextMenu.track)}>
+            <button class="menu-row" role="menuitem" onclick={() => actions.radioByTrack($contextMenu.track)}>
               <span class="icon">{@html ICONS.RADIO}</span>
               <span>Vibe by Track</span>
             </button>
-            <button class="menu-row" onclick={() => actions.radioByArtist($contextMenu.track)}>
+            <button class="menu-row" role="menuitem" onclick={() => actions.radioByArtist($contextMenu.track)}>
               <span class="icon">{@html ICONS.ARTISTS}</span>
               <span>Vibe by Artist</span>
             </button>
           {/if}
 
           {#if !isRadio && !isYandexTrack}
-            <button class="menu-row" onclick={() => actions.goToAlbum($contextMenu.track)}>
+            <button class="menu-row" role="menuitem" onclick={() => actions.goToAlbum($contextMenu.track)}>
               <span class="icon">{@html ICONS.ALBUM_LINK || ICONS.ALBUMS}</span>
               <span>Go to Album</span>
             </button>
 
-            <button class="menu-row" onclick={() => actions.goToArtist($contextMenu.track)}>
+            <button class="menu-row" role="menuitem" onclick={() => actions.goToArtist($contextMenu.track)}>
               <span class="icon"
                 >{@html ICONS.ARTIST_LINK || ICONS.ARTISTS}</span
               >
@@ -212,7 +212,7 @@
             </button>
           {/if}
 
-          <button class="menu-row" onclick={() => actions.toggleLike($contextMenu.track)}>
+          <button class="menu-row" role="menuitem" onclick={() => actions.toggleLike($contextMenu.track)}>
             <span class="icon" class:liked={isLiked}>
               {@html isLiked ? ICONS.HEART_FILLED : ICONS.HEART}
             </span>
@@ -221,7 +221,7 @@
 
           {#if isPlaylistContext}
             <div class="sep"></div>
-            <button class="menu-row" onclick={() => actions.removeFromPlaylist($contextMenu.context)}>
+            <button class="menu-row" role="menuitem" onclick={() => actions.removeFromPlaylist($contextMenu.context)}>
               <span class="icon">{@html ICONS.REMOVE}</span>
               <span>Remove from Playlist</span>
             </button>
@@ -229,7 +229,7 @@
 
           {#if isQueueContext}
             <div class="sep"></div>
-            <button class="menu-row" onclick={() => actions.removeFromQueue($contextMenu.context)}>
+            <button class="menu-row" role="menuitem" onclick={() => actions.removeFromQueue($contextMenu.context)}>
               <span class="icon">{@html ICONS.REMOVE}</span>
               <span>Remove from Queue</span>
             </button>
