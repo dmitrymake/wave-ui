@@ -5,7 +5,12 @@
  *
  * Touch notes: the browser fires a synthetic click when the finger lifts, so
  * without the capture-phase swallow below a long-press on a row would BOTH open
- * the context menu and play the track (or immediately close the menu it opened).
+ * the context menu and play the track. That click is hit-tested where the finger
+ * lifts — over the menu's backdrop, which the long press has just put on top of
+ * `node` — so the node's own swallow never saw it and the backdrop closed the
+ * menu it had opened. The touch path therefore cancels the touchend itself
+ * (no synthetic click at all) and, for browsers that still send one, swallows
+ * the next click anywhere for a beat.
  * The default duration is the single value for the whole app — long enough not
  * to fire while scrolling, short enough to feel deliberate on a touchscreen.
  *
@@ -21,6 +26,15 @@ export function longpress(
   const { duration = 600, enabled = true } = options;
   let timer: ReturnType<typeof setTimeout>;
   let fired = false;
+  let swallowTimer: ReturnType<typeof setTimeout> | undefined;
+  const swallowClick = (e: MouseEvent): void => {
+    e.stopPropagation();
+    e.preventDefault();
+  };
+  const stopSwallowing = (): void => {
+    clearTimeout(swallowTimer);
+    window.removeEventListener("click", swallowClick, true);
+  };
 
   // Interactive descendants that drive their own press/drag gestures
   // (volume slider, progress bar, buttons, links, form fields). A long-press
@@ -42,9 +56,13 @@ export function longpress(
 
   const handleStart = (e: MouseEvent | TouchEvent): void => {
     if (!enabled) return;
+    // A new press always disarms the previous one, even when it starts on a
+    // button: a long press released over the menu leaves `fired` set (its click
+    // lands elsewhere), and the next click on, say, the like button must not be
+    // swallowed for it.
+    fired = false;
     if (e.type === "mousedown" && (e as MouseEvent).button !== 0) return;
     if (startsOnInteractive(e.target)) return;
-    fired = false;
 
     timer = setTimeout(() => {
       fired = true;
@@ -58,6 +76,18 @@ export function longpress(
 
   const handleEnd = (): void => {
     clearTimeout(timer);
+  };
+
+  // Touch events keep targeting the node the finger went down on, so this runs
+  // even though the menu's backdrop now covers it.
+  const handleTouchEnd = (e: TouchEvent): void => {
+    clearTimeout(timer);
+    if (!fired) return;
+    fired = false;
+    if (e.cancelable) e.preventDefault();
+    stopSwallowing();
+    window.addEventListener("click", swallowClick, { capture: true, once: true });
+    swallowTimer = setTimeout(stopSwallowing, 350);
   };
 
   // Capture phase: runs before the row/card onclick, and only swallows the
@@ -75,7 +105,7 @@ export function longpress(
 
   node.addEventListener("mouseup", handleEnd);
   node.addEventListener("mouseleave", handleEnd);
-  node.addEventListener("touchend", handleEnd);
+  node.addEventListener("touchend", handleTouchEnd, { passive: false });
   node.addEventListener("touchcancel", handleEnd);
   node.addEventListener("touchmove", handleEnd);
 
@@ -86,9 +116,11 @@ export function longpress(
       node.removeEventListener("click", handleClick, true);
       node.removeEventListener("mouseup", handleEnd);
       node.removeEventListener("mouseleave", handleEnd);
-      node.removeEventListener("touchend", handleEnd);
+      node.removeEventListener("touchend", handleTouchEnd);
       node.removeEventListener("touchcancel", handleEnd);
       node.removeEventListener("touchmove", handleEnd);
+      clearTimeout(timer);
+      stopSwallowing();
     },
   };
 }

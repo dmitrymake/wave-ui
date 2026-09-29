@@ -195,6 +195,64 @@ describe("longpress action", () => {
     expect(clickHandler).toHaveBeenCalledTimes(1);
   });
 
+  it("cancels the touchend that ends a long press (no synthetic click)", () => {
+    action = longpress(node, { duration: 500 });
+
+    node.dispatchEvent(new TouchEvent("touchstart", { touches: [{} as Touch] }));
+    vi.advanceTimersByTime(500);
+    const end = new TouchEvent("touchend", { cancelable: true });
+    node.dispatchEvent(end);
+    expect(end.defaultPrevented).toBe(true);
+  });
+
+  it("does not cancel the touchend of an ordinary tap", () => {
+    action = longpress(node, { duration: 500 });
+
+    node.dispatchEvent(new TouchEvent("touchstart", { touches: [{} as Touch] }));
+    vi.advanceTimersByTime(100);
+    const end = new TouchEvent("touchend", { cancelable: true });
+    node.dispatchEvent(end);
+    expect(end.defaultPrevented).toBe(false);
+  });
+
+  it("swallows a synthetic click that lands outside the node after a touch long press", () => {
+    // Regression: the click is hit-tested where the finger lifts, i.e. on the
+    // context menu's backdrop the long press has just opened, and closed it.
+    const backdrop = document.createElement("div");
+    document.body.appendChild(backdrop);
+    const backdropClick = vi.fn();
+    backdrop.addEventListener("click", backdropClick);
+
+    action = longpress(node, { duration: 500 });
+    node.dispatchEvent(new TouchEvent("touchstart", { touches: [{} as Touch] }));
+    vi.advanceTimersByTime(500);
+    node.dispatchEvent(new TouchEvent("touchend", { cancelable: true }));
+
+    backdrop.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
+    expect(backdropClick).not.toHaveBeenCalled();
+
+    // Only for a beat: a deliberate tap afterwards goes through.
+    vi.advanceTimersByTime(400);
+    backdrop.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
+    expect(backdropClick).toHaveBeenCalledTimes(1);
+    document.body.removeChild(backdrop);
+  });
+
+  it("does not swallow a click on a button pressed after a long press whose click went elsewhere", () => {
+    const btn = document.createElement("button");
+    node.appendChild(btn);
+    const btnClick = vi.fn();
+    btn.addEventListener("click", btnClick);
+
+    action = longpress(node, { duration: 500 });
+    node.dispatchEvent(new MouseEvent("mousedown", { button: 0 }));
+    vi.advanceTimersByTime(500); // fired; its click lands on the backdrop, not here
+
+    btn.dispatchEvent(new MouseEvent("mousedown", { button: 0, bubbles: true }));
+    btn.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
+    expect(btnClick).toHaveBeenCalledTimes(1);
+  });
+
   it("cleans up listeners on destroy", () => {
     action = longpress(node, { duration: 500 });
     action.destroy();
