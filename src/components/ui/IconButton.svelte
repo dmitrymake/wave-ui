@@ -81,14 +81,18 @@
 
 <style>
   .ibtn {
+    /* The box, as a custom property so a caller can align the GLYPH rather
+       than the box (TrackRow's trailing button pulls itself into the row's
+       padding by half the difference). 40px with a mouse — the same height as
+       the labelled pills, so a bare glyph never looks smaller than its
+       neighbour — and the 44px touch floor under a coarse pointer (below). */
+    --ibtn-box: var(--control-h-lg);
     display: inline-flex;
     align-items: center;
     justify-content: center;
     box-sizing: border-box;
-    /* 40px, the app's tap target (>= WCAG 2.5.8) — the same height as the
-       labelled pills, so a bare glyph never looks smaller than its neighbour. */
-    width: var(--control-h-lg);
-    height: var(--control-h-lg);
+    width: var(--ibtn-box);
+    height: var(--ibtn-box);
     padding: 0;
     /* Every other control in a row is sized by its content and cannot shrink
        below it. This one is sized by `width`, so without this it was the only
@@ -100,9 +104,10 @@
     color: var(--c-text-secondary);
     cursor: pointer;
     transition:
-      color var(--trans-fast),
-      background var(--trans-fast),
-      transform var(--trans-fast);
+      color var(--dur-fast) var(--ease-default),
+      background var(--dur-fast) var(--ease-default),
+      opacity var(--dur-fast) var(--ease-default),
+      transform var(--dur-instant) var(--ease-default);
   }
 
   /* ---- Glyph: sized for optical balance inside the target, and stroked with
@@ -114,8 +119,23 @@
   }
   .ibtn--xs {
     /* 32px chip: sits on a cover, so it must not cover it. */
-    width: var(--control-h-sm);
-    height: var(--control-h-sm);
+    --ibtn-box: var(--control-h-sm);
+  }
+  /* Touch: every box meets the 44px floor, except the chip on a cover, which
+     keeps its 32px look and grows an invisible 44px hit area around it. */
+  @media (pointer: coarse) {
+    .ibtn {
+      --ibtn-box: var(--target-touch);
+    }
+    .ibtn--xs {
+      --ibtn-box: var(--control-h-sm);
+      position: relative;
+    }
+    .ibtn--xs::after {
+      content: "";
+      position: absolute;
+      inset: calc((var(--control-h-sm) - var(--target-touch)) / 2);
+    }
   }
   .ibtn--xs :global(svg) {
     width: var(--icon-size-xs); /* 16px */
@@ -134,10 +154,22 @@
     height: var(--icon-size-lg);
   }
 
-  /* ---- Variants ---- */
-  .ibtn--naked:hover:not(:disabled) {
-    color: var(--c-text-primary);
-    background: var(--c-surface-hover);
+  /* ---- Variants ----
+     Every :hover in the primitives sits behind (hover: hover): a touchscreen
+     keeps :hover on whatever was tapped last, so a glyph that happened to land
+     under the finger (the mute button under the dock you just tapped, say)
+     wore a hover plate until the next tap. Touch gets the :active dip instead. */
+  @media (hover: hover) {
+    .ibtn--naked:hover:not(:disabled) {
+      color: var(--c-text-primary);
+      background: var(--c-surface-hover);
+    }
+    .ibtn--filled:hover:not(:disabled) {
+      background: var(--c-surface-button-hover);
+    }
+    .ibtn--overlay:hover:not(:disabled) {
+      background: var(--c-black-50);
+    }
   }
 
   /* filled: the header's icon button — a neutral surface with a white glyph,
@@ -146,17 +178,11 @@
     background: var(--c-surface-button);
     color: var(--c-text-primary);
   }
-  .ibtn--filled:hover:not(:disabled) {
-    background: var(--c-surface-button-hover);
-  }
 
   /* overlay: a chip revealed on top of media (e.g. the card menu). */
   .ibtn--overlay {
     background: var(--c-black-20);
     color: var(--c-text-primary);
-  }
-  .ibtn--overlay:hover:not(:disabled) {
-    background: var(--c-black-50);
   }
 
   /* ---- Tones ----
@@ -192,6 +218,8 @@
   }
 
   /* ---- States ---- */
+  /* Press feedback: a quick dip on the instant duration (the colour and the
+     surface keep the slower fade). */
   .ibtn:active:not(:disabled) {
     transform: scale(0.95);
   }

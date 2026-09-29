@@ -35,6 +35,8 @@
   import { getPlaylistCoverStyle } from "../../lib/playlistColor";
   import { FAVORITES_PLAYLIST } from "../../lib/constants";
   import { formatTotalDuration } from "../../lib/utils";
+  import { countLabel, ELLIPSIS } from "../../lib/format";
+  import { summarizeQuality, HI_RES_LABEL, type QualitySummary } from "../../lib/quality";
   import { ICONS } from "../../lib/icons";
   import TrackRow from "../TrackRow.svelte";
   import BaseList from "./BaseList.svelte";
@@ -59,7 +61,7 @@
   let searchResultsGrouped = $state<{ playlist: Playlist; tracks: Track[] }[]>([]);
 
   let headerTotalDuration = $state("");
-  let headerQuality = $state("");
+  let headerQuality = $state<QualitySummary | null>(null);
 
   let playingIndex = $derived(Number($status.song));
   let playingFile = $derived($currentSong.file);
@@ -132,7 +134,7 @@
   function playFoundTracks(tracks: Track[], playlistName: string) {
     showModal({
       title: "Play Search Results?",
-      message: `This will clear your queue and play ${tracks.length} matching tracks from "${playlistName}".`,
+      message: `This will clear your queue and play ${countLabel(tracks.length, "matching track")} from “${playlistName}”.`,
       confirmLabel: "Play",
       type: "confirm",
       onConfirm: () => {
@@ -154,8 +156,8 @@
       $activePlaylistTracks.length === 0 &&
       !$isLoadingTracks
     ) {
-      headerTotalDuration = "0 min";
-      headerQuality = "";
+      headerTotalDuration = "0\u00a0min";
+      headerQuality = null;
     }
   });
 
@@ -180,17 +182,11 @@
       0,
     );
     headerTotalDuration = formatTotalDuration(totalSec);
-
-    const formats = new Set();
-    tracks.forEach((t) => {
-      if (t.qualityBadge) formats.add(t.qualityBadge.split(" ")[0]);
-    });
-    headerQuality =
-      formats.size === 1
-        ? tracks[0].qualityBadge ?? ""
-        : formats.size > 1
-          ? "Mixed"
-          : "";
+    // One badge for the whole list, read from moOde's raw tag at display time:
+    // the full label when every file agrees, the shared codec when only the
+    // resolutions differ, "Mixed" when the codecs do. It used to print the first
+    // track's raw tag ("MP3 l 2") whenever the codecs matched.
+    headerQuality = summarizeQuality(tracks.map((t) => t.qualityBadge));
   }
 
   function openPlaylist(playlist: Playlist) {
@@ -221,7 +217,7 @@
     const data = (currentView.data ?? {}) as { name?: string };
     showModal({
       title: "Replace Queue?",
-      message: `This will clear your current queue and play "${data.name}".`,
+      message: `This will clear your current queue and play “${data.name}”.`,
       confirmLabel: "Play",
       type: "confirm",
       onConfirm: () => {
@@ -297,7 +293,8 @@
         <span class="search-icon">{@html ICONS.SEARCH}</span>
         <input
           type="text"
-          placeholder="Search playlists & tracks..."
+          placeholder="Search playlists & tracks{ELLIPSIS}"
+          aria-label="Search playlists and tracks"
           value={searchTerm}
           oninput={handleSearchInput}
         />
@@ -346,21 +343,22 @@
                   {currentViewName}
                 </h1>
 
-                <div class="meta-badges">
+                <p class="meta-line">
                   {#if $isLoadingTracks}
-                    <span class="meta-tag">Loading...</span>
+                    <span class="meta-text"><span class="meta-item">Loading{ELLIPSIS}</span></span>
                   {:else}
-                    <span class="meta-tag"
-                      >{$activePlaylistTracks.length} tracks</span
-                    >
-                    {#if headerTotalDuration}<span class="meta-tag"
-                        >{headerTotalDuration}</span
-                      >{/if}
-                    {#if headerQuality}<span class="meta-tag quality"
-                        >{headerQuality}</span
-                      >{/if}
+                    <span class="meta-text">
+                      <span class="meta-item">{countLabel($activePlaylistTracks.length, "track")}</span>
+                      {#if headerTotalDuration}<span class="meta-item">{headerTotalDuration}</span>{/if}
+                    </span>
+                    {#if headerQuality}
+                      <span class="badge">
+                        {#if headerQuality.hiRes}<span class="badge__lead">{HI_RES_LABEL}</span>{/if}
+                        {headerQuality.label}
+                      </span>
+                    {/if}
                   {/if}
-                </div>
+                </p>
               </div>
 
               <div class="header-actions">
@@ -369,7 +367,7 @@
                   onclick={handlePlayAll}
                   disabled={pressedPlayAll}
                 >
-                  {pressedPlayAll ? "Playing..." : "Play All"}
+                  {pressedPlayAll ? `Playing${ELLIPSIS}` : "Play All"}
                 </Button>
                 <Button
                   variant="secondary"

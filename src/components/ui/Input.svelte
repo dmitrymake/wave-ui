@@ -199,6 +199,15 @@
   .field__input::placeholder {
     color: var(--c-text-secondary);
   }
+  /* type="search" brings the browser's own clear control (a blue × in Chromium)
+     next to this primitive's — two crosses in one field. The field keeps its own,
+     which matches the app and has a label. */
+  .field__input::-webkit-search-cancel-button,
+  .field__input::-webkit-search-decoration {
+    -webkit-appearance: none;
+    appearance: none;
+    display: none;
+  }
 
   /* ---- Leading icon ---- */
   .field__icon {
@@ -237,6 +246,14 @@
   .field :global(.field__clear:hover) {
     color: var(--c-text-primary);
   }
+  /* Touch: a field is a target too, and the 44px floor keeps it level with the
+     44px "Save" pill that sits beside it in settings. */
+  @media (pointer: coarse) {
+    .field {
+      min-height: var(--target-touch);
+    }
+  }
+
   /* ---- States ---- */
   /* Text fields show a brighter gray border instead of a plate (the field is
      already a filled surface), using the same neutral focus color family. */

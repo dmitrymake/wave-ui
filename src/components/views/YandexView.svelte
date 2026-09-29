@@ -3,6 +3,7 @@
 <script lang="ts">
   import { onMount, onDestroy, untrack } from "svelte";
   import { fade } from "svelte/transition";
+  import { MOTION } from "../../lib/transitions";
   import { writable, get } from "svelte/store";
   import { YandexApi, isYandexAuthError, type PlaylistSource } from "../../lib/yandex";
   import { ViewCache, getModeFromStack } from "../../lib/yandexViewCache";
@@ -674,7 +675,7 @@
     {/if}
 
     {#if viewMode === "dashboard"}
-      <div class="content-padded" in:fade>
+      <div class="content-padded" in:fade={{ duration: MOTION.fast }}>
         <YandexDashboard
           {vibeCards}
           {collectionCards}

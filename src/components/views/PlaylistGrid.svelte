@@ -17,6 +17,10 @@
     onNewPlaylist?: () => void;
   } = $props();
 
+  // "28 Sep 2026" in the reader's own order and month names, instead of the
+  // all-numeric "9/28/2026" (which reads as the 9th month to half the world).
+  const DATE_FORMAT: Intl.DateTimeFormatOptions = { day: "numeric", month: "short", year: "numeric" };
+
   function resolveCardStyle(playlist: Playlist) {
     return getPlaylistCoverStyle(playlist, currentTheme, { defaultFallback: "colorVar" });
   }
@@ -61,7 +65,7 @@
       {#snippet sub()}
         <div class="card-sub">
           {playlist.lastModified
-            ? new Date(playlist.lastModified).toLocaleDateString()
+            ? new Date(playlist.lastModified).toLocaleDateString(undefined, DATE_FORMAT)
             : "Playlist"}
         </div>
       {/snippet}

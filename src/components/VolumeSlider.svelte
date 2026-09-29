@@ -79,8 +79,10 @@
 </script>
 
 <div class="volume-row" class:compact onclick={(e) => e.stopPropagation()} onkeydown={(e) => e.stopPropagation()} role="presentation">
+  <!-- md in the dock: the xs chip drew a 16px speaker beside 24px transport
+       glyphs, the one icon in the bar that looked like it belonged elsewhere. -->
   <IconButton
-    size={compact ? "xs" : "lg"}
+    size={compact ? "md" : "lg"}
     ariaLabel={$status.volume > 0 ? "Mute" : "Unmute"}
     title="Mute/Unmute"
     icon={volumeIcon}
@@ -172,8 +174,8 @@
     bottom: var(--space-0);
     margin-block: auto;
     transform: translateX(-50%);
-    width: 14px;
-    height: 14px;
+    width: var(--knob-size);
+    height: var(--knob-size);
     background: var(--c-text-primary);
     border-radius: var(--radius-circle);
     box-shadow: var(--shadow-sm-strong);

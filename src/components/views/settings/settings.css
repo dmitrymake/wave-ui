@@ -2,15 +2,16 @@
 /* Copyright (c) 2025 dmitrymake */
 /*
   Shared rules for the settings sections (Services / Alarm / Appearance /
-  Connection / About). Every section is a stack of Cards, and every Card is the
-  same three parts: a row with a label on the left and a control on the right, an
-  optional second line of grouped controls, an optional hint, and a separator.
+  Connection / About). Every section is a heading and a stack of Cards, and every
+  Card is the same parts: a row with a label on the left and a control or a value
+  on the right, an optional second line of grouped controls, an optional hint,
+  and a separator.
 
-  These were written out five times, byte for byte. They live here, under
-  `.settings` (the wrapper SettingsView puts around the sections) because the
-  name `.row` is taken: TrackRow's own row is a different role with the same
-  name, and an unscoped `.row { gap }` would have added a gap to every track row
-  in the app.
+  These were written out five times, byte for byte (the section and its heading
+  included). They live here, under `.settings` (the wrapper SettingsView puts
+  around the sections) because the name `.row` is taken: TrackRow's own row is a
+  different role with the same name, and an unscoped `.row { gap }` would have
+  added a gap to every track row in the app.
 
   The rhythm, in the app's roles: a Card's own `gap` (12px, the ROW step) is the
   only thing that separates the parts of a card, and the section's 32px
@@ -18,6 +19,32 @@
   are part of the block they sit in, so they add NO margin of their own — which
   is what the phone block at the bottom of this file is for.
 */
+
+/* The form column stops growing on a wide window (on a 1440 desktop a label
+   and its value sat 1100px apart); it stays on the page's left edge. */
+.settings > .content-padded {
+}
+
+/* Each section is a size container, so a row can reflow by the width it
+   actually has (a phone, the Pi's 336px column) rather than the viewport's. */
+.settings .section {
+  margin-bottom: var(--space-8);
+  container-type: inline-size;
+}
+
+/* The section heading: the title role at 18px. It sits on the card's own left
+   edge — the page's one inset — where it used to be pushed 4px in, which put it
+   on neither the card's edge (16px) nor the text inside the card (32px). */
+.settings .section-header {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin: var(--space-0) var(--space-0) var(--space-3);
+  font-size: var(--text-xl);
+  font-weight: var(--weight-bold);
+  line-height: var(--leading-snug);
+  color: var(--c-text-primary);
+}
 
 .settings .row {
   display: flex;
@@ -39,24 +66,51 @@
   gap: var(--space-2);
 }
 
+/* THE ROW LABEL — one style. There were two in one list: 14/600 in the
+   secondary grey ("Enable Alarm", "Moode Device IP") and 14/400 in white
+   ("Interface Theme", "Connection Status"), so half the rows read as form
+   captions and half as list items. A settings row is a list item: the label is
+   the body role in the primary colour, and whatever it is set to — a value, a
+   time, a version — is the secondary colour on the right. */
 .settings .row-label {
   font-size: var(--text-base);
+  font-weight: var(--weight-regular);
+  line-height: var(--leading-snug);
+  color: var(--c-text-primary);
+  min-width: 0;
+}
+
+.settings .row-value {
+  font-size: var(--text-base);
+  line-height: var(--leading-snug);
   color: var(--c-text-secondary);
-  font-weight: var(--weight-semibold);
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  min-width: 0;
 }
 
 .settings .input-group {
   display: flex;
   gap: var(--space-2);
   flex: 1;
+  min-width: 0;
+}
+/* The field takes the room and may shrink; the button keeps its label. Without
+   this the field held its 100% width and pushed "Save" out of the card and off
+   a 390px screen. */
+.settings .input-group > :first-child {
+  flex: 1;
+  min-width: 0;
 }
 
 /* A hint is the second line OF the row above it, so proximity says it belongs
    closer to that row than to whatever comes next. */
 .settings .hint {
   font-size: var(--text-sm);
+  line-height: var(--leading-normal);
   color: var(--c-text-muted);
   margin: var(--space-1) 0 0;
+  text-wrap: pretty;
 }
 
 /* A 1px rule is border geometry, not spacing: same value as
@@ -67,6 +121,17 @@
   background: var(--c-border);
   opacity: var(--opacity-faint);
   margin: var(--space-1) 0;
+}
+
+/* A NARROW CARD (a phone, the Pi's column): a row that holds a field puts its
+   label above the field instead of beside it. Beside it, "Moode Device IP"
+   wrapped onto three lines at 390px. */
+@container (max-width: 480px) {
+  .settings .row:has(> .input-group) {
+    flex-direction: column;
+    align-items: stretch;
+    gap: var(--space-2);
+  }
 }
 
 /* ---- Phone only --------------------------------------------------------

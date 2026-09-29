@@ -13,7 +13,11 @@
     - default size "md" == legacy 40px pill (--control-h-lg, pad 0 --control-pad-x-md, font 14/700).
     - size "sm" == legacy .small / .btn-action mobile (36px, pad 0 16px, font 13).
     - size "lg" == md height with larger horizontal padding.
-    - primary keeps UPPERCASE + 0.5px tracking; others are sentence-case.
+    - ONE casing for every variant: the label as written, in Title Case ("Play All",
+      "To Queue", "Stop Stream", "Save"). The primary used to be uppercased and
+      tracked while the secondary beside it was not, so the two buttons of one
+      header read as two different systems. The fill says "primary"; the
+      casing does not have to. Tracked caps belong to the eyebrow alone.
     - pill radius via --radius-pill (= --radius-full) to avoid the gruvbox --radius-xl drift.
 -->
 <script lang="ts">
@@ -135,19 +139,20 @@
        gruvbox #fe8019+#282828=5.84:1 (plain --c-accent would be 3.41:1). */
     background: var(--c-accent-btn);
     color: var(--c-text-inverse);
-    text-transform: uppercase;
-    letter-spacing: var(--tracking-wide);
   }
-  .btn--primary:hover:not(:disabled) {
-    background: var(--c-accent-btn-hover);
+  /* Hover only where there is one (see IconButton): no sticky plate after a tap. */
+  @media (hover: hover) {
+    .btn--primary:hover:not(:disabled) {
+      background: var(--c-accent-btn-hover);
+    }
+    .btn--secondary:hover:not(:disabled) {
+      background: var(--c-surface-button-hover);
+    }
   }
 
   .btn--secondary {
     background: var(--c-surface-button);
     color: var(--c-text-primary);
-  }
-  .btn--secondary:hover:not(:disabled) {
-    background: var(--c-surface-button-hover);
   }
   .btn--secondary:active:not(:disabled) {
     background: var(--c-surface-active);
@@ -181,6 +186,17 @@
 
   .btn:active:not(:disabled) {
     transform: scale(0.97);
+  }
+
+  /* Touch: the 44px floor. min-height/min-width, so the pill keeps its own
+     padding and only a box that was smaller than the floor grows. */
+  @media (pointer: coarse) {
+    .btn {
+      min-height: var(--target-touch);
+    }
+    .btn--icon {
+      min-width: var(--target-touch);
+    }
   }
 
   .btn:disabled {

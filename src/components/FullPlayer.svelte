@@ -2,7 +2,7 @@
 <!-- Copyright (c) 2025 dmitrymake -->
 <script lang="ts">
   import { fade } from "svelte/transition";
-  import { sendArt, receiveArt, fadeVar, hold } from "../lib/transitions";
+  import { sendArt, receiveArt, fadeVar, hold, MOTION } from "../lib/transitions";
   import { seek, nav, togglePlay } from "../lib/playerActions";
   import { ICONS } from "../lib/icons";
   import {
@@ -116,7 +116,7 @@
 <div
   class="full-player"
   class:is-docked={isDocked}
-  transition:hold|global={{ duration: isDocked ? 0 : 440 }}
+  transition:hold|global={{ duration: isDocked ? 0 : MOTION.slow }}
   onkeydown={(e) => { if (e.key === "Escape" && !isDocked) close(); }}
 >
   <div
@@ -141,7 +141,7 @@
     </div>
   {/if}
 
-  <div class="bg-container" transition:fade|global={{ duration: 320 }}>
+  <div class="bg-container" transition:fade|global={{ duration: MOTION.base }}>
     <div class="bg-gradient-fallback"></div>
     <img class="bg-img" src={artSrc} alt="" loading="eager" />
     <div class="bg-overlay"></div>
@@ -176,7 +176,7 @@
       {/if}
     </div>
 
-    <div class="controls-area" style="--drag-op: {1 - currentY / 400}" transition:fadeVar|global={{ duration: 300 }}>
+    <div class="controls-area" style="--drag-op: {1 - currentY / 400}" transition:fadeVar|global={{ duration: MOTION.base }}>
       <div class="meta">
         <h1 class="title">
           <Marquee text={$currentSong.title || "Not Playing"} />
@@ -188,7 +188,7 @@
             />
           </h2>
           {#if qualityLabel}
-            <span class="meta-tag quality">{qualityLabel}</span>
+            <span class="badge">{qualityLabel}</span>
           {/if}
         </div>
       </div>
@@ -216,17 +216,25 @@
           <div class="common-track">
             <div
               class="common-fill"
-              style="transform: scaleX({progressPct / 100}); transition: {isSmooth ? 'transform var(--dur-base) var(--ease-linear)' : 'none'}"
+              style="transform: scaleX({progressPct / 100}); transition: {isSmooth ? 'transform var(--dur-tick) var(--ease-linear)' : 'none'}"
             ></div>
+            <!-- Translated carriage, like the dock's: the knob glides on the
+                 compositor instead of animating `left` on every tick. -->
             <div
-              class="common-knob"
-              style="left: {progressPct}%; transition: {isSmooth ? 'left var(--dur-base) var(--ease-linear)' : 'none'}"
-            ></div>
+              class="knob-carriage"
+              style="transform: translateX({progressPct}%); transition: {isSmooth ? 'transform var(--dur-tick) var(--ease-linear)' : 'none'}"
+            >
+              <div class="common-knob"></div>
+            </div>
           </div>
         </div>
         <div class="time-row">
           <span>{formatTime(seekCtl.displaySeconds)}</span>
-          <span>{isRadio ? "LIVE" : formatTime(duration)}</span>
+          {#if isRadio}
+            <span class="badge badge--accent badge--live">Live</span>
+          {:else}
+            <span>{formatTime(duration)}</span>
+          {/if}
         </div>
       </div>
 
@@ -244,7 +252,8 @@
         {#if !isRadio}
           <PlayModeButton compact={isDocked} />
         {:else}
-          <div style="width: 44px;"></div>
+          <!-- Holds the play-mode button's place so the transport stays centred. -->
+          <div class="mode-placeholder" aria-hidden="true"></div>
         {/if}
       </div>
 
@@ -328,7 +337,7 @@
 
   .player-body {
     flex: 1; display: flex; flex-direction: column;
-    padding: var(--space-0) var(--space-6) var(--space-10); max-width: 500px; width: 100%;
+    padding: var(--space-0) var(--space-6) var(--space-10); max-width: var(--player-col-max); width: 100%;
     margin: var(--space-0) auto; box-sizing: border-box;
     justify-content: center; gap: var(--space-8);
     position: relative; z-index: 4;
@@ -343,7 +352,8 @@
     display: flex; justify-content: center; align-items: flex-start;
     padding-top: var(--space-4); cursor: pointer;
   }
-  .drag-handle-icon { color: var(--c-white-30); transition: color var(--dur-fast); width: 32px; height: 32px; }
+  .drag-handle-icon { color: var(--c-white-30); transition: color var(--dur-fast); width: var(--icon-size-xl); height: var(--icon-size-xl); }
+  .drag-zone:hover .drag-handle-icon,
   .drag-zone:active .drag-handle-icon { color: var(--c-white-60); }
   .drag-handle-icon :global(svg) { width: 100%; height: 100%; stroke-width: 3; }
 
@@ -358,10 +368,22 @@
     flex: 1 1 auto; margin-bottom: var(--space-0); height: 100%; max-height: 34vh; overflow: hidden;
   }
   .artwork {
-    width: 100%; max-width: 400px; aspect-ratio: 1;
+    width: 100%; max-width: var(--player-art-max); aspect-ratio: 1;
     background: var(--c-bg-placeholder); border-radius: var(--radius-xl);
     box-shadow: var(--shadow-lg); overflow: hidden;
     display: flex; align-items: center; justify-content: center;
+  }
+  /* Short windows. The sheet's column is cover + 32 + controls (267px, measured:
+     title, artist, seek, transport, volume) + 40, centred — so a 400px cover
+     slid under the close chevron on a 1366x768 laptop and pushed a 1024x700
+     one past both edges. The cover gives up size first: it may take the window
+     minus the rest of the column and twice the chevron's band (16 + 28 + 12;
+     twice, because the centring mirrors it). From ~850px of height up this is
+     the 400px it always was. */
+  .full-player:not(.is-docked) .artwork {
+    --fp-chrome: calc(2 * (var(--space-4) + var(--icon-size-xl) + var(--space-3))
+      + var(--space-8) + 267px + var(--space-10));
+    max-width: clamp(160px, 100dvh - var(--fp-chrome), var(--player-art-max));
   }
   .is-docked .artwork {
     height: 100%; width: auto; max-width: 100%;
@@ -388,13 +410,18 @@
   .meta { text-align: left; margin-bottom: var(--space-2); }
   .is-docked .meta { text-align: center; margin-bottom: var(--space-1); }
 
-  .title { font-size: var(--text-3xl); font-weight: var(--weight-bold); margin: var(--space-0) var(--space-0) var(--space-1); color: var(--c-text-primary); }
+  /* The display role: tight leading and display tracking, like a page title. */
+  .title {
+    font-size: var(--text-3xl); font-weight: var(--weight-bold);
+    line-height: var(--leading-tight); letter-spacing: var(--tracking-display);
+    margin: var(--space-0) var(--space-0) var(--space-1); color: var(--c-text-primary);
+  }
   /* Same 16px title as the list and the mini player, so the same weight. */
-  .is-docked .title { font-size: var(--text-lg); font-weight: var(--weight-medium); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .is-docked .title { font-size: var(--text-lg); font-weight: var(--weight-medium); line-height: var(--leading-snug); letter-spacing: normal; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
   .artist-row { display: flex; align-items: center; gap: var(--space-2); width: 100%; }
   .is-docked .artist-row { justify-content: center; }
-  .artist { font-size: var(--text-lg); color: var(--c-text-secondary); margin: var(--space-0); flex: 1 1 auto; min-width: 0; }
+  .artist { font-size: var(--text-lg); font-weight: var(--weight-regular); line-height: var(--leading-snug); color: var(--c-text-secondary); margin: var(--space-0); flex: 1 1 auto; min-width: 0; }
   .is-docked .artist { font-size: var(--text-base); }
 
   .bar-hit-area {
@@ -413,11 +440,14 @@
     width: 100%; height: 100%; transform-origin: left center;
     background: var(--c-text-primary); border-radius: var(--radius-xs); pointer-events: none;
   }
+  /* The carriage spans the rail, so translateX(N%) is N% of the rail. */
+  .knob-carriage { position: absolute; inset: var(--space-0); pointer-events: none; }
   .common-knob {
     position: absolute; top: 50%; left: var(--space-0);
     transform: translate(-50%, -50%);
-    width: 14px; height: 14px; background: var(--c-text-primary); border-radius: var(--radius-circle);
+    width: var(--knob-size); height: var(--knob-size); background: var(--c-text-primary); border-radius: var(--radius-circle);
     box-shadow: var(--shadow-sm-strong); pointer-events: none;
+    transition: transform var(--dur-fast) var(--ease-emphasized);
   }
   /* Wide hit area -> the focus indicator is the knob (enlarged, fill only). */
   .bar-hit-area:focus-visible { outline: none; }
@@ -430,9 +460,10 @@
      through all but 8px of it. That used to be a flat -12px, which only lined up
      for one bar height; derived from the bar it stays put. */
   .time-row {
-    display: flex; justify-content: space-between;
+    display: flex; justify-content: space-between; align-items: center;
     margin-top: calc((var(--space-1) - var(--control-h-lg)) / 2 + var(--space-2));
     font-size: var(--text-sm); color: var(--c-text-secondary); font-weight: var(--weight-medium); font-variant-numeric: tabular-nums;
+    line-height: var(--leading-none);
   }
   /* Docked is the ONLY player on 800x480: same value as the full view, so the
      time does not shrink when the rail is on screen. */
@@ -454,6 +485,15 @@
     border: none; display: flex; align-items: center; justify-content: center; flex-shrink: 0;
   }
   .play-btn-large:active { transform: scale(0.95); }
+  /* The radio stand-in for the play-mode button: its box, so the transport
+     stays centred (was a raw 44px). */
+  .mode-placeholder { width: var(--control-h-lg); height: var(--control-h-lg); flex-shrink: 0; }
+  @media (pointer: coarse) {
+    .mode-placeholder { width: var(--target-touch); }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .common-knob, .play-btn-large, .drag-handle-icon { transition: none; }
+  }
   .play-btn-large :global(svg) { width: var(--icon-size-xl); height: var(--icon-size-xl); fill: currentColor; }
   .is-docked .play-btn-large { width: var(--circle-play-sm); height: var(--circle-play-sm); }
   .is-docked .play-btn-large :global(svg) { width: var(--icon-size-md); height: var(--icon-size-md); }

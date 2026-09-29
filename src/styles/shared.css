@@ -94,7 +94,6 @@
   --c-overlay-backdrop: var(--c-black-80);
   
   --c-shadow-card: rgba(0, 0, 0, 0.3);
-  --c-shadow-popover: rgba(0, 0, 0, 0.5);
   --c-shadow-header: rgba(0, 0, 0, 0.5);
   --c-shadow-phantom: rgba(0, 0, 0, 0.7);
   --c-shadow-glow-accent: rgba(250, 45, 72, 0.5);
@@ -123,6 +122,16 @@ body {
      and everything else inherited `normal`, so multi-line text (toasts, hints,
      empty states) had its own, tighter rhythm. */
   line-height: var(--leading-normal);
+  /* Light text on a near-black ground: subpixel AA on macOS makes it read a
+     weight heavier and fringed, which is why every native dark player switches
+     to greyscale AA. No effect elsewhere. */
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  font-kerning: normal;
+  /* iOS inflates text in landscape unless told not to; this is an app, not an
+     article. */
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
   overflow: hidden;
   -webkit-tap-highlight-color: transparent;
   /* A double tap on a heading used to zoom the viewport, and in a kiosk there
@@ -201,8 +210,12 @@ body :is(.nav-item.active, .btn--primary, .toggle.is-checked):focus-visible {
 
 /* gruvbox's focus plate is a light warm gray (it has to be, to clear 3:1
    against #3c3836), so the label inverts there — the only per-theme exception
-   in the focus layer. */
-body[data-theme="gruvbox"]:is(
+   in the focus layer.
+   The descendant space is load-bearing: this used to read
+   `body[data-theme="gruvbox"]:is(button, …)`, i.e. "the BODY element when it is
+   a button", which never matched — every focused control in gruvbox kept its
+   cream label on the light plate (3.4:1). */
+body[data-theme="gruvbox"] :is(
     button,
     a[href],
     select,
@@ -286,20 +299,160 @@ body[data-theme="gruvbox"]:is(
    src/components/ui/Button.svelte — the legacy .btn-primary / .btn-secondary /
    .btn-action rules are gone. */
 
-/* --- Badges --- */
-.meta-badges {
+/* --- The meta line ------------------------------------------------------
+   "1986 · 2 tracks · 7 min  [FLAC 24/192]": what a header (or a card) says
+   ABOUT its subject, set as one line of text. Counts, durations and years used
+   to be boxed chips each ("2 tracks" "7 min" "1986"), which made every fact
+   look like a control and left nothing to tell the real badge — the quality —
+   apart from them.
+
+     <p class="meta-line">
+       <span class="meta-text">
+         <span class="meta-item">1986</span><span class="meta-item">2 tracks</span>…
+       </span>
+       <span class="badge">MP3</span>
+     </p>
+
+   Flex at both levels, so template whitespace between the spans can never add
+   a second space; everything sits on one baseline. The facts are one group
+   (a word-space apart, joined by a middle dot that belongs to the item BEFORE
+   it, so a wrap never starts a line with "·"); the badges are the next group
+   (a pair step away), and when the header is too narrow they wrap as a whole
+   to a line of their own, starting flush left. Each fact is its own <span>, so
+   "2 tracks" is still one text node for a test or a screen reader. */
+.meta-line {
   display: flex;
-  gap: var(--space-2);
-  /* No bottom margin: the four views that print a badge row all put it inside
-     .header-text-group, and the gap to whatever follows belongs to the header
-     (`.header-text-group + .header-actions` in MusicViews.css). A loaded album
-     has this row, an empty playlist renders it 0x0, and the buttons used to sit
-     8px or 16px up depending on which. */
-  margin: var(--space-0);
-  /* Badges are nowrap; without this a long one ("12 hr 34 min") pushed the
-     others out of the row instead of shrinking. */
-  min-width: 0;
   flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--space-1) var(--space-2);
+  margin: var(--space-0);
+  min-width: 0;
+  font-size: var(--text-sm);
+  line-height: var(--leading-normal);
+  color: var(--c-text-secondary);
+  font-variant-numeric: tabular-nums;
+}
+.meta-text {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  column-gap: 0.3em;
+  min-width: 0;
+}
+:is(.meta-text, .card-meta) > .meta-item:not(:last-child)::after {
+  content: "·";
+  margin-left: 0.3em;
+  color: var(--c-text-muted);
+}
+
+/* --- Badges ---------------------------------------------------------------
+   ONE primitive. A badge says something about the thing it sits on — its
+   quality or its state — and it is never a number of things (that is the meta
+   line above). Before this there were eight looks for that one role: the
+   filled .meta-tag, the outlined .meta-tag.quality, the 10px .card-badge and
+   its outlined twin, the queue's red pill, the radio cover's glowing caps, the
+   settings' tinted status and an accent-filled mono clock.
+
+     .badge            quality: FLAC 24/192 · MP3 · 320 kbps · Mixed
+                       11px/600, tabular, outlined, 21px tall (4px cap + border)
+     .badge--sm        the compact one on a row or a card (10px, 2px cap)
+     .badge--accent    hi-res, and the queue's live stream
+     .badge--live      adds the live dot to an accent badge
+     .badge--solid     on top of ARTWORK: opaque, so it reads on any cover
+     .badge--success   settings: connected
+     .badge--danger    settings: not connected
+
+   Sentence case, no caps: a format name is already capitalised (FLAC, MP3),
+   and tracked caps belong to the eyebrow alone. */
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  box-sizing: border-box;
+  padding: var(--space-1) var(--space-2);
+  border: var(--border-width-thin) solid var(--c-border-bright);
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--c-text-secondary);
+  font-size: var(--text-xs);
+  font-weight: var(--weight-semibold);
+  line-height: var(--leading-none);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+.badge--sm {
+  padding: var(--space-0_5) var(--space-1);
+  border-radius: var(--radius-xs);
+  font-size: var(--text-2xs);
+}
+/* A qualifier in front of the label, in the accent: "Hi-Res │ FLAC 24/192".
+   One badge, so the pair wraps as a unit on a narrow header instead of leaving
+   "Hi-Res" alone on the next line. */
+.badge__lead {
+  color: var(--c-accent-btn);
+  padding-right: var(--space-1);
+  border-right: var(--border-width-thin) solid var(--c-border-bright);
+}
+.badge--accent {
+  /* Accent text on the page ground: 4.9:1 default, 5.8:1 gruvbox. The border
+     is the same hue at half strength — a ring, not a second fill. */
+  color: var(--c-accent-btn);
+  border-color: color-mix(in srgb, var(--c-accent-btn) 50%, transparent);
+}
+.badge--live::before {
+  content: "";
+  width: 0.5em;
+  height: 0.5em;
+  border-radius: var(--radius-circle);
+  background: currentColor;
+  animation: badge-live var(--dur-pulse) var(--ease-default) infinite;
+}
+@keyframes badge-live {
+  50% {
+    opacity: var(--opacity-ghost);
+  }
+}
+.badge--solid {
+  background: var(--c-bg-glass);
+  border-color: var(--c-border-bright);
+  color: var(--c-text-primary);
+  box-shadow: var(--shadow-sm);
+}
+.badge--solid.badge--accent {
+  color: var(--c-accent-btn);
+}
+/* A state is carried by a coloured dot and ring; the WORD stays in the text
+   colour. Coloured text on a tint of itself cleared AA on the default card but
+   not on gruvbox's lighter #3c3836 (the error red measured 3.7:1 there). The
+   dot only has to clear the 3:1 non-text bar, which it does in both themes. */
+.badge--success,
+.badge--danger {
+  color: var(--c-text-primary);
+}
+.badge--success::before,
+.badge--danger::before {
+  content: "";
+  width: 0.5em;
+  height: 0.5em;
+  border-radius: var(--radius-circle);
+}
+.badge--success {
+  border-color: color-mix(in srgb, var(--c-success) 55%, transparent);
+}
+.badge--success::before {
+  background: var(--c-success);
+}
+.badge--danger {
+  border-color: color-mix(in srgb, var(--c-error) 55%, transparent);
+}
+.badge--danger::before {
+  background: var(--c-error);
+}
+@media (prefers-reduced-motion: reduce) {
+  .badge--live::before {
+    animation: none;
+  }
 }
 
 /* Text the user never needs to select: the finger slides over these on every
@@ -316,25 +469,5 @@ body[data-theme="gruvbox"]:is(
   -webkit-user-select: none;
 }
 
-.meta-tag {
-  font-size: var(--text-xs);
-  font-weight: var(--weight-semibold);
-  color: var(--c-text-primary);
-  border: var(--border-width-thin) solid transparent;
-  background: var(--c-surface-button);
-  padding: var(--space-1) var(--space-2);
-  /* The `height: 18px` that used to be here did nothing (no border-box, so the
-     box was 26px) and only fought the vertical rhythm. */
-  display: inline-flex;
-  align-items: center;
-  border-radius: var(--radius-sm);
-  white-space: nowrap;
-  line-height: var(--leading-none);
-}
-
-.meta-tag.quality {
-  background: transparent;
-  border: 1px solid var(--c-border);
-  color: var(--c-text-primary);
-  opacity: 0.9;
-}
+/* .meta-tag and .meta-tag.quality are GONE: every count became a .meta-item in
+   a .meta-line, every quality/status became a .badge (above). */

@@ -6,6 +6,7 @@
   import IconButton from "../ui/IconButton.svelte";
   import { getPlaylistCoverStyle } from "../../lib/playlistColor";
   import { FAVORITES_PLAYLIST } from "../../lib/constants";
+  import { countLabel } from "../../lib/format";
   import type { Playlist, Track } from "../../lib/types";
 
   let { matchedPlaylists = [], searchResultsGrouped = [], isSearching = false, searchTerm = "", currentTheme = "", playingFile = "", isPlaying = false, onOpenPlaylist, onPlayFoundTracks, onQueueFoundTracks, onPlayTrack }: {
@@ -67,7 +68,7 @@
         >
           <div class="group-icon">{@html ICONS.PLAYLISTS}</div>
           <div class="group-title" title={group.playlist.name}>{group.playlist.name}</div>
-          <div class="group-count">{group.tracks.length}</div>
+          <div class="group-count">{countLabel(group.tracks.length, "track")}</div>
 
           <div class="group-actions">
             <IconButton
@@ -106,10 +107,10 @@
 {/if}
 
 {#if !isSearching && matchedPlaylists.length === 0 && searchResultsGrouped.length === 0}
-  <div class="empty-text">No matches found for "{searchTerm}"</div>
+  <div class="empty-text">No matches found for “{searchTerm}”</div>
 {:else if isSearching && searchResultsGrouped.length === 0}
   <div class="empty-text" style="opacity: var(--opacity-dim)">
-    Searching tracks in playlists...
+    Searching tracks in playlists…
   </div>
 {/if}
 
@@ -137,8 +138,13 @@
     border-radius: var(--radius-md);
     border-bottom: var(--border-default-dim);
   }
-  .group-header:hover {
+  .group-header:active {
     background: var(--c-surface-active);
+  }
+  @media (hover: hover) {
+    .group-header:hover {
+      background: var(--c-surface-active);
+    }
   }
   .group-icon {
     width: var(--icon-size-md);
@@ -163,17 +169,15 @@
     overflow: hidden;
     text-overflow: ellipsis;
   }
-  /* Same chip as the header's .meta-tag: 4px cap, 8px sides, leading-none, so
-     the count reads as a tag in the band and not as loose text. */
+  /* A count is a fact, not a badge: meta-role text with its noun ("3 tracks"),
+     like every other count in the app. It was a bare number in a pill. */
   .group-count {
-    background: var(--c-surface-button);
-    padding: var(--space-1) var(--space-2);
-    border-radius: var(--radius-full);
+    flex-shrink: 0;
+    margin-left: var(--space-2);
     font-size: var(--text-sm);
-    color: var(--c-text-muted);
-    display: inline-flex;
-    align-items: center;
-    line-height: var(--leading-none);
+    color: var(--c-text-secondary);
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
   }
   .group-actions {
     display: flex;

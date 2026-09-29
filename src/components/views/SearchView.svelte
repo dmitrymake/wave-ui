@@ -11,6 +11,7 @@
   import { ICONS } from "../../lib/icons";
   import { navigateTo, getTrackThumbUrl, searchQuery } from "../../lib/store";
   import SearchBar from "../ui/SearchBar.svelte";
+  import { formatQuality } from "../../lib/quality";
   import BaseList from "./BaseList.svelte";
   import type { Track, SearchAlbumResult } from "../../lib/types";
 
@@ -139,12 +140,15 @@
     {#snippet header()}
       <div class="content-padded">
         {#if $searchQuery.length < 2}
+          <!-- The app's search glyph, not a colour emoji: 🔍 rendered as a 60px
+               platform picture (a blue Apple loupe, a Noto one on Linux) in a
+               product that draws every other icon as a 1.5px line. -->
           <div class="placeholder-state">
-            <div class="placeholder-icon">🔍</div>
+            <div class="placeholder-icon" aria-hidden="true">{@html ICONS.SEARCH}</div>
             <p>Type to search your library</p>
           </div>
         {:else if !isSearching && $tracksStore.length === 0 && foundAlbums.length === 0 && hasSearched}
-          <div class="empty-text">No results found for "{$searchQuery}"</div>
+          <div class="empty-text">No results found for “{$searchQuery}”</div>
         {:else}
           {#if foundAlbums.length > 0}
             <div class="header-label section-spacing">Albums</div>
@@ -162,22 +166,18 @@
                       radius="var(--radius-md)"
                     >
                       {#snippet fallback()}
-                        <div class="icon-fallback">💿</div>
+                        <div class="icon-fallback">{@html ICONS.ALBUMS}</div>
                       {/snippet}
                     </ImageLoader>
                   {/snippet}
                   {#snippet sub()}
-                    <div class="card-sub">{album.artist}</div>
-
-                    {#if album.year && String(album.year) !== "0"}
-                      <div class="meta-tag">{album.year}</div>
-                    {/if}
-
-                    {#if album.qualityBadge}
-                      <div class="meta-tag quality">
-                        {album.qualityBadge.split(" ")[0]}
-                      </div>
-                    {/if}
+                    <div class="card-sub" title={album.artist}>{album.artist}</div>
+                  {/snippet}
+                  {#snippet meta()}
+                    <!-- The library card's facts line, not two header chips: these
+                         were .meta-tag, 21px tall, which cut the artist to "Geo…". -->
+                    {#if album.year && String(album.year) !== "0"}<span class="meta-item">{album.year}</span>{/if}
+                    {#if album.qualityBadge}<span class="meta-item">{formatQuality(album.qualityBadge, "short")}</span>{/if}
                   {/snippet}
                 </MediaCard>
               {/each}
@@ -213,13 +213,27 @@
     flex-direction: column;
     align-items: center;
     justify-content: center;
+    gap: var(--space-3);
     height: 40vh;
     color: var(--c-text-secondary);
+    text-align: center;
+  }
+  .placeholder-state p {
+    margin: var(--space-0);
+    font-size: var(--text-base);
+    text-wrap: pretty;
   }
 
+  /* The emblem size, the same glyph the search field and the sidebar use. */
   .placeholder-icon {
-    font-size: var(--text-8xl);
-    margin-bottom: var(--space-5);
+    display: flex;
+    width: var(--icon-size-xl);
+    height: var(--icon-size-xl);
     color: var(--c-icon-faint);
+  }
+  .placeholder-icon :global(svg) {
+    width: 100%;
+    height: 100%;
+    stroke-width: var(--icon-stroke-width);
   }
 </style>

@@ -30,7 +30,7 @@
   <div class="search-block">
     <SearchBar
       bind:value
-      placeholder="Search Yandex Music..."
+      placeholder="Search Yandex Music…"
       ariaLabel="Search Yandex Music"
       {oninput}
       {onClear}

@@ -8,6 +8,7 @@
   import Button from "../ui/Button.svelte";
   import type { Writable } from "svelte/store";
   import type { YandexAlbum, YandexArtist, YandexHeaderData, YandexPlaylist } from "../../lib/types/yandex";
+  import { countLabel } from "../../lib/format";
 
   let { headerData = null, viewMode = "", isLoading = false, tracksCount = 0, albumsStore, onPlayAll, onAddAllToQueue, onPlayVibe, onOpenAlbum }: {
     headerData?: YandexHeaderData;
@@ -44,7 +45,7 @@
     onOpenAlbum?.(album);
   }
 
-  /** Count chips under the header title — the same `.meta-tag` role the
+  /** The counts in the header's meta line — the same `.meta-item` role the
       library and playlist headers use.
 
       `tracksCount` is only trustworthy where Yandex hands the whole list over:
@@ -54,13 +55,13 @@
   const countBadges = $derived.by(() => {
     const badges: string[] = [];
     if (viewMode === "artist_details" || viewMode === "album_details") {
-      if (tracksCount > 0) badges.push(`${tracksCount} tracks`);
+      if (tracksCount > 0) badges.push(countLabel(tracksCount, "track"));
       if (viewMode === "artist_details" && $albumsStore.length > 0) {
-        badges.push(`${$albumsStore.length} albums`);
+        badges.push(countLabel($albumsStore.length, "album"));
       }
     } else {
       const total = (headerData as YandexPlaylist | null)?.trackCount;
-      if (typeof total === "number" && total > 0) badges.push(`${total} tracks`);
+      if (typeof total === "number" && total > 0) badges.push(countLabel(total, "track"));
     }
     return badges;
   });
@@ -142,22 +143,23 @@
             {headerData.title || headerData.name}
           </h1>
           {#if headerArtist || headerData.description}
-            <!-- Album: artist + year, the row the library's album header uses. -->
+            <!-- Album: the performer, the row the library's album header uses. -->
             <div class="header-subtitle-row">
               <h2 class="header-sub-text" title={headerArtist || headerData.description}>
                 {headerArtist || headerData.description}
               </h2>
-              {#if headerYear}
-                <span class="meta-tag">{headerYear}</span>
-              {/if}
             </div>
           {/if}
-          {#if countBadges.length > 0}
-            <div class="meta-badges">
-              {#each countBadges as badge}
-                <span class="meta-tag">{badge}</span>
-              {/each}
-            </div>
+          {#if headerYear || countBadges.length > 0}
+            <!-- Year and counts as one line of facts, like the library header. -->
+            <p class="meta-line">
+              <span class="meta-text">
+                {#if headerYear}<span class="meta-item">{headerYear}</span>{/if}
+                {#each countBadges as badge}
+                  <span class="meta-item">{badge}</span>
+                {/each}
+              </span>
+            </p>
           {/if}
         </div>
         <div class="header-actions">
@@ -208,11 +210,12 @@
           </ImageLoader>
         {/snippet}
         {#snippet sub()}
-          <!-- The app's album card: artist as the sub, year as the badge. -->
-          <div class="card-sub">{album.artist ?? "Album"}</div>
-          {#if album.year}
-            <div class="card-badge">{album.year}</div>
-          {/if}
+          <!-- The app's album card: the artist on its own line, the year under it
+               as a fact. -->
+          <div class="card-sub" title={album.artist ?? "Album"}>{album.artist ?? "Album"}</div>
+        {/snippet}
+        {#snippet meta()}
+          {#if album.year}<span class="meta-item">{album.year}</span>{/if}
         {/snippet}
       </MediaCard>
     {/each}

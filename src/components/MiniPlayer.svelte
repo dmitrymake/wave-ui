@@ -3,7 +3,7 @@
 <script lang="ts">
   import { onDestroy } from "svelte";
   import { fade } from "svelte/transition";
-  import { sendArt, receiveArt } from "../lib/transitions";
+  import { sendArt, receiveArt, MOTION } from "../lib/transitions";
   import { seek, nav, togglePlay } from "../lib/playerActions";
   import { ICONS } from "../lib/icons";
   import {
@@ -116,18 +116,13 @@
        open action lives on the info block below instead of the whole dock. -->
   <div
     class="dock"
-    transition:fade={{ duration: 220 }}
+    transition:fade={{ duration: MOTION.fast }}
     onclick={handleDockOpen}
     use:longpress
     onlongpress={handleLongPress}
     role="group"
     aria-label="Now playing"
   >
-    <div
-      class="progress-shadow"
-      style="transform: scaleX({pct / 100}); transition: {smooth ? 'transform var(--dur-slow-2) var(--ease-linear)' : 'none'}"
-    ></div>
-
     <div
       class="progress-bar"
       class:radio={isRadio}
@@ -152,13 +147,18 @@
       <div class="rail"></div>
       <div
         class="fill"
-        style="transform: scaleX({pct / 100}); transition: {smooth ? 'transform var(--dur-slow-2) var(--ease-linear)' : 'none'}"
+        style="transform: scaleX({pct / 100}); transition: {smooth ? 'transform var(--dur-tick) var(--ease-linear)' : 'none'}"
       ></div>
       {#if !isRadio}
+        <!-- The knob rides a full-width carriage that is TRANSLATED, so it glides
+             on the compositor like the fill beside it; it used to animate `left`,
+             a layout property, on every 250ms tick. -->
         <div
-          class="knob"
-          style="left: {pct}%; transition: transform var(--dur-fast){smooth ? ', left var(--dur-slow-2) var(--ease-linear)' : ''}"
-        ></div>
+          class="knob-carriage"
+          style="transform: translateX({pct}%); transition: {smooth ? 'transform var(--dur-tick) var(--ease-linear)' : 'none'}"
+        >
+          <div class="knob"></div>
+        </div>
       {/if}
 
       {#if (isHoveringBar || isDragging) && !isRadio}
@@ -214,7 +214,7 @@
               {displayArtist}
             </div>
             {#if qualityLabel}
-              <span class="meta-tag quality">{qualityLabel}</span>
+              <span class="badge">{qualityLabel}</span>
             {/if}
           </div>
         </div>
@@ -260,16 +260,16 @@
     cursor: pointer; user-select: none;
   }
 
-  .progress-shadow {
-    position: absolute; top: var(--space-0); left: var(--space-0); bottom: var(--space-0);
-    width: 100%; transform-origin: left center;
-    background: var(--c-surface-button); z-index: 101;
-    pointer-events: none; opacity: 0.1;
-  }
+  /* .progress-shadow is GONE. It filled the whole dock up to the playhead with
+     a ~1% white, so the bar split into two tones (#151515 | #121212) exactly at
+     the progress point — which read as a rendering fault, and said nothing the
+     2px rail above it does not already say. The dock's layers are now a local
+     scale (the dock is its own stacking context): the grid at --z-base, the
+     progress hit-area over it at --z-above — instead of raw 101/105/110. */
 
   .progress-bar {
     position: absolute; top: calc(-1 * var(--space-2xs)); left: var(--space-0); width: 100%;
-    height: var(--space-14px); z-index: 110; cursor: pointer;
+    height: var(--space-14px); z-index: var(--z-above); cursor: pointer;
     display: flex; align-items: center;
   }
   .progress-bar.radio { cursor: default; opacity: var(--opacity-hidden); pointer-events: none; }
@@ -295,11 +295,17 @@
     background: var(--c-accent); pointer-events: none;
   }
   .progress-bar:hover .rail, .progress-bar:hover .fill { height: var(--space-1); }
+  /* The carriage spans the bar, so translateX(N%) moves the knob N% of the way
+     along it. */
+  .knob-carriage {
+    position: absolute; inset: var(--space-0); pointer-events: none;
+  }
   .knob {
     position: absolute; top: 50%; left: var(--space-0);
     width: var(--space-3); height: var(--space-3); border-radius: var(--radius-circle);
     background: var(--c-text-primary); transform: translate(-50%, -50%) scale(0);
     box-shadow: var(--shadow-xs-strong);
+    transition: transform var(--dur-fast) var(--ease-emphasized);
   }
   .progress-bar:hover .knob { transform: translate(-50%, -50%) scale(1); }
   /* :hover never fires on a touchscreen, so the knob (and the time tooltip)
@@ -316,13 +322,13 @@
     transform: translate(-50%, -50%) scale(1.6);
   }
 
-  /* The same chip as every .meta-tag in the app (4px cap, 8px sides, tight
-     leading), not a 3px nudge: the time labels under a rail and the tags under a
-     title are the same role and were two different boxes. */
+  /* The badge's box (4px cap, 8px sides, tight leading) with the timecode's
+     type: tabular figures, so "1:09" → "1:10" does not jitter under the cursor. */
   .tooltip {
     position: absolute; top: calc(-1 * var(--space-7));
     background: var(--c-surface-active); color: var(--c-text-primary);
-    font-size: var(--text-xs); font-weight: var(--weight-bold);
+    font-size: var(--text-xs); font-weight: var(--weight-semibold);
+    font-variant-numeric: tabular-nums;
     padding: var(--space-1) var(--space-2);
     line-height: var(--leading-none);
     border-radius: var(--radius-sm); transform: translateX(-50%);
@@ -332,7 +338,7 @@
   .grid {
     display: grid; grid-template-columns: 1fr max-content 1fr;
     height: 100%; padding: var(--space-0) var(--space-8); align-items: center;
-    gap: var(--space-5); position: relative; z-index: 105;
+    gap: var(--space-5); position: relative; z-index: var(--z-base);
   }
 
   /* The whole info block opens the full player, so its focus plate is a chip
@@ -356,6 +362,8 @@
   .meta {
     display: flex; flex-direction: column; justify-content: center;
     gap: var(--space-0_5); overflow: hidden;
+    /* A two-line lockup, so the title leading, not the body's 1.45. */
+    line-height: var(--leading-snug);
   }
   .title-row { display: flex; align-items: center; gap: var(--space-2); }
   .title { font-size: var(--text-lg); font-weight: var(--weight-medium); color: var(--c-text-primary); }
@@ -379,6 +387,9 @@
   }
   .play-btn:hover { transform: scale(1.05); }
   .play-btn:active { transform: scale(0.95); }
+  @media (prefers-reduced-motion: reduce) {
+    .knob, .play-btn { transition: none; }
+  }
   .play-btn :global(svg) { width: var(--icon-size-lg); height: var(--icon-size-lg); }
 
   .volume { display: flex; align-items: center; justify-content: flex-end; gap: var(--space-3); }
@@ -397,6 +408,22 @@
     .play-btn { width: var(--control-h-lg); height: var(--control-h-lg); }
     .art { width: var(--thumb-md); height: var(--thumb-md); }
     .title-row :global(.tiny-dots) { display: none; }
-    .meta-tag { display: none; }
+    .badge { display: none; }
+    /* The targets are 44px on a phone, so 20px between them was 40px between
+       the glyphs — width the title (which truncated at "I Love The …") needed. */
+    .controls { gap: var(--space-2); }
+  }
+  /* A PORTRAIT TABLET (the 820px iPad): the dock is the full width but the
+     sidebar is not collapsed, and the symmetric 1fr | transport | 1fr grid left
+     the title "Surren…" beside five transport controls and a 150px slider. The
+     heart and the play mode go (as on a phone; the full player has both) and
+     the volume column shrinks to its content, so the title gets the rest. */
+  @media (min-width: 769px) and (max-width: 900px) {
+    .controls :global(.only-wide) { display: none !important; }
+    .grid { grid-template-columns: minmax(0, 1fr) max-content max-content; }
+  }
+  /* A phone's play button meets the touch floor like its two neighbours. */
+  @media (max-width: 768px) and (pointer: coarse) {
+    .play-btn { width: var(--target-touch); height: var(--target-touch); }
   }
 </style>

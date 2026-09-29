@@ -2,6 +2,7 @@
 <!-- Copyright (c) 2025 dmitrymake -->
 <script lang="ts">
   import { fade } from "svelte/transition";
+  import { MOTION } from "../../lib/transitions";
   import SkeletonGrid from "../SkeletonGrid.svelte";
   import {
     stations,
@@ -16,6 +17,7 @@
   import MediaCard from "../MediaCard.svelte";
   import Skeleton from "../Skeleton.svelte";
   import Input from "../ui/Input.svelte";
+  import { bitrateLabel } from "../../lib/format";
 
   let searchTerm = $state("");
 
@@ -27,18 +29,16 @@
     );
   }));
 
-  let qualityLabel = $derived($status.bitrate
-    ? `${$status.bitrate} kbps`
-    : $status.format || "");
+  let qualityLabel = $derived(bitrateLabel($status.bitrate) || $status.format || "");
 </script>
 
-<div class="view-container scrollable" in:fade={{ duration: 200 }}>
+<div class="view-container scrollable" in:fade={{ duration: MOTION.fast }}>
   <div class="content-padded no-bottom-pad">
     <div class="search-wrap">
       <Input
         search
         bind:value={searchTerm}
-        placeholder="Find station..."
+        placeholder="Find station…"
         ariaLabel="Find station"
       >
         {#snippet icon()}
@@ -69,16 +69,21 @@
             {#snippet cover()}
               <ImageLoader src={imgUrl ?? ""} alt={station.name} radius="var(--radius-md)">
                 {#snippet fallback()}
-                  <div class="icon-fallback">📻</div>
+                  <!-- The radio glyph, not a colour emoji (📻 drew a platform
+                       picture in a product of 1.5px line icons). -->
+                  <div class="icon-fallback">{@html ICONS.RADIO}</div>
                 {/snippet}
               </ImageLoader>
             {/snippet}
             {#snippet coverExtra()}
+              <!-- The shared badge in its on-artwork form: opaque so it reads on
+                   any logo, the live dot when it is playing. It was a glowing
+                   accent slab of 10px tracked caps. -->
               {#if isActive}
                 {#if $status.state === "play"}
-                  <div class="status-badge playing">PLAYING</div>
+                  <span class="badge badge--solid badge--accent badge--live">Playing</span>
                 {:else}
-                  <div class="status-badge paused">PAUSED</div>
+                  <span class="badge badge--solid">Paused</span>
                 {/if}
               {/if}
             {/snippet}
@@ -88,9 +93,7 @@
               {/if}
 
               {#if isActive && qualityLabel}
-                <div class="card-badge quality" in:fade>
-                  {qualityLabel}
-                </div>
+                <span class="badge badge--sm" in:fade={{ duration: MOTION.fast }}>{qualityLabel}</span>
               {/if}
             {/snippet}
           </MediaCard>
@@ -120,25 +123,7 @@
     }
   }
 
-  .status-badge {
-    font-size: var(--text-2xs);
-    font-weight: var(--weight-bold);
-    padding: var(--space-1) var(--space-3);
-    border-radius: var(--radius-sm);
-    color: var(--c-text-primary);
-    letter-spacing: var(--tracking-wide);
-    z-index: 5;
-  }
-
-  .status-badge.playing {
-    background: var(--c-accent);
-    box-shadow: var(--shadow-glow);
-  }
-
-  .status-badge.paused {
-    background: var(--c-bg-toast);
-    border: var(--border-default);
-    color: var(--c-text-secondary);
-  }
+  /* .status-badge is GONE — the station status is the shared .badge
+     (--solid for artwork), see shared.css. */
 
 </style>

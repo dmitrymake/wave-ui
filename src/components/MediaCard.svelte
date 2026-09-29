@@ -18,6 +18,8 @@
   cover: what fills the square (image, dashed placeholder, icon).
   coverExtra: anything that floats on top of it (menu chip, status badge).
   sub: the line under the title. Skipped entirely when absent.
+  meta: a quieter line of facts under that ("1986 · FLAC") — .meta-item spans,
+        joined by the shared middle dot. Skipped entirely when absent.
 -->
 <script lang="ts">
   import type { Snippet } from "svelte";
@@ -30,6 +32,7 @@
     /** Left-aligned like the playlist/library cards. */
     titleCenter?: boolean;
     sub?: Snippet;
+    meta?: Snippet;
     coverExtra?: Snippet;
     /** The dim "tap to play" overlay. Off for cards that are not playable. */
     playable?: boolean;
@@ -48,6 +51,7 @@
     title,
     titleCenter = false,
     sub,
+    meta,
     coverExtra,
     playable = true,
     coverClass = "",
@@ -104,6 +108,12 @@
   {#if sub}
     <div class="card-sub-row">
       {@render sub()}
+    </div>
+  {/if}
+
+  {#if meta}
+    <div class="card-meta">
+      {@render meta()}
     </div>
   {/if}
 </div>

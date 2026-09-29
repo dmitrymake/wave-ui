@@ -12,6 +12,9 @@
   display: flex;
   align-items: center;
   gap: var(--space-2);
+  /* "A–Z" broke at its dash into "A–" over "Z" on every screen. */
+  white-space: nowrap;
+  flex-shrink: 0;
   background: transparent;
   border: none;
   color: var(--c-text-secondary);
@@ -25,8 +28,10 @@
   transition: color var(--dur-fast);
 }
 
-.sort-trigger:hover {
-  color: var(--c-text-primary);
+@media (hover: hover) {
+  .sort-trigger:hover {
+    color: var(--c-text-primary);
+  }
 }
 
 .sort-trigger-icon {
@@ -86,9 +91,15 @@
   transition: background var(--dur-instant), color var(--dur-instant);
 }
 
-.sort-item:hover {
+.sort-item:active {
   background: var(--c-surface-hover);
   color: var(--c-text-primary);
+}
+@media (hover: hover) {
+  .sort-item:hover {
+    background: var(--c-surface-hover);
+    color: var(--c-text-primary);
+  }
 }
 
 /* Was rgba(255,255,255,0.05) — barely distinguishable from the resting row

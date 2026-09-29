@@ -33,44 +33,45 @@
   </div>
   <Card clickable ariaLabel="Open theme selector" onclick={openThemeSelector}>
     <div class="row space-between">
-      <span>Interface Theme</span>
+      <span class="row-label">Interface Theme</span>
       <div class="row-gap">
-        <span class="value">{activeThemeLabel}</span>
-        <span class="chevron">{@html ICONS.NEXT}</span>
+        <span class="row-value">{activeThemeLabel}</span>
+        <!-- A disclosure chevron: this row opens a chooser. It was the
+             next-track glyph (▶|), which read as a transport control. -->
+        <span class="chevron" aria-hidden="true">{@html ICONS.CHEVRON_RIGHT}</span>
       </div>
     </div>
   </Card>
 </div>
 
 <style>
-  .section {
-    margin-bottom: var(--space-8);
-  }
-
-  .section-header {
-    display: flex;
-    align-items: center;
-    gap: var(--space-2);
-    font-size: var(--text-xl);
-    font-weight: var(--weight-bold);
-    color: var(--c-text-primary);
-    margin-bottom: var(--space-3);
-    padding-left: var(--space-1);
-  }
-
-  .value {
-    color: var(--c-text-secondary);
-    font-size: var(--text-base);
-  }
+  /* .section / .section-header live in settings.css (they were copied into all
+     five sections). */
 
   .chevron {
     width: var(--icon-size-xs);
     height: var(--icon-size-xs);
     color: var(--c-text-muted);
     display: flex;
+    flex-shrink: 0;
   }
   .chevron :global(svg) {
     width: 100%;
     height: 100%;
+    stroke-width: var(--icon-stroke-width);
+  }
+  /* The value may be long ("Default (Moode Dark)") and the row narrow (the Pi):
+     it truncates, the label and the chevron do not. */
+  .row-gap {
+    min-width: 0;
+  }
+  .row-gap .row-value {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .row-label {
+    white-space: nowrap;
+    flex-shrink: 0;
   }
 </style>

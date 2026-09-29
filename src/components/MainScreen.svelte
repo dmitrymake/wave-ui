@@ -3,6 +3,7 @@
 <script lang="ts">
   import { onMount } from "svelte";
   import { fly } from "svelte/transition";
+  import { MOTION, EASE_EMPHASIZED } from "../lib/transitions";
   import { ICONS } from "../lib/icons";
   import { Router } from "../lib/router";
   import {
@@ -62,14 +63,14 @@
 <div class="app-container">
   <div class="app-layout" class:player-open={$isFullPlayerOpen}>
     {#if isOffline}
-      <div class="offline-banner" role="status" transition:fly={{ y: -40, duration: 300 }}>
+      <div class="offline-banner" role="status" transition:fly={{ y: -40, duration: MOTION.base, easing: EASE_EMPHASIZED }}>
         <span class="offline-dot"></span>
         Connection lost — reconnecting…
       </div>
     {/if}
 
     {#if $toastMessage}
-      <div class="toast-container" transition:fly={{ y: -50, duration: 300 }}>
+      <div class="toast-container" transition:fly={{ y: -50, duration: MOTION.base, easing: EASE_EMPHASIZED }}>
         <div class="toast-body {$toastMessage.type}">
           {$toastMessage.text}
         </div>
@@ -221,9 +222,14 @@
     color: var(--c-text-primary);
     padding: var(--space-3) var(--space-6);
     border-radius: var(--radius-full);
-    box-shadow: var(--shadow-md-popover);
+    box-shadow: var(--shadow-md);
     font-weight: var(--weight-semibold);
     font-size: var(--text-base);
+    line-height: var(--leading-snug);
+    /* A long message wraps inside the pill instead of running off a phone. */
+    max-width: calc(100vw - var(--space-8));
+    text-align: center;
+    text-wrap: balance;
   }
 
   /* Unobtrusive offline indicator: a slim pill anchored under the header, themed via
@@ -244,7 +250,7 @@
        nor the height the toast's own padding produces. */
     padding: var(--space-2) var(--space-4);
     border-radius: var(--radius-full);
-    box-shadow: var(--shadow-md-popover);
+    box-shadow: var(--shadow-md);
     font-weight: var(--weight-semibold);
     font-size: var(--text-base);
     pointer-events: none;
@@ -255,13 +261,14 @@
     height: var(--space-2);
     border-radius: var(--radius-circle);
     background: var(--c-text-inverse);
-    opacity: 0.85;
-    animation: offline-pulse 1.4s ease-in-out infinite;
+    opacity: var(--opacity-strong);
+    animation: offline-pulse var(--dur-pulse) var(--ease-default) infinite;
   }
 
+  /* The same breath as the live badge's dot. */
   @keyframes offline-pulse {
-    0%, 100% { opacity: 0.85; }
-    50% { opacity: 0.2; }
+    0%, 100% { opacity: var(--opacity-strong); }
+    50% { opacity: var(--opacity-ghost); }
   }
   @media (prefers-reduced-motion: reduce) {
     .offline-dot { animation: none; }
@@ -318,12 +325,25 @@
     cursor: pointer;
     display: flex;
     align-items: center;
-    gap: var(--space-2);
+    gap: var(--space-1);
     padding: var(--space-1) var(--space-2);
     margin: calc(-1 * var(--space-1)) calc(-1 * var(--space-2));
+    /* The hit area is the control's full height (the text was a 24px strip —
+       on a phone this is the ONLY way back); the negative margins keep the
+       label where it was. */
+    min-height: var(--control-h-lg);
     /* Labeled control: pill, like the Button primitive. */
     border-radius: var(--radius-pill);
     line-height: var(--leading-none);
+    transition: opacity var(--dur-instant) var(--ease-default);
+  }
+  .back-btn:active {
+    opacity: var(--opacity-dim);
+  }
+  @media (pointer: coarse) {
+    .back-btn {
+      min-height: var(--target-touch);
+    }
   }
 
   .icon-inline {
@@ -337,10 +357,16 @@
     display: block;
   }
 
+  /* The title role: 20px bold with display tracking, on one line. */
   .view-title {
     font-size: var(--text-2xl);
     font-weight: var(--weight-bold);
+    line-height: var(--leading-snug);
+    letter-spacing: var(--tracking-display);
     color: var(--c-text-primary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
 
   .docked-player-container {

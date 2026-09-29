@@ -85,12 +85,12 @@
             </ImageLoader>
           {/snippet}
           {#snippet sub()}
-            <!-- Same album card as the library + search views: artist as the
-                 sub, year as the badge. .card-sub already truncates. -->
-            <div class="card-sub">{album.artist ?? "Album"}</div>
-            {#if album.year}
-              <div class="card-badge">{album.year}</div>
-            {/if}
+            <!-- Same album card as the library + search views: the artist on its
+                 own line, the year as a fact under it. -->
+            <div class="card-sub" title={album.artist ?? "Album"}>{album.artist ?? "Album"}</div>
+          {/snippet}
+          {#snippet meta()}
+            {#if album.year}<span class="meta-item">{album.year}</span>{/if}
           {/snippet}
         </MediaCard>
       {/each}

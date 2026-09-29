@@ -2,6 +2,7 @@
 <!-- Copyright (c) 2025 dmitrymake -->
 <script lang="ts">
   import { fade } from "svelte/transition";
+  import { MOTION } from "../lib/transitions";
   import ImageLoader from "./ImageLoader.svelte";
   import { ICONS } from "../lib/icons";
   import { stations, getTrackThumbUrl, getTrackCoverUrl } from "../lib/store.js";
@@ -25,7 +26,7 @@
 
 <ImageLoader src={imgUrl} {alt} radius="var(--radius-sm)" onError={() => (imgError = true)}>
   {#snippet fallback()}
-    <div class="icon-ph" in:fade>
+    <div class="icon-ph" in:fade={{ duration: MOTION.fast }}>
       {@html isRadio ? ICONS.RADIO : ICONS.ALBUMS}
     </div>
   {/snippet}

@@ -2,6 +2,7 @@
 <!-- Copyright (c) 2025 dmitrymake -->
 <script lang="ts">
   import { fade, scale } from "svelte/transition";
+  import { MOTION, EASE_EMPHASIZED } from "../lib/transitions";
   import {
     contextMenu,
     closeContextMenu,
@@ -32,17 +33,24 @@
   });
 
   // Overlay closes via Escape/backdrop only — no history.* side-effects.
-  // Move focus into the menu on open (first row, else the card itself so
-  // Escape still works with an empty list), refocus on view switches, and
-  // restore the trigger focus on close.
+  // Move focus into the menu on open, refocus on view switches, and restore the
+  // trigger focus on close.
+  // WHERE focus lands depends on how the menu was reached. From the keyboard
+  // (the trigger shows :focus-visible) it goes to the first row, as a menu
+  // should. From a finger or a mouse it goes to the card itself: Chromium
+  // matches :focus-visible on a script focus during a touch, so the first row
+  // wore the grey focus plate and "Play Next" looked pre-selected on every
+  // long-press (reproduced with a real CDP touch long-press, not only with the
+  // synthetic event). The card still takes Escape, and ArrowDown enters the list.
   $effect(() => {
     const open = $contextMenu.isOpen;
     void view; // re-run (and refocus) when switching main<->playlists
     if (open) {
       if (!prevFocus) prevFocus = document.activeElement as HTMLElement | null;
+      const fromKeyboard = !!(document.activeElement as HTMLElement | null)?.matches?.(":focus-visible");
       queueMicrotask(() => {
         const first = menuEl?.querySelector<HTMLButtonElement>(".menu-row");
-        if (first) first.focus();
+        if (first && fromKeyboard) first.focus();
         else menuEl?.focus();
       });
     } else if (prevFocus) {
@@ -109,15 +117,19 @@
     class="backdrop"
     onclick={handleBackdropClick}
     role="presentation"
-    transition:fade={{ duration: 100 }}
+    transition:fade={{ duration: MOTION.fast }}
   >
+    <!-- Enters on the fast step with a small scale from its anchor corner
+         (transform-origin comes from the positioner); leaves on the instant
+         step as a plain fade — an exit should get out of the way. -->
     <div
       class="menu-card"
       bind:this={menuEl}
       bind:clientHeight={menuHeight}
       bind:clientWidth={menuWidth}
       style={stylePosition}
-      transition:scale={{ start: 0.95, duration: 100 }}
+      in:scale={{ start: 0.96, duration: MOTION.fast, easing: EASE_EMPHASIZED }}
+      out:fade={{ duration: MOTION.instant }}
       onclick={(e) => e.stopPropagation()}
       role="menu"
       aria-label="Track actions"
@@ -200,7 +212,7 @@
 
           <button class="menu-row" role="menuitem" onclick={showPlaylists}>
             <span class="icon">{@html ICONS.ADD_TO_PLAYLIST || ICONS.ADD}</span>
-            <span>Add to Playlist...</span>
+            <span>Add to Playlist…</span>
           </button>
 
           {#if isStreamTrack}
@@ -266,6 +278,11 @@
     backdrop-filter: blur(2px);
   }
 
+  /* The card takes focus only as a keyboard anchor (Escape, ArrowDown into the
+     list) — it is not a control, so it draws no ring. */
+  .menu-card:focus {
+    outline: none;
+  }
   .menu-card {
     background: var(--c-bg-card);
     width: 220px;
@@ -299,15 +316,19 @@
     height: 100%;
   }
 
+  /* The header is the subject of the menu: the item role at body size
+     (semibold, not the display bold), its performer in the meta role. */
   .title {
     font-size: var(--text-base);
-    font-weight: var(--weight-bold);
+    font-weight: var(--weight-semibold);
+    line-height: var(--leading-snug);
     color: var(--c-text-primary);
     margin-bottom: var(--space-0_5);
   }
 
   .artist {
     font-size: var(--text-sm);
+    line-height: var(--leading-snug);
     color: var(--c-text-secondary);
   }
 
@@ -369,9 +390,13 @@
     width: 100%;
   }
 
-  .menu-row:active,
-  .menu-row:hover {
+  .menu-row:active {
     background: var(--c-surface-hover);
+  }
+  @media (hover: hover) {
+    .menu-row:hover {
+      background: var(--c-surface-hover);
+    }
   }
 
   .icon {

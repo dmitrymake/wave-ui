@@ -92,8 +92,10 @@
     cursor: pointer;
     transition: background var(--trans-fast);
   }
-  .card--clickable:hover {
-    background: var(--c-surface-hover);
+  @media (hover: hover) {
+    .card--clickable:hover {
+      background: var(--c-surface-hover);
+    }
   }
   .card--clickable:active {
     background: var(--c-surface-hover);

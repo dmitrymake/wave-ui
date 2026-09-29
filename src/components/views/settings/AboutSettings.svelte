@@ -8,7 +8,11 @@
     typeof __BUILD_DATE__ !== "undefined"
       ? __BUILD_DATE__
       : new Date().toISOString();
-  const buildDate = new Date(buildDateRaw).toLocaleString();
+  // "28 Sep 2026, 21:35" in the reader's own order, not "9/28/2026, 9:35:00 PM".
+  const buildDate = new Date(buildDateRaw).toLocaleString(undefined, {
+    dateStyle: "medium",
+    timeStyle: "short",
+  });
 </script>
 
 <div class="section">
@@ -16,50 +20,26 @@
     <span>About</span>
   </div>
   <Card>
-    <div class="info-row">
-      <span>Version</span>
-      <span class="mono">{appVersion}</span>
+    <div class="row space-between">
+      <span class="row-label">Version</span>
+      <!-- The one technical string in settings keeps the mono face; neither
+           value is boxed any more — they are values like every other. -->
+      <span class="row-value mono">{appVersion}</span>
     </div>
     <div class="separator"></div>
-    <div class="info-row">
-      <span>Build Date</span>
-      <span class="mono small">{buildDate}</span>
+    <div class="row space-between">
+      <span class="row-label">Build Date</span>
+      <span class="row-value">{buildDate}</span>
     </div>
   </Card>
 </div>
 
 <style>
-  .section {
-    margin-bottom: var(--space-8);
-  }
+  /* .section / .section-header live in settings.css (they were copied into all
+     five sections). */
 
-  .section-header {
-    display: flex;
-    align-items: center;
-    gap: var(--space-2);
-    font-size: var(--text-xl);
-    font-weight: var(--weight-bold);
-    color: var(--c-text-primary);
-    margin-bottom: var(--space-3);
-    padding-left: var(--space-1);
-  }
-
-  .info-row {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: var(--space-1) var(--space-0);
-    font-size: var(--text-base);
-    color: var(--c-text-primary);
-  }
   .mono {
     font-family: var(--font-mono);
-    background: var(--c-surface-hover);
-    padding: var(--space-0_5) var(--space-1);
-    border-radius: var(--radius-sm);
-  }
-  .mono.small {
-    font-size: var(--text-sm);
   }
 
 </style>

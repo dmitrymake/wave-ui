@@ -20,6 +20,7 @@
   import { getActiveDaemon } from "../../lib/sources";
   import { ICONS } from "../../lib/icons";
   import { formatTotalDuration } from "../../lib/utils";
+  import { countLabel } from "../../lib/format";
 
   import TrackRow from "../TrackRow.svelte";
   import BaseList from "./BaseList.svelte";
@@ -144,24 +145,27 @@
 
               <h1 class="header-title">
                 {#if daemonState.active}
-                  <span class="daemon-active">
-                    {daemonState.label}
-                  </span>
+                  {daemonState.label}
                 {:else}
                   Current Queue
                 {/if}
               </h1>
 
-              <div class="meta-badges">
-                <span class="meta-tag">{$queue.length} tracks</span>
-                {#if headerTotalDuration}
-                  <span class="meta-tag">{headerTotalDuration}</span>
-                {/if}
-
+              <!-- The live stream is said once, by the badge and its pulsing dot.
+                   The title used to pulse and turn red as well (on the Pi and
+                   the desktop), which with the red eyebrow and the red STOP
+                   STREAM pill made four accents for one fact. -->
+              <p class="meta-line">
+                <span class="meta-text">
+                  <span class="meta-item">{countLabel($queue.length, "track")}</span>
+                  {#if headerTotalDuration}
+                    <span class="meta-item">{headerTotalDuration}</span>
+                  {/if}
+                </span>
                 {#if daemonState.active}
-                  <span class="meta-tag active-badge">Daemon Active</span>
+                  <span class="badge badge--accent badge--live">Daemon Active</span>
                 {/if}
-              </div>
+              </p>
             </div>
 
             <div class="header-actions">
@@ -224,60 +228,10 @@
 </div>
 
 <style>
-
-
-  .daemon-active {
-    color: var(--c-accent-btn);
-    animation: pulse-text 2s infinite;
-  }
-
-  .active-badge {
-    /* AA: --c-text-inverse on --c-accent-btn = 5.53:1 / 5.84:1; the previous
-       white-on-accent was 3.79 / 3.41. */
-    background: var(--c-accent-btn);
-    color: var(--c-text-inverse);
-    border-radius: var(--radius-pill);
-  }
-
-  @keyframes pulse-text {
-    0% {
-      opacity: var(--opacity-visible);
-    }
-    50% {
-      opacity: var(--opacity-strong);
-    }
-    100% {
-      opacity: var(--opacity-visible);
-    }
-  }
-
-  /* The queue title pulses for as long as a stream runs, which is unbounded. */
-  @media (prefers-reduced-motion: reduce) {
-    .daemon-active {
-      animation: none;
-    }
-  }
-
-  /* ---- Phone only. The breakpoint is the codebase's --bp-md: 800px would match
-     the Pi screen exactly and move its approved layout. ---- */
-  @media (max-width: 768px) {
-    /* The art block is NOT hidden here any more, and that is the point: the
-       album, playlist and Yandex headers all carry a hero square on a phone
-       (218px at 390x900, capped by 30vh so a short screen gets 192px), and the
-       queue was the one header without one — so the same screen furniture had
-       two different shapes depending on the tab, and the list below started at
-       a different height on every one of them. The queue's art is a tinted
-       square with the queue glyph in it at the shared `.icon-wrap` size, exactly
-       like the other two. Cost, measured: the queue header is 344px instead of
-       136px on a 390x640 phone, so it shows two track rows instead of five —
-       which is what the playlist and album headers already cost there. */
-
-    /* The red DAEMON ACTIVE badge and the red STOP STREAM pill already say the
-       stream is live, so the title itself goes neutral: red eyebrow + red title
-       + red badge + red pill was a wall of accent with nothing to look at. The
-       pulse stays — it is the liveness signal, and it is now the only one. */
-    .daemon-active {
-      color: var(--c-text-primary);
-    }
-  }
+  /* The daemon's title styling (.daemon-active: accent colour + an endless
+     opacity pulse, neutralised on phones only) is gone — the .badge--live in the
+     meta line carries the liveness on every screen size, and the title is plain
+     white everywhere: red eyebrow + red title + red badge + red pill was a wall
+     of accent with nothing to look at. The header itself is the shared
+     .view-header (MusicViews.css), art block included on a phone. */
 </style>

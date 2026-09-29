@@ -88,7 +88,6 @@ export const THEMES: Theme[] = [
       "--c-overlay-backdrop": "rgba(0, 0, 0, 0.8)",
 
       "--c-shadow-card": "rgba(0, 0, 0, 0.3)",
-      "--c-shadow-popover": "rgba(0, 0, 0, 0.5)",
       "--c-shadow-header": "rgba(0, 0, 0, 0.5)",
       "--c-shadow-phantom": "rgba(0, 0, 0, 0.7)",
       "--c-shadow-glow-accent": "rgba(250, 45, 72, 0.5)",
@@ -193,7 +192,6 @@ export const THEMES: Theme[] = [
       "--c-overlay-backdrop": "rgba(29, 32, 33, 0.8)",
 
       "--c-shadow-card": "rgba(0, 0, 0, 0.3)",
-      "--c-shadow-popover": "rgba(0, 0, 0, 0.5)",
       "--c-shadow-header": "rgba(0, 0, 0, 0.2)",
       "--c-shadow-phantom": "rgba(0, 0, 0, 0.5)",
       "--c-shadow-glow-accent": "rgba(214, 93, 14, 0.3)",

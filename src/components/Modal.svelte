@@ -2,6 +2,7 @@
 <!-- Copyright (c) 2025 dmitrymake -->
 <script lang="ts">
   import { fade, scale } from "svelte/transition";
+  import { MOTION, EASE_EMPHASIZED } from "../lib/transitions";
   import { modal, closeModal } from "../lib/store";
 
   let isError = $state(false);
@@ -14,9 +15,14 @@
     if ($modal.isOpen) {
       prevFocus = document.activeElement as HTMLElement | null;
       // Focus prompt input, confirm button, or (select type) the card itself.
+      // The confirm button only takes focus when the dialog was opened from the
+      // keyboard: after a tap or a click the focus plate made "Play" look
+      // already chosen (see ContextMenu for the same heuristic). A prompt's
+      // field always takes it — the dialog exists to be typed into.
+      const fromKeyboard = !!prevFocus?.matches?.(":focus-visible");
       queueMicrotask(() => {
         if ($modal.type === "prompt" && inputRef) inputRef.focus();
-        else if (confirmRef) confirmRef.focus();
+        else if (confirmRef && fromKeyboard) confirmRef.focus();
         else cardEl?.focus();
       });
     } else if (prevFocus) {
@@ -114,12 +120,13 @@
     class="backdrop"
     onclick={handleBackdropClick}
     role="presentation"
-    transition:fade={{ duration: 150 }}
+    transition:fade={{ duration: MOTION.fast }}
   >
     <div
       class="modal-card"
       bind:this={cardEl}
-      transition:scale={{ start: 0.95, duration: 200 }}
+      in:scale={{ start: 0.96, duration: MOTION.fast, easing: EASE_EMPHASIZED }}
+      out:fade={{ duration: MOTION.instant }}
       onclick={(e) => e.stopPropagation()}
       role="dialog"
       aria-modal="true"
@@ -183,7 +190,7 @@
             disabled={isBusy}
             aria-busy={isBusy}
           >
-            {isBusy ? `${$modal.confirmLabel}...` : $modal.confirmLabel}
+            {isBusy ? `${$modal.confirmLabel}…` : $modal.confirmLabel}
           </button>
         </div>
       {/if}
@@ -225,6 +232,10 @@
     padding: var(--space-5);
   }
 
+  /* Focused only as a keyboard anchor when no button takes focus: no ring. */
+  .modal-card:focus {
+    outline: none;
+  }
   .modal-card {
     background: var(--c-bg-card);
     width: 100%;
@@ -308,8 +319,13 @@
     transition: all var(--trans-fast);
   }
 
-  .select-item:hover {
+  .select-item:active {
     background: var(--c-surface-active);
+  }
+  @media (hover: hover) {
+    .select-item:hover {
+      background: var(--c-surface-active);
+    }
   }
 
   .select-item.active {

@@ -4,6 +4,7 @@
   import Card from "../../ui/Card.svelte";
   import { onMount, onDestroy } from "svelte";
   import { fade } from "svelte/transition";
+  import { MOTION } from "../../../lib/transitions";
   import {
     showToast,
     alarmTime,
@@ -67,14 +68,16 @@
   </div>
   <Card>
     <div class="row space-between">
-      <span class="label-text">Current Player Time</span>
-      <span class="mono-badge">{serverTime}</span>
+      <span class="row-label">Current Player Time</span>
+      <!-- A value, like every other value in settings: it was an accent-filled
+           mono chip, the loudest thing on the screen for a read-only clock. -->
+      <span class="row-value">{serverTime}</span>
     </div>
 
     <div class="separator"></div>
 
     <div class="row space-between">
-      <span class="label-text">Enable Alarm</span>
+      <span class="row-label">Enable Alarm</span>
       <Toggle
         bind:checked={$isAlarmEnabled}
         ariaLabel="Enable Alarm"
@@ -84,10 +87,10 @@
     </div>
 
     {#if $isAlarmEnabled}
-      <div class="separator" in:fade></div>
+      <div class="separator" in:fade={{ duration: MOTION.fast }}></div>
 
-      <div class="row space-between" in:fade>
-        <label for="alarm-time">Wake up time</label>
+      <div class="row space-between" in:fade={{ duration: MOTION.fast }}>
+        <label class="row-label" for="alarm-time">Wake-up Time</label>
         <input
           id="alarm-time"
           type="time"
@@ -97,10 +100,10 @@
         />
       </div>
 
-      <div class="separator" in:fade></div>
+      <div class="separator" in:fade={{ duration: MOTION.fast }}></div>
 
-      <div class="row space-between" in:fade>
-        <label for="alarm-pl">Playlist</label>
+      <div class="row space-between" in:fade={{ duration: MOTION.fast }}>
+        <label class="row-label" for="alarm-pl">Playlist</label>
         <div class="select-wrapper">
           <select
             id="alarm-pl"
@@ -119,27 +122,8 @@
 </div>
 
 <style>
-  .section {
-    margin-bottom: var(--space-8);
-  }
-
-  .section-header {
-    display: flex;
-    align-items: center;
-    gap: var(--space-2);
-    font-size: var(--text-xl);
-    font-weight: var(--weight-bold);
-    color: var(--c-text-primary);
-    margin-bottom: var(--space-3);
-    padding-left: var(--space-1);
-  }
-
-  label,
-  .label-text {
-    font-size: var(--text-base);
-    color: var(--c-text-secondary);
-    font-weight: var(--weight-semibold);
-  }
+  /* .section / .section-header live in settings.css (they were copied into all
+     five sections). */
 
   input[type="time"] {
     background: var(--c-surface-input);
@@ -149,6 +133,7 @@
     border-radius: var(--radius-md);
     font-size: var(--text-lg);
     font-family: inherit;
+    font-variant-numeric: tabular-nums;
     outline: none;
   }
 
@@ -158,16 +143,6 @@
      text fields: a brighter neutral border. */
   input[type="time"]:focus-visible {
     border-color: var(--c-focus-line);
-  }
-
-  .mono-badge {
-    font-family: var(--font-mono);
-    background: var(--c-accent);
-    color: var(--c-text-primary);
-    padding: var(--space-1) var(--space-2);
-    border-radius: var(--radius-sm);
-    font-size: var(--text-base);
-    font-weight: var(--weight-bold);
   }
 
   .select-wrapper {

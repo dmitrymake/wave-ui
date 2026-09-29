@@ -22,6 +22,7 @@
   } from "../lib/store.js";
   import { longpress } from "../lib/actions";
   import { isRemoteUrl, formatClock } from "../lib/utils";
+  import { formatQuality } from "../lib/quality";
   import { resolveSourceForTrack } from "../lib/sources/trackSource";
 
   let {
@@ -75,11 +76,17 @@
     !isStreamTrack);
   let displayTitle = $derived(track.title || track.file?.split("/").pop());
   let duration = $derived(formatDuration(track.time));
-  let quality = $derived(track.qualityBadge ? track.qualityBadge.split(" ")[0] : null);
   let thumbKey = $derived(getTrackThumbUrl(track, "sm", $stations, null));
 
+  // A row looks the same in every list (cover, title, artist, the same right
+  // cluster), so moving between an album and the queue changes nothing but the
+  // songs. The one thing an album row drops is the per-row format: the album's
+  // header already carries it ("Mixed" when it varies).
+  let isAlbumContext = $derived(currentView?.view === "tracks_by_album");
+  let quality = $derived(isAlbumContext || isRadio ? "" : formatQuality(track.qualityBadge, "short"));
+
   function formatDuration(time: number | string | undefined) {
-    if (isRadio) return "\u221e";
+    if (isRadio) return "∞";
     const val = parseFloat(String(time));
     if (!val || isNaN(val) || val === 0) return "0:00";
     return formatClock(Math.round(val));
@@ -169,9 +176,13 @@
         <div class="icon-small">{@html ICONS.DRAG_HANDLE}</div>
       </button>
     {:else}
+      <!-- The song that is playing reads the same wherever it appears: an album
+           or a playlist showing the playing FILE gets the equaliser and the
+           pause-on-hover the queue's exact position gets (its tap already
+           toggled playback — the glyph said "play" while the action paused). -->
       <TrackPlaybackIndicator
         {index}
-        {isExactActive}
+        isExactActive={isExactActive || showStripes}
         {isPlaying}
         {isHovering}
         onaction={handleAction}
@@ -194,9 +205,7 @@
       {:else}
         <Skeleton width="60%" height="15px" radius="4px" />
       {/if}
-      {#if quality && !isRadio}
-        <span class="meta-tag quality">{quality}</span>
-      {/if}
+      {#if quality}<span class="badge badge--sm">{quality}</span>{/if}
     </div>
 
     {#if track.artist}
@@ -214,9 +223,9 @@
           {track.artist}
         </div>
       {/if}
-    {:else if track.title || (track.file && !isStreamTrack)}
+    {:else if !track.artist && (track.title || (track.file && !isStreamTrack))}
       <div class="artist text-ellipsis">Unknown Artist</div>
-    {:else}
+    {:else if !track.artist}
       <!-- The 2px that separates the title from the artist is .info's own gap
            (a real artist line gets exactly that), so the placeholder must not
            add a second margin on top of it. -->
@@ -224,6 +233,9 @@
     {/if}
   </div>
 
+  <!-- Always the same cluster, always visible: [service] … ♡ duration. In edit
+       mode only the duration gives way to the remove button, inside the same
+       fixed slot, so nothing in the row moves. -->
   <div class="right">
     {#if source?.brandIcon}
       <span class="brand-icon-inline" title={source.id}>
@@ -242,23 +254,31 @@
 
     <LikeButton {track} compact />
 
-    {#if isEditable}
-      <IconButton
-        class="remove"
-        size="sm"
-        ariaLabel={`Remove ${displayTitle ?? "track"} from list`}
-        title="Remove"
-        icon={ICONS.REMOVE}
-        onclick={(e) => { e.stopPropagation(); onremove?.({ index }); }}
-      />
-    {:else}
-      <div class="dur">{duration}</div>
-    {/if}
+    <div class="end-slot">
+      {#if isEditable}
+        <IconButton
+          class="remove"
+          size="sm"
+          ariaLabel={`Remove ${displayTitle ?? "track"} from list`}
+          title="Remove"
+          icon={ICONS.REMOVE}
+          onclick={(e) => { e.stopPropagation(); onremove?.({ index }); }}
+        />
+      {:else}
+        <div class="dur">{duration}</div>
+      {/if}
+    </div>
   </div>
 </div>
 
 <style>
   .row {
+    /* The row is its own size container: the density below follows the width
+       the row actually gets — 358px on a phone, 336px beside the Pi's docked
+       player, 1190px on a desktop — not the width of the viewport. */
+    /* Width of the number column (TrackPlaybackIndicator's .num-box), which
+       the drag handle mirrors in edit mode. */
+    --num-w: 28px;
     display: flex;
     align-items: center;
     width: 100%;
@@ -267,42 +287,30 @@
     box-sizing: border-box;
     border-radius: var(--radius-md);
     border-bottom: var(--border-default-dim);
-    transition: background var(--dur-fast);
+    transition: background var(--dur-fast) var(--ease-default);
     cursor: default;
     user-select: none;
     background: transparent;
     position: relative;
     overflow: hidden;
   }
-  .row:hover { background: var(--c-surface-hover); }
-  .row.active { background: var(--c-surface-active); }
-  /* Touchscreen: :hover never fires, so a tap on a row had no feedback until
-     MPD answered 200-500ms later. */
+  /* Hover where there is one: a touchscreen would keep the plate on the row
+     that was just tapped. Touch gets :active — without it a tap on a row had no
+     feedback until MPD answered 200-500ms later. */
+  @media (hover: hover) {
+    .row:hover { background: var(--c-surface-hover); }
+  }
   .row:active { background: var(--c-surface-active); }
 
-  .row.striped::before {
-    content: "";
-    position: absolute;
-    inset: 0;
-    pointer-events: none;
-    z-index: 0;
-    border-radius: inherit;
-    box-sizing: border-box;
-    background-image: repeating-linear-gradient(
-      -45deg, transparent, transparent 10px,
-      var(--c-surface-active) 10px, var(--c-surface-active) 20px
-    );
-    opacity: 0.4;
-    background-size: 28.28px 28.28px;
-    animation: moveStripes 2s linear infinite;
-  }
-  @keyframes moveStripes {
-    0% { background-position: 0 0; }
-    100% { background-position: 28.28px 0; }
-  }
-  @media (prefers-reduced-motion: reduce) {
-    .row.striped::before { animation: none; }
-  }
+  /* THE NOW-PLAYING ROW — the queue's exact position (.active) and the playing
+     file anywhere else (.striped, class name kept for its tests). One look for
+     both: the accent title and the equaliser in the number column.
+     No plate: the old active plate (surface-active, ~#414141) put the accent
+     title at 2.7:1 and the muted duration at 2.9:1; on the page ground the accent
+     is 4.9:1. The moving diagonal stripes are gone too — a second, louder
+     now-playing signal that animated for as long as the song played. */
+  .active .title,
+  .striped .title { color: var(--c-accent-btn); }
 
   .left, .info, .right { position: relative; z-index: 1; }
   .left {
@@ -310,8 +318,6 @@
     align-items: center;
     gap: var(--space-3);
     margin-right: var(--space-4);
-    width: 80px;
-    min-width: 80px;
     flex-shrink: 0;
   }
 
@@ -321,15 +327,26 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    /* 44px: the handle is the ONLY way to reorder on a touchscreen. */
+    /* The handle is the ONLY way to reorder on a touchscreen. */
     width: var(--control-h-lg);
     height: var(--control-h-lg);
+    /* Edit mode must not move the row: the handle takes exactly the footprint
+       of the number it replaces (TrackPlaybackIndicator's 28px .num-box) and its
+       larger hit box overhangs evenly into the row's padding and the gap. */
+    margin-inline: calc((var(--num-w) - var(--control-h-lg)) / 2);
     background: none;
     border: none;
     padding: 0;
     border-radius: var(--radius-sm);
   }
   .drag-handle:active { cursor: grabbing; color: var(--c-text-primary); }
+  @media (pointer: coarse) {
+    .drag-handle {
+      width: var(--target-touch);
+      height: var(--target-touch);
+      margin-inline: calc((var(--num-w) - var(--target-touch)) / 2);
+    }
+  }
 
   .icon-small {
     width: var(--icon-size-xs);
@@ -359,30 +376,32 @@
     justify-content: center;
     gap: var(--space-0_5);
   }
-  .title-row {
-    display: flex;
-    align-items: center;
-    gap: var(--space-2);
-    min-width: 0;
-  }
   .title {
     font-size: var(--text-lg);
     font-weight: var(--weight-medium);
     color: var(--c-text-primary);
     line-height: var(--leading-snug);
   }
-  .active .title { color: var(--c-accent-btn); }
+
+  .title-row {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    min-width: 0;
+  }
 
   .artist {
     font-size: var(--text-base);
     color: var(--c-text-secondary);
     width: fit-content;
     max-width: 100%;
+    min-width: 0;
     background: none;
     border: none;
     padding: 0;
     text-align: left;
     font-family: inherit;
+    line-height: inherit;
   }
   /* The artist name is a text button, so its focus plate is a chip with real
      padding — negative margins keep the row's two-line layout byte-identical
@@ -392,39 +411,75 @@
     border-radius: var(--radius-sm);
     padding: var(--space-1) var(--space-2);
     margin: calc(-1 * var(--space-1)) calc(-1 * var(--space-2));
+    /* The underline is drawn below the descenders at a hairline weight, so
+       "Georgy" stays readable under it (the UA default cut through the g/y). */
+    text-underline-offset: 0.2em;
+    text-decoration-thickness: var(--border-width-thin);
+    text-decoration-skip-ink: auto;
   }
-  .artist.link:hover {
-    text-decoration: underline;
-    color: var(--c-text-primary);
-    cursor: pointer;
+  @media (hover: hover) {
+    .artist.link:hover {
+      text-decoration-line: underline;
+      color: var(--c-text-primary);
+      cursor: pointer;
+    }
   }
+
+  /* A focused row gets the shared gray plate; everything written on it follows
+     the plate's label colour instead of keeping its own (the accent title was
+     2.7:1 on it, the secondary artist 3.1:1, and in gruvbox the cream title
+     2.4:1 on the light plate). */
+  .row:focus-visible :is(.title, .artist, .dur, .brand-icon-inline) { color: inherit; }
 
   .right {
     margin-left: auto;
     display: flex;
     align-items: center;
     gap: var(--space-2);
+    /* Air between the truncated title and the first mark, so "…" never
+       touches the service icon. */
+    padding-left: var(--space-2);
+  }
+  /* Touch: the 44px boxes already keep the glyphs 24px apart, so the gaps
+     between them shrink and the title keeps its width. */
+  @media (pointer: coarse) {
+    .right { gap: var(--space-1); }
+  }
+  /* The last slot holds the duration, or the remove button in edit mode, at one
+     width — the wider of the two — in EVERY list, so entering edit mode moves
+     nothing and the "…" and the heart stand on the same vertical in an album,
+     the queue and a playlist. Its font size is the timecode's, so 4.5ch is the
+     timecode's own ch. */
+  .end-slot {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    flex-shrink: 0;
+    font-size: var(--text-sm);
+    width: max(4.5ch, var(--control-h-lg));
+  }
+  @media (pointer: coarse) {
+    .end-slot { width: max(4.5ch, var(--target-touch)); }
+  }
+  /* Timecode role: --text-sm / --weight-medium / tabular-nums, shared with the
+     player's time row. A fixed column (4.5ch fits "88:88" in tabular figures) so
+     the title column never jitters between rows, and a long timecode grows the
+     box instead of spilling out of it. */
+  /* Secondary, not muted: the muted grey fell to 4.0:1 on the hover plate. */
+  .dur {
+    font-size: var(--text-sm);
+    font-weight: var(--weight-medium);
+    color: var(--c-text-secondary);
+    font-variant-numeric: tabular-nums;
+    min-width: 4.5ch;
+    flex-shrink: 0;
+    text-align: right;
   }
   /* Destructive action: the × is muted at rest and red under the finger. The
      button itself is the shared primitive. */
   .right :global(.remove) { color: var(--c-text-muted); }
   .right :global(.remove:hover) { color: var(--c-accent-btn); }
-  /* Timecode role: --text-sm / --weight-medium / tabular-nums, shared with the
-     player's time row. Was 14px/400 here, 12px/600 there, 10px/600 in the dock and
-     11px/700 in the tooltip — four values for one role. */
-  .dur {
-    font-size: var(--text-sm);
-    font-weight: var(--weight-medium);
-    color: var(--c-text-muted);
-    font-variant-numeric: tabular-nums;
-    /* Fixed column so the title column never jitters between rows; min-width +
-       flex-shrink so a long M:SS (podcast, radio set-up) cannot grow the box and
-       squeeze the title — the number is unbreakable, so it would not shrink. */
-    width: 28px;
-    min-width: 28px;
-    flex-shrink: 0;
-    text-align: right;
-  }
+
   /* The row's secondary action stays quiet until the finger is on it. */
   .right :global(.context-menu-btn) { opacity: var(--opacity-muted); }
   .right :global(.context-menu-btn:hover) { opacity: var(--opacity-visible); }
@@ -438,4 +493,8 @@
     opacity: var(--opacity-strong);
   }
   .brand-icon-inline :global(svg) { width: 100%; height: 100%; }
+
+  @media (prefers-reduced-motion: reduce) {
+    .row { transition: none; }
+  }
 </style>

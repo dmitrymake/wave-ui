@@ -6,6 +6,7 @@
   // shares — see the file header for why it is scoped to `.settings`.
   import "./settings/settings.css";
   import { fade } from "svelte/transition";
+  import { MOTION } from "../../lib/transitions";
   import { YandexService } from "../../lib/yandexService";
   import ServicesSettings from "./settings/ServicesSettings.svelte";
   import AlarmSettings from "./settings/AlarmSettings.svelte";
@@ -18,7 +19,7 @@
   });
 </script>
 
-<div class="view-container scrollable settings" in:fade={{ duration: 200 }}>
+<div class="view-container scrollable settings" in:fade={{ duration: MOTION.fast }}>
   <div class="content-padded">
     <!-- No <h1>Settings</h1> here: the top bar already shows the current
          section, and the duplicate heading cost a whole line of screen. The

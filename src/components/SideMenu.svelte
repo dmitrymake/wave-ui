@@ -2,6 +2,7 @@
 <!-- Copyright (c) 2025 dmitrymake -->
 <script lang="ts">
   import { fade } from "svelte/transition";
+  import { MOTION } from "../lib/transitions";
   import logo from "../assets/wave-logo.svg?raw";
   import { ICONS } from "../lib/icons";
   import {
@@ -89,7 +90,7 @@
     class="backdrop"
     onclick={() => onClose?.()}
     role="presentation"
-    transition:fade={{ duration: 200 }}
+    transition:fade={{ duration: MOTION.base }}
   ></div>
 {/if}
 
@@ -100,7 +101,7 @@
   style:transform={isOpen ? `translateX(${translateX}px)` : ""}
   style:transition={isSwiping
     ? "none"
-    : "width var(--dur-slow) var(--ease-emphasized), transform var(--dur-base) var(--ease-default)"}
+    : "width var(--dur-slow) var(--ease-emphasized), transform var(--dur-base) var(--ease-emphasized)"}
   ontouchstart={handleTouchStart}
   ontouchmove={handleTouchMove}
   ontouchend={handleTouchEnd}
@@ -176,7 +177,7 @@
           >{@html ICONS.SYNC}</span
         >
         <span class="label-text" class:hidden={$isSidebarCollapsed}
-          >{$isSyncingLibrary ? "Syncing..." : "Update Library"}</span
+          >{$isSyncingLibrary ? "Syncing…" : "Update Library"}</span
         >
       </button>
 
@@ -379,9 +380,11 @@
   .nav-item:active {
     transform: scale(0.97);
   }
-  .nav-item:hover {
-    background: var(--c-surface-hover);
-    color: var(--c-text-primary);
+  @media (hover: hover) {
+    .nav-item:hover {
+      background: var(--c-surface-hover);
+      color: var(--c-text-primary);
+    }
   }
   /* AA: dark label on the accent-btn fill (5.53:1 default / 5.84:1 gruvbox).
      White on --c-accent was 3.79 / 3.41 — below AA in both themes. */
@@ -439,7 +442,7 @@
   .footer-text {
     font-size: var(--text-xs);
     color: var(--c-text-muted);
-    transition: opacity var(--dur-fast);
+    transition: opacity var(--dur-fast) var(--ease-default);
     white-space: nowrap;
   }
   .footer-text.hidden {
@@ -456,7 +459,9 @@
       height: 100dvh;
       width: var(--dock-w) !important;
       transform: translateX(-100%);
-      transition: transform var(--dur-base) var(--ease-default);
+      /* Same curve as every other sheet: decelerate in, and the backdrop fades
+         on the same 300ms. */
+      transition: transform var(--dur-base) var(--ease-emphasized);
     }
     .side-menu.mobile-open {
       transform: translateX(0);
@@ -497,6 +502,18 @@
     }
     .sep {
       margin: var(--space-3) var(--space-8);
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .side-menu,
+    .chevron,
+    .logo-wrapper,
+    .label-text {
+      transition: none !important;
+    }
+    .spin {
+      animation: none;
     }
   }
 

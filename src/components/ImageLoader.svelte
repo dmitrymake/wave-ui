@@ -2,6 +2,7 @@
 <!-- Copyright (c) 2025 dmitrymake -->
 <script lang="ts">
   import { fade } from "svelte/transition";
+  import { MOTION } from "../lib/transitions";
   import type { Snippet } from "svelte";
   import Skeleton from "./Skeleton.svelte";
 
@@ -37,7 +38,7 @@
 
 <div class="loader" style="border-radius: {radius}">
   {#if status === "loading"}
-    <div class="skel" out:fade={{ duration: 200 }}>
+    <div class="skel" out:fade={{ duration: MOTION.fast }}>
       <Skeleton width="100%" height="100%" {radius} />
     </div>
   {/if}

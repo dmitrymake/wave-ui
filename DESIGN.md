@@ -3,10 +3,10 @@
 > Техническое задание дизайн-системы для **Wave UI** — лёгкого Svelte 5 SPA-плеера для moOde Audio.
 > Документ предназначен для дальнейшей доработки дизайна в **Claude Design**.
 >
-> **Статус:** канонический набор токенов и примитивов под **визуальный паритет** с текущим UI.
-> Каждое реально используемое в коде «сырое» значение покрыто токеном. «Нечётные» (off-scale)
-> значения токенизированы **как есть** и помечены кандидатами на рационализацию — менять их
-> сейчас нельзя (это уже визуальное изменение, относится к этапу Claude Design, см. §8).
+> **Статус:** канонический набор токенов и примитивов. Фаза паритета завершена; проходы
+> «Claude Design» и «типографика / отступы / движение» рационализировали шкалы (см. §8) и ввели
+> типографические роли (§2.3), единый бейдж и строку фактов (§4.5), тач-порог 44px (§2.10),
+> токены движения с reduced-motion (§2.9). Значения в таблицах совпадают с `src/styles/tokens.css`.
 
 ---
 
@@ -17,7 +17,8 @@
 - **Всё остальное** (отступы, типографика, радиусы, тени, z-index, анимации, размеры контролов, иконок, opacity) — инвариантно для обеих тем → новый статический файл `src/styles/tokens.css` (`:root`).
 - Композитные токены (`--border-*`, `--shadow-*`) живут в `tokens.css`, но **ссылаются** на цвет-токены из темы → резолвятся под активную тему в рантайме.
 - Порядок подключения CSS: **`tokens.css` → `shared.css` → `MusicViews.css`**, затем `theme.ts` инжектит цвета поверх.
-- Брейкпоинты и длительности JS-переходов **нельзя** хранить в CSS-переменных там, где они нужны в `@media`/Svelte-transition — зеркалить в `src/lib/constants.ts` (`BREAKPOINTS`, `MOTION`).
+- Брейкпоинты и длительности JS-переходов **нельзя** хранить в CSS-переменных там, где они нужны в `@media`/Svelte-transition: брейкпоинты — литералы в `@media` (документированы в §2.15), длительности — `MOTION` в `src/lib/transitions.ts` (зеркало `--dur-*`, уважает reduced-motion).
+- Типографика — через **роли** (§2.3); чипы — только `.badge` (качество/состояние), факты — `.meta-line` (§4.5); качество moOde — только через `src/lib/quality.ts`.
 
 ---
 
@@ -62,97 +63,112 @@ Wave UI — однокартиночный плеер. Интерфейс ори
 
 ### 2.2. Отступы — `--space-*` (invariant)
 
-Базовая единица — **4px**. Двухуровневая шкала: основная (кратна 4) + off-scale алиасы под паритет.
+Базовая единица — **4px**. Одна лестница (кратная 4) и четыре «не-кратных» значения, у каждого из которых есть владелец-геометрия (не «подгонка»).
 
-#### Основная шкала (on-scale, /4)
+**Роли** (выбирать по роли, не по «похоже»; у зазора ровно один владелец — flex/grid-родитель, а не margin ребёнка):
+`inset --space-4` — поле страницы · `pair --space-2` — внутри группы (заголовок→значение, иконка→подпись) · `row --space-3` — между частями одного блока · `group --space-6` — между группами · `section --space-8` — между секциями.
+
+#### Основная шкала (/4)
 
 | Токен | Значение | Назначение |
 |---|---|---|
-| `--space-0` | `0` | Сброс отступов/инсетов (~53 вхождений). Для `!important` — `var(--space-0) !important`. |
-| `--space-0_5` | `2px` | 0.5×. Микро-отступы бейджей/индикаторов. |
-| `--space-1` | `4px` | 1×. Очень частый базовый отступ. |
-| `--space-2` | `8px` | 2×. `gap:8px` ×14. |
-| `--space-3` | `12px` | 3×. `gap:12px` ×11, `margin-bottom:12px` ×8. |
-| `--space-4` | `16px` | 4×. Канонический внутренний отступ контейнера. `padding:0 16px` ×10. |
-| `--space-5` | `20px` | 5×. `gap:20px` ×6. |
-| `--space-6` | `24px` | 6×. `margin-bottom:24px` ×5. |
-| `--space-8` | `32px` | 8×. Отступы секций настроек ×5. |
-| `--space-10` | `40px` | 10×. Padding empty-state ×3. Отрицательный inset через `calc(-1 * var(--space-10))`. |
+| `--space-0` | `0` | Сброс. |
+| `--space-1` | `4px` | 1×: микро-зазоры, «шапка» чипа. |
+| `--space-2` | `8px` | 2×: **pair**. |
+| `--space-3` | `12px` | 3×: **row**, паддинг карточки. |
+| `--space-4` | `16px` | 4×: **inset** — единственное поле страницы. |
+| `--space-5` | `20px` | 5×: гаттер грида (Pi). |
+| `--space-6` | `24px` | 6×: **group**. |
+| `--space-7` | `28px` | 7×: «отрыв» (SideMenu `.sep`, тултип дока). |
+| `--space-8` | `32px` | 8×: **section**. |
+| `--space-10` | `40px` | 10×: паддинг empty-state. |
 
-#### Off-scale алиасы (паритет; кандидаты на рационализацию — §8)
+#### Не-кратные (только у названных владельцев)
 
-| Токен | Значение | Назначение | Кандидат |
-|---|---|---|---|
-| `--space-px` | `1px` | Хэйрлайн / субпиксельный сдвиг (VolumeSlider). | — |
-| `--space-2xs` | `6px` | `gap:6px` ×5, `padding:6px` ×3. | → 4 или 8 |
-| `--space-2_5` | `10px` | **Самый частый gap** (`gap:10px` ×15). Отрицательный — `calc(-1 * var(--space-2_5))`. | → 8 или 12 |
-| `--space-3px` | `3px` | Один бейдж. | → 2/4 |
-| `--space-5px` | `5px` | Редкий. | → 4/6 |
-| `--space-7px` | `7px` | Центровка thumb в VolumeSlider — паритет-критично. | → 8 |
-| `--space-14px` | `14px` | Строки контекст/sort-меню. | → 12/16 |
-| `--space-15px` | `15px` | MainScreen. | → 16 |
-| `--space-28px` | `28px` | 7×4, но редко (SideMenu / MiniPlayer fold). Отрицательный — `calc`. | (формально на шкале) |
-| `--space-30px` | `30px` | FullPlayer gap, стрелка select в Alarm. | → 32 |
-| `--space-50px` | `50px` | MainScreen `padding-bottom` (зазор под мини-плеер), YandexNotConnected. | → 48 или привязать к `--mini-player-height` |
+| Токен | Значение | Владелец |
+|---|---|---|
+| `--space-0_5` | `2px` | Хэйрлайн: толщина рельса прогресса, «шапка» 10px-чипа (`.badge--sm`), зазор между двумя строками одной группы (заголовок→артист в строке, строка фактов карточки). |
+| `--space-px` | `1px` | Инсет ручки свитча, 1px-разделитель. |
+| `--space-2xs` | `6px` | Половина чего-то: вылет хит-зоны прогресса дока, отступ точки PlayMode. |
+| `--space-14px` | `14px` | Хит-зона прогресса дока; горизонтальный инсет строк контекст/sort-меню. |
 
-> **Правила.** Отрицательные отступы — `calc(-1 * var(--space-N))`, отдельных токенов нет. Ключевое слово `auto` остаётся литералом (это не величина). Составные значения собираются из токенов: `padding: var(--space-2) var(--space-3)`.
+> Удалены прошлыми проходами: `--space-2_5`, `--space-3px`, `--space-5px`, `--space-7px`, `--space-15px`, `--space-28px` (→ `--space-7`), `--space-30px`, `--space-50px`. Отрицательные отступы — `calc(-1 * var(--space-N))`; `auto` — литерал. Типографские зазоры внутри строки текста (слово·слово в строке фактов) задаются в `em` (`0.3em`) — это межсловный пробел шрифта, а не отступ.
 
 ---
 
 ### 2.3. Типографика (invariant)
 
-#### Размер шрифта — `--text-*` (T-shirt)
+#### Роли (выбирать роль, а не «ближайший размер»)
 
-| Токен | Значение | Назначение |
+| Роль | Размер | Вес | Leading | Tracking | Где |
+|---|---|---|---|---|---|
+| **display** | 40 desktop · 24 phone · 20 Pi; 24/32 плеер | bold | `--leading-tight` | `--tracking-display` | `.header-title`, заголовок FullPlayer — один на экран |
+| **title** | 20 (топбар), 18 (секции настроек) | bold | `--leading-snug` | `--tracking-display` (≥20px) | `.view-title`, `.settings .section-header` |
+| **item** | 16 | medium | `--leading-snug` | 0 | трек, карточка, заголовок дока |
+| **body** | 14 | regular | `--leading-normal` | 0 | исполнитель, строки меню, сообщения, лейблы настроек |
+| **meta** | 12 (14 в desktop-хедере) | regular, **tabular** | `--leading-normal` | 0 | `.meta-line` «1986 · 2 tracks · 7 min», строка фактов карточки, таймкоды |
+| **eyebrow** | 12 | semibold | `--leading-none` | `--tracking-caps` | ALBUM / PLAYLIST / секции поиска — **единственные капсы с трекингом** |
+| **badge** | 11 (10 на строке/карточке) | semibold, **tabular** | `--leading-none` | 0 | качество/статус, никогда не счётчик |
+
+**Цифры табличные** везде, где стоят в колонке или меняются на месте: длительности, номера треков, время, счётчики, годы, битрейт, часы.
+
+**Микротипографика:** настоящее многоточие «…» (`ELLIPSIS` в `src/lib/format.ts`), неразрывный пробел между числом и единицей («7 min», «320 kbps», «2 tracks» — `NBSP`, `countLabel()`, `bitrateLabel()`), согласование числа («1 track»), типографские кавычки “…” вокруг имён в UI-копи, диапазон — через en dash («A–Z»). `text-wrap: balance` для многострочных заголовков, `pretty` для подсказок/пустых состояний. Подчёркивание ссылки артиста: `text-underline-offset: 0.2em`, толщина `--border-width-thin`.
+
+#### Размер шрифта — `--text-*`
+
+| Токен | Значение | Роль |
 |---|---|---|
-| `--text-2xs` | `10px` | Микро-капшен: nav-метки, бейджи, мета плиток. |
-| `--text-xs` | `11px` | Капшен: артист MiniPlayer, подсказки, `.meta-tag`. |
-| `--text-sm` | `12px` | Маленький капшен/мета. |
-| `--text-base-sm` | `13px` | Плотный body: TrackRow, пункты меню. Off-scale кандидат. `!important` → `var(--text-base-sm) !important`. |
-| `--text-base` | `14px` | **Основной body (23 вхождения — самый частый).** |
-| `--text-md` | `15px` | Сильный body/лейбл: заголовки треков, карточек. Off-scale (между 14/16). |
-| `--text-lg` | `16px` | Лейбл/сабтайтл; безопасный для iOS-zoom размер input. |
-| `--text-xl` | `18px` | Заголовок секций/настроек. `!important` → `var(--text-xl) !important`. |
-| `--text-2xl` | `20px` | Заголовок страницы. |
-| `--text-3xl` | `24px` | Display-sm: заголовок FullPlayer. |
-| `--text-4xl` | `28px` | Display. Off-scale (одиночный, между 24/32). |
-| `--text-5xl` | `32px` | Display: заголовок SettingsView. |
-| `--text-6xl` | `40px` | Display-xl: hero-числа. |
-| `--text-7xl` | `48px` | Display-2xl: hero. |
-| `--text-8xl` | `60px` | Display-3xl: иконка empty-state. Off-scale кандидат. |
+| `--text-2xs` | `10px` | компактный бейдж на строке/карточке — **никогда не body** |
+| `--text-xs` | `11px` | бейдж (хедер/плеер), подпись футера |
+| `--text-sm` | `12px` | eyebrow, meta, подсказки, таймкоды |
+| `--text-base` | `14px` | body |
+| `--text-lg` | `16px` | item; безопасный от iOS-zoom инпут |
+| `--text-xl` | `18px` | title: секции настроек; артист в desktop-плеере |
+| `--text-2xl` | `20px` | title: топбар, заголовок страницы на Pi, desktop-исполнитель |
+| `--text-3xl` | `24px` | display: заголовок страницы на телефоне, FullPlayer |
+| `--text-4xl` | `32px` | display: заголовок desktop-FullPlayer (новый) |
+| `--text-6xl` | `40px` | display: заголовок страницы на desktop |
 
-#### Высота строки — `--leading-*`
+> Удалён `--text-8xl` (60px): его единственным потребителем был цветной эмодзи 🔍 в пустом состоянии поиска — теперь это глиф поиска размера эмблемы.
 
-| Токен | Значение | Назначение |
+#### Высота строки — `--leading-*` (лестница сужается с ростом кегля)
+
+| Токен | Значение | Роль |
 |---|---|---|
-| `--leading-none` | `1` | Иконки / одиночные числа. |
-| `--leading-tight` | `1.1` | Очень плотный display. Off-scale (≈snug). |
-| `--leading-snug` | `1.2` | Плотный многострочник: TrackRow. |
-| `--leading-normal` | `1.5` | Читаемый body: Modal. |
+| `--leading-none` | `1` | чипы, иконки, однострочные контролы фиксированной высоты, eyebrow |
+| `--leading-tight` | `1.15` | display 24–40px (при 1.3 две строки 40px читаются как два заголовка) |
+| `--leading-snug` | `1.3` | titles/items 16–20px, 2-строчные кламп |
+| `--leading-normal` | `1.45` | body/meta 11–14px — дефолт `body` |
 
-#### Трекинг — `--tracking-*`
+#### Трекинг — `--tracking-*` (в `em`, чтобы один токен был верен на любом кегле)
 
-| Токен | Значение | Назначение |
+| Токен | Значение | Роль |
 |---|---|---|
-| `--tracking-tight` | `0.2px` | Лёгкий: `.meta-tag`. Off-scale (≈wide). |
-| `--tracking-wide` | `0.5px` | Капс-пиллы/бейджи. |
+| `--tracking-caps` | `0.06em` | только прописные eyebrow/лейблы |
+| `--tracking-display` | `-0.02em` | жирные заголовки ≥20px (крупный гротеск на «текстовом» трекинге выглядит разреженным) |
+
+> Удалён `--tracking-wide` (0.5px): его потребители — капсовая primary-кнопка (теперь Title Case), eyebrow (→ `--tracking-caps`), капсовый статус радио (→ бейдж).
 
 #### Жирность — `--weight-*`
 
 | Токен | Значение | Назначение |
 |---|---|---|
-| `--weight-regular` | `400` | Дефолт body. |
-| `--weight-medium` | `500` | Заголовки треков, `sort-item.selected`. |
-| `--weight-semibold` | `600` | **Самый частый акцент (×18).** |
-| `--weight-bold` | `700` | ×11 как `700` + ×4 как `bold` (нормализовано в 700 — визуально идентично). |
-| `--weight-extrabold` | `800` | Display-заголовки, бейдж RadioView. |
+| `--weight-regular` | `400` | body, исполнитель (именован для мест, где сбрасывается унаследованный вес) |
+| `--weight-medium` | `500` | item-заголовки |
+| `--weight-semibold` | `600` | eyebrow, бейджи, **все кнопки** (`--weight-control`) |
+| `--weight-bold` | `700` | display/title |
 
 #### Семейство — `--font-*`
 
-| Токен | Значение | Назначение |
-|---|---|---|
-| `--font-sans` | `-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif` | Body. Объединяет два стека (`shared.css` без Helvetica/Arial vs `main.css` с ними) — системный шрифт резолвится первым, хвост-фоллбэк визуально инертен. `font-family: inherit` (кнопки/инпуты) остаётся литералом (поведение, не значение). |
-| `--font-mono` | `monospace` | Технические/числовые поля (версия, время, коды). |
+| Токен | Значение |
+|---|---|
+| `--font-sans` | `-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Noto Sans", "Adwaita Sans", Cantarell, Ubuntu, "Helvetica Neue", Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji"` |
+| `--font-mono` | `ui-monospace, "SF Mono", SFMono-Regular, Menlo, "Cascadia Mono", Consolas, "Roboto Mono", "Noto Sans Mono", "DejaVu Sans Mono", "Liberation Mono", monospace` |
+
+- В старом стеке не было ни одного Linux-семейства: Chromium на Linux падал в `sans-serif` → свой дефолт «Arial» → метрический клон fontconfig **Liberation Sans** (проверено `CSS.getPlatformFontsForNode`). Теперь: macOS/iOS — SF, Windows — Segoe UI, Android/ChromeOS — Roboto, Linux — Noto Sans (или Adwaita/Cantarell/Ubuntu), всё с кириллицей.
+- **`system-ui` сознательно не в стеке:** на Pi (RPi OS Lite без десктопа) он резолвится через fontconfig в DejaVu Sans — заметно шире Liberation Sans, которую Pi рендерит сейчас, и перерезал бы утверждённую раскладку 800×480. Pi по-прежнему доходит до хвоста `Arial` (= Liberation Sans). Замер при 16px: Noto Sans на 6% шире Liberation, Adwaita Sans — на 8%.
+- Mono — только технические строки (версия, диагностика). Время и счётчики — табличные цифры sans, не mono.
+- Веб-шрифт не подключается (§3.10 DESIGN_AUDIT; устройство в LAN, может быть офлайн). Предложение self-hosted шрифта — см. отчёт дизайн-прохода.
 
 ---
 
@@ -160,15 +176,14 @@ Wave UI — однокартиночный плеер. Интерфейс ори
 
 | Токен | Значение | Назначение |
 |---|---|---|
-| `--radius-xs` | `2px` | Рейлы/скроллбар/прогресс (2px ×7). **Новый**, ниже `--radius-sm`. `1px`/`3px` — off-scale, мапятся сюда (для строгого байт-паритета держать литералом). |
-| `--radius-sm` | `4px` | Существует. Мигрировать сырые `4px` (×6). Дефолт Skeleton. |
-| `--radius-md` | `8px` | Существует. Мигрировать сырые `8px` (×12). |
-| `--radius-lg` | `12px` | Существует. Мигрировать сырые `12px` (×12). |
-| `--radius-xl` | `20px` | Существует, но **рассинхронизирован по темам** (default 20 / gruvbox 16) — БАГ инвариантной оси. **Унифицировать на 20px** (gruvbox 16→20: согласованное мелкое визуальное изменение, см. §8). |
-| `--radius-full` | `9999px` | Существует. Капсула/пилл. |
-| `--radius-circle` | `50%` | **Самый частый радиус (×18):** круглые аватары/кнопки/ручки/thumb. **Не равен** `--radius-full` для не-квадратных элементов → отдельный токен. |
-| `--radius-pill` | `var(--radius-full)` | Семантический алиас для полностью скруглённых пилл-контролов. Развязывает скругление пиллов от `--radius-xl` (иначе пиллы темо-зависимы на gruvbox). Паритет-безопасно (full == капсула для коротких контролов). Для строгого байт-паритета литерала `20px` → `--radius-pill: 20px`. Сюда же рационализируются `30px` (toast) и `10px` (count pill). |
-| `--radius-6px` | `6px` | Off-scale, один (`.mono-badge` в AlarmSettings). Кандидат → sm/md. |
+| `--radius-xs` | `2px` | Рельсы/скроллбар/прогресс, компактный бейдж `.badge--sm`. |
+| `--radius-sm` | `4px` | Бейдж `.badge`, миниатюра строки, фокус-плашка ссылки. |
+| `--radius-md` | `8px` | Обложка карточки, строка списка, инпут. |
+| `--radius-lg` | `12px` | Карточка/модалка/меню, обложка хедера, поле поиска. |
+| `--radius-xl` | `16px` | Обложка FullPlayer. |
+| `--radius-full` | `9999px` | Капсула. |
+| `--radius-circle` | `50%` | Круглые кнопки/ручки/точки. |
+| `--radius-pill` | `var(--radius-full)` | Семантический алиас пилл-контролов (Button, back-кнопка, toast). |
 
 ---
 
@@ -198,16 +213,14 @@ Wave UI — однокартиночный плеер. Интерфейс ори
 | `--shadow-xs` | `0 1px 3px var(--c-shadow-card)` | Лёгкая. Паритет-риск: существуют варианты на `--c-black-50` и сыром `rgba(0,0,0,0.3)`. Для тяжёлого цвета — `--shadow-xs-strong: 0 1px 3px var(--c-black-50)`. |
 | `--shadow-sm` | `0 2px 4px var(--c-shadow-card)` | `0 2px 5px` (MiniPlayer) близко, но не идентично (5 vs 4) — off-scale. Для строгого паритета цвета — `--shadow-sm-strong` на `--c-black-50`. |
 | `--shadow-md` | `0 4px 12px var(--c-shadow-card)` | Приподнятая / popover. |
-| `--shadow-md-popover` | `0 4px 15px var(--c-shadow-popover)` | MainScreen popover (×2). Off-scale blur (15). Кандидат → слить с `--shadow-md`. |
 | `--shadow-lg` | `0 8px 24px var(--c-shadow-card)` | Hover карточки/грида. `0 10px 30px` — почти дубль, off-scale кандидат. |
 | `--shadow-xl` | `0 10px 40px var(--c-black-70)` | Меню/модалка/контекст. Паритет-риск: та же геометрия с `--c-shadow-header` (gruvbox=0.2) — **разные** тени по темам, **не сливать**. Сырое `rgba(0,0,0,0.7)` → `--c-black-70`. |
 | `--shadow-xl-header` | `0 10px 40px var(--c-shadow-header)` | Хедер MusicViews. Темо-различный цвет (default 0.5 / gruvbox 0.2). Держать отдельно ради паритета gruvbox. |
 | `--shadow-2xl` | `0 20px 50px var(--c-shadow-phantom)` | Самая глубокая (drag-фантом, оверлей main.css). Паритет: сырое `rgba(0,0,0,0.5)` совпадает с gruvbox phantom, но **не** с default phantom (0.7). Если значение должно остаться ровно 0.5 — использовать `--c-shadow-popover` (default 0.5). |
-| `--shadow-glow` | `0 0 10px var(--c-shadow-glow-accent)` | Акцентное свечение (RadioView active). |
 | `--shadow-focus-ring` | `0 0 0 3px var(--c-accent)` | Фокус-кольцо (MusicViews). |
 | `--shadow-error-ring` | `0 0 0 1px var(--c-error-ring)` | Кольцо ошибки в Modal. Нужен **новый** per-theme токен `--c-error-ring` (default `rgba(255,68,68,0.3)`; gruvbox — производное от `--c-error`) в `theme.ts`. |
 
-> **БАГ (не паритет, исправить отдельно):** `FullPlayer.svelte` пишет `box-shadow: var(--c-shadow-popover)` / `var(--c-shadow-card)` — цвет-токен как **полное** значение `box-shadow` → невалидно, тень не рендерится. Замена на `--shadow-md`/`--shadow-xl` = исправление (появится тень) — это визуальное изменение, согласовать с владельцем отдельно.
+> Удалены: `--shadow-md-popover` (слит с `--shadow-md`: toast и офлайн-баннер) и `--shadow-glow` (единственный потребитель — светящийся капсовый статус радио, теперь бейдж). Вместе с ним из `theme.ts`/`shared.css` ушёл неиспользуемый цвет `--c-shadow-popover`.
 
 ---
 
@@ -233,57 +246,43 @@ Wave UI — однокартиночный плеер. Интерфейс ори
 
 ### 2.9. Анимации (invariant)
 
-#### Переходы-композиты — `--trans-*` (существуют, недоиспользованы)
+**Правила движения:** только токены длительности/кривых; анимируются только `transform`/`opacity` (ручки прогресса едут на «каретке» через `translateX`, а не через `left`); каждое движение уважает `prefers-reduced-motion`; вход медленнее выхода; ничего декоративного.
 
 | Токен | Значение | Назначение |
 |---|---|---|
-| `--trans-fast` | `0.2s ease` | Применён только ×3 против ~21 сырого `0.2s ease`. **Самый большой разрыв адопции — внедрить.** |
-| `--trans-smooth` | `0.3s cubic-bezier(0.2, 0.8, 0.2, 1)` | **Ноль использований (мёртвый токен)**, 6 хардкод-совпадений — внедрить. |
+| `--dur-instant` | `0.1s` | Выход меню/модалки, press-feedback. |
+| `--dur-fast` | `0.2s` | Вход поповера/диалога, фейды, hover. |
+| `--dur-base` | `0.3s` | Шторки: drawer, FullPlayer, toast. |
+| `--dur-slow` | `0.4s` | Полёт обложки mini → full, ширина сайдбара. |
+| `--dur-tick` | `0.25s` | **Не выбор дизайнера:** плейхед скользит между двумя тиками статуса, поэтому это и есть `PLAYER_CONFIG.TICKER_INTERVAL` (250мс). Был безымянный кандидат `--dur-slow-2`. |
+| `--dur-pulse` | `2s` | Период «живой» петли: точка live-бейджа, точка офлайн-баннера. |
+| `--ease-default` | `ease` | Цвет/фон. |
+| `--ease-emphasized` | `cubic-bezier(0.2, 0.8, 0.2, 1)` | Вход всего, что появляется; drawer. |
+| `--ease-sharp` | `cubic-bezier(0.2, 0, 0, 1)` | Перестановка строк (drag). |
+| `--ease-linear` | `linear` | Прогресс, спиннер, marquee. |
+| `--trans-fast` / `--trans-smooth` | `0.2s ease` / `0.3s emphasized` | Шорткаты для совместимости. |
 
-#### Длительности — `--dur-*` (новые, для per-property переходов)
+**JS-переходы Svelte** (`fade`/`fly`/`scale`/`crossfade`) не читают `var()`: их длительности — `MOTION.instant|fast|base|slow` из `src/lib/transitions.ts` (зеркало `--dur-*`, менять вместе), кривая — `EASE_EMPHASIZED` (≈ `--ease-emphasized`). Каждый геттер `MOTION` возвращает **0** при `prefers-reduced-motion: reduce` — раньше JS-переходы игнорировали настройку целиком.
 
-| Токен | Значение | Назначение |
-|---|---|---|
-| `--dur-instant` | `0.1s` | 7 сырых `0.1s` микро-фидбэков нажатия. |
-| `--dur-fast` | `0.2s` | Аналог `--trans-fast` без easing. |
-| `--dur-base` | `0.3s` | Аналог `--trans-smooth` без easing. |
-| `--dur-slow` | `0.4s` | Drawer/width-анимации (SideMenu). `0.5s` близко — снап сюда или литерал. |
-| `--dur-slow-2` | `0.25s` | Off-scale одиночный. Кандидат → fast/base. |
+**Хореография:** меню/sort-меню/модалка — `in:scale` от 0.96 на `fast` c `EASE_EMPHASIZED`, `out:fade` на `instant`; подложки — `fade` на `fast`; drawer — `transform` на `base` + `--ease-emphasized`, подложка на том же `base`; toast/офлайн — `fly` на `base`. Press: кнопки `scale(.97)`, иконо-кнопки `.95`, карточки `.98`, строки — плашка `:active`. `:hover` в примитивах и строках — только под `(hover: hover)`: тач-экран «залипает» на последнем тапнутом элементе.
 
-#### Кривые — `--ease-*` (новые)
+> Удалены: `--dur-slow-2` (→ `--dur-tick`), `--ease-soft` (раньше).
 
-| Токен | Значение | Назначение |
-|---|---|---|
-| `--ease-default` | `ease` | Дефолтное ключевое слово. |
-| `--ease-emphasized` | `cubic-bezier(0.2, 0.8, 0.2, 1)` | Стандартный decelerate (== `--trans-smooth`). ×5. |
-| `--ease-sharp` | `cubic-bezier(0.2, 0, 0, 1)` | Кривая входа списков (BaseList/MusicViews). ×4. |
-| `--ease-soft` | `cubic-bezier(0.25, 0.46, 0.45, 0.94)` | SideMenu width/transform. Off-scale (≈emphasized). |
-| `--ease-linear` | `linear` | spin/progress/marquee. |
-
----
-
-### 2.10. Размеры контролов — `--control-*` / круглые / свитч / icon-btn-pad (invariant)
+### 2.10. Размеры контролов (invariant)
 
 | Токен | Значение | Назначение |
 |---|---|---|
-| `--control-h-sm` | `32px` | Минимальная высота интерактивной строки. |
-| `--control-h-md` | `36px` | Компакт-пилл / мобильный header-экшен. |
-| `--control-h-lg` | `40px` | Дефолтная/большая высота контрола. |
-| `--control-h-xl` | `48px` | XL-инпуты / nav сайдбара / mini play. |
-| `--control-h-2xl` | `50px` | Header-строки (ContextMenu/Modal). Off-scale vs 48. |
-| `--control-pad-x-sm` | `16px` | = `--space-4`; горизонтальный padding контрола. |
-| `--control-pad-x-md` | `20px` | = `--space-5`; дефолтный padding пилла. |
-| `--icon-btn-pad` | `8px` | Стандартный padding «голой» иконо-кнопки (~40px цель вокруг 24px глифа). |
-| `--icon-btn-pad-lg` | `10px` | Транспортная иконо-кнопка. Off-scale vs 8. |
-| `--icon-btn-pad-sm` | `6px` | Компактная (docked) иконо-кнопка. |
-| `--switch-w` | `44px` | Ширина дорожки тоггла. |
-| `--switch-h` | `24px` | Высота дорожки тоггла. |
-| `--switch-knob` | `20px` | Ручка тоггла; ход `translateX(20px)` = w − knob − 2×1px инсет. |
-| `--circle-btn-sm` | `28px` | Малая круглая иконо-кнопка. Off-scale vs 32. |
-| `--circle-btn-md` | `32px` | Дефолтная малая круглая. |
-| `--circle-play-sm` | `44px` | Docked play (FullPlayer). Off-scale. |
-| `--circle-play-md` | `48px` | Play MiniPlayer. |
-| `--circle-play-lg` | `64px` | Play FullPlayer. |
+| `--control-h-sm` | `32px` | Чип на обложке (IconButton `xs`). |
+| `--control-h-md` | `36px` | Кнопка `sm`, компактное поле. |
+| `--control-h-lg` | `40px` | Кнопка `md`, IconButton — **с мышью**. |
+| `--control-h-xl` | `48px` | Поле поиска, пункт навигации. |
+| `--control-h-2xl` | `var(--control-h-xl)` | Шапки ContextMenu/Modal. |
+| `--target-touch` | `44px` | **Тач-порог.** Под `(pointer: coarse)` хит-зона любого контрола ≥ 44×44: Button/IconButton растят бокс, 32px-чип на обложке сохраняет вид и растит невидимую хит-зону (`::after`). Мышь сохраняет плотность 40px. |
+| `--control-pad-x-sm/md` | `16px` / `20px` | Горизонтальный паддинг пиллов. |
+| `--switch-w/-h/-knob` | `44/24/20px` | Свитч. |
+| `--circle-btn-md` | `32px` | Малая круглая кнопка. |
+| `--circle-play-sm/md/lg` | `44/48/64px` | Play: docked / MiniPlayer / FullPlayer. |
+| `--knob-size` | `14px` | Ручка слайдера seek/громкости FullPlayer (была сырая 14px в двух местах). |
 
 ### 2.11. Размеры иконок — `--icon-size-*` (invariant)
 
@@ -309,30 +308,39 @@ Wave UI — однокартиночный плеер. Интерфейс ори
 | `--opacity-strong` | `0.8` | Почти непрозрачные оверлеи. `0.85/0.9/0.95` off-scale → консолидация к 0.8/1. |
 | `--opacity-visible` | `1` | Показанное состояние (×13). |
 
-### 2.13. Лейаут — (invariant, вынести из theme.ts)
+### 2.13. Лейаут (invariant)
 
 | Токен | Значение | Назначение |
 |---|---|---|
-| `--header-height` | `64px` | Сейчас задублирован (`theme.ts` + `shared.css`) → в `tokens.css`, убрать из `theme.colors`. |
-| `--mini-player-height` | `90px` | Та же дублизация → в `tokens.css`. NB: `--space-50px` концептуально выводится отсюда. |
-| `--icon-stroke-width` | `1.5px` | Сейчас только в `theme.colors` (нет в `shared.css :root`). Инвариантен (1.5px в обеих темах) → в `tokens.css`. |
+| `--header-height` | `64px` | Топбар. |
+| `--mini-player-height` | `90px` | Док. |
+| `--icon-stroke-width` | `1.5px` | Толщина штриха иконок. |
+| `--row-h` | `56px` | Строка трека / скелетон. |
+| `--thumb-sm/md/lg` | `40/48/64px` | Миниатюры строки / дока (телефон) / дока. |
+| `--sidebar-w` / `--sidebar-w-collapsed` | `250px` / `80px` | Сайдбар. |
+| `--dock-w` | `264px` | Docked FullPlayer (Pi), drawer. |
+| `--header-art-sm/md/lg` | `64px` / `96px` / `clamp(200px, 16vw, 240px)` | Квадрат обложки хедера: Pi / телефон / laptop→desktop (были литералы; desktop раньше фиксированные 200px). |
+| `--player-col-max` | `500px` | Колонка FullPlayer (был литерал). |
+| `--player-art-max` | `400px` | Обложка в этой колонке; на низком окне ужимается (был литерал). |
 
 ### 2.14. Контрольная типографика — алиасы (invariant)
 
 | Токен | Значение | Назначение |
 |---|---|---|
-| `--text-control` | `var(--text-base)` | Дефолтный размер текста контрола/лейбла; держит контролы в синхроне с body-шкалой. |
-| `--weight-control` | `var(--weight-bold)` | Жирность пилл-кнопок; вторичные контролы — `--weight-semibold`. |
+| `--text-control` | `var(--text-base)` | Размер подписи кнопки (14px). |
+| `--weight-control` | `var(--weight-semibold)` | Вес **всех** пилл-кнопок (был 700 + капс только у primary). На шрифте без 600 (Liberation на Pi) резолвится в Bold. |
 
 ### 2.15. Брейкпоинты — `--bp-*` (DOC-ONLY, см. §6.4)
 
 | Токен | Значение | Назначение |
 |---|---|---|
-| `--bp-sm` | `600px` | `max-width: 600px`; `max-height: 600px and orientation: landscape`. |
-| `--bp-md` | `768px` | Основной мобильный брейкпоинт (×7). Источник правды через `constants.ts`. |
-| `--bp-lg` | `800px` | Планшетный one-off (MusicViews). Кандидат → слить в `--bp-md`. |
+| `--bp-sm` | `600px` | `max-height: 600px and orientation: landscape` — docked-раскладка Pi (сайдбар + docked-плеер, без топбара и дока). |
+| `--bp-md` | `768px` | Телефон (портрет): гамбургер, грид карточек 140px, строка-хедер. |
+| `--bp-lg` | `800px` | **Ровно ширина экрана Pi:** блок `max-width: 800px` и есть раскладка Pi (не «планшетный one-off»), он остаётся. |
+| — | `769–900px` | Портретный планшет: плотность дока (без сердца и режима). |
+| — | `≥1024px` + `min-aspect-ratio: 5/4` | Две колонки FullPlayer. |
 
-> **CSS-переменные нельзя использовать внутри `@media`-feature-запросов.** `--bp-*` — документационные; реальный источник правды — `BREAKPOINTS` в `src/lib/constants.ts` для `matchMedia`; литералы в `@media`-правилах остаются.
+> **CSS-переменные нельзя использовать внутри `@media`-feature-запросов.** `--bp-*` — документационные, литералы в `@media`-правилах остаются. Там, где важна ширина **блока**, а не окна, — контейнерные запросы: секции настроек (480px).
 
 ---
 
@@ -347,7 +355,7 @@ Wave UI — однокартиночный плеер. Интерфейс ори
 - Семантика: `--c-heart`, `--c-error` + **новый** `--c-error-ring` (default `rgba(255,68,68,0.3)`, gruvbox — производное от `--c-error`; нужен для `--shadow-error-ring`).
 - Поверхности: `--c-surface-*` (hover/active/input/input-focus/button/button-hover/drag-phantom/drag-land), `--c-rail-bg(/-hover)`, `--c-skeleton-base`.
 - Границы (цвет): `--c-border`, `--c-border-dim`, `--c-border-bright`, `--c-border-dashed(/-hover)`.
-- Оверлеи/тени (цвет): `--c-overlay-dim/backdrop`, `--c-shadow-card/popover/header/phantom/glow-accent`.
+- Оверлеи/тени (цвет): `--c-overlay-dim/backdrop`, `--c-shadow-card/header/phantom/glow-accent` (`--c-shadow-popover` удалён — у него не осталось потребителей).
 - Иконки (цвет): `--c-icon-idle/hover/faint`.
 - Палитра плейлистов: `--c-pl-0..5`.
 
@@ -358,78 +366,59 @@ Wave UI — однокартиночный плеер. Интерфейс ори
 ## 3. Шкалы: визуальная логика
 
 ### 3.1. Отступы
-- **База 4px.** Ритм интерфейса строится на кратных 4 (`--space-1..10`).
-- Чем больше число — тем «крупнее» разделение: внутри кнопки (`--space-2`), внутри карточки (`--space-3/4`), между секциями (`--space-6/8`).
-- `--space-4` (16px) — канонический инсет контейнера. Используй его как дефолт для горизонтальных полей экрана.
-- Off-scale (6/10/14/15/30/50) — паритетные «острова». Не вводи новые off-scale значения; для нового отступа выбирай ближайшее on-scale.
+- **База 4px.** Ритм строится на кратных 4 (`--space-1..10`); роли — inset/pair/row/group/section (§2.2).
+- Близость несёт смысл: значение ближе к своему лейблу, чем к следующей группе.
+- `--space-4` (16px) — единственный инсет страницы.
+- Не-кратные — только четыре с владельцами (§2.2). Новая нужда в 2/3/5px — это задача раскладки, а не токена.
 
 ### 3.2. Типографика
-- T-shirt-шкала от `--text-2xs` (10px) до `--text-8xl` (60px).
-- **`--text-base` (14px) — основной body.** Заголовки/мета смещаются на ±шаг от него.
-- Связки по умолчанию: body → `--text-base` + `--weight-regular` + `--leading-normal`; заголовок трека → `--text-md` + `--weight-medium` + `--leading-snug`; капс-бейдж → `--text-2xs/xs` + `--weight-bold/extrabold` + `--tracking-wide`.
-- Off-scale размеры (13/15/28/60) сохранены под паритет; для нового текста бери ровный шаг шкалы.
+- Шкала `--text-2xs` (10) … `--text-6xl` (40); выбирается **роль** (§2.3), а не размер.
+- Иерархия держится размером и весом, а не цветом: display bold → item medium → body regular → meta (secondary, tabular) → eyebrow (единственные капсы).
+- Чипы — только для качества и состояния (`.badge`); факты (год, счётчики, длительность) — строкой `.meta-line` с «·».
+- Лестница leading сужается с ростом кегля (`none 1 → tight 1.15 → snug 1.3 → normal 1.45`); трекинг — в `em`.
 
 ### 3.3. Радиусы
-- Прогрессия скругления: `xs(2) → sm(4) → md(8) → lg(12) → xl(20)`. Чем крупнее поверхность — тем больше радиус.
-- `--radius-circle` (50%) — для круглых элементов (аватары, play-кнопки, ручки).
-- `--radius-pill`/`--radius-full` — для капсульных контролов (теги, пилл-кнопки).
+- Прогрессия: `xs(2) → sm(4) → md(8) → lg(12) → xl(16)`. Чем крупнее поверхность — тем больше радиус.
+- `--radius-circle` (50%) — круглые элементы; `--radius-pill`/`--radius-full` — капсулы (Button, back-кнопка, toast).
 - Не путай `--radius-circle` (50%) и `--radius-full` (9999px): для не-квадратных элементов это **разный** результат.
 
 ### 3.4. Тени и z-index
 - Тени по «высоте»: `xs → sm → md → lg → xl → 2xl`. Чем «выше» элемент над плоскостью — тем глубже тень.
-- Z-index — банды: локальные (`-1..10`) → mini-player (100) → sidebar (999) → dock (1000) → modal (2000) → toast (3000) → menu (9000) → drag (9999) → context-menu (10001). Между бандами большие зазоры намеренно.
+- Z-index — банды: локальные (`--z-base/above/content/overlay-local`, 1–10) → sidebar (999) → dock (1000) → modal (2000) → toast (3000) → menu (9000) → drag (9999) → context-menu (10001). Между бандами большие зазоры намеренно. Внутри дока — локальная шкала (`--z-base` грид, `--z-above` хит-зона прогресса) вместо сырых 101/105/110: док сам себе stacking context.
 
 ---
 
 ## 4. Компоненты-примитивы
 
-> На момент написания в `src/components/` существуют только специализированные `Modal.svelte`, `Skeleton.svelte`, `LikeButton.svelte`, `PlayModeButton.svelte`. **Единых примитивов кнопок/иконок нет** — ~15 разрозненных классов (`.btn-primary`, `.btn-secondary`, `.btn-icon`, `.btn-action`, `.toggle-btn`, `.vol-btn`, `.side-btn`, `.play-btn`, `.play-btn-large`, `.mode-btn`, `.like-btn`, `.collapse-btn`, `.card-menu-btn`, `.clear-icon-btn`, `.hamburger-btn`).
->
-> Ниже — **целевой** API примитивов. Это ТЗ: примитивы создаются так, чтобы инкапсулировать токены и заменить разрозненные классы без визуальных изменений (variant/size подобраны под существующие значения).
+> Примитивы живут в `src/components/ui/` (`Button`, `IconButton`, `Input`, `SearchBar`, `Toggle`, `Card`) и рядом (`MediaCard`, `TrackRow`, `ContextMenu`, `Modal`, `Skeleton`, `LikeButton`, `PlayModeButton`). Разрозненные legacy-классы (`.btn-primary`, `.btn-icon`, `.meta-tag`, `.card-badge`…) удалены. Ниже — фактический API и правила.
 
 ### 4.1. `Button`
-Базовая текстовая/пилл-кнопка. Покрывает `.btn-primary`, `.btn-secondary`, `.btn-action`, `.collapse-btn`.
+Текстовая/пилл-кнопка (`src/components/ui/Button.svelte`).
 
-**Props**
 | Prop | Тип | Дефолт | Описание |
 |---|---|---|---|
-| `variant` | `'primary' \| 'secondary' \| 'ghost'` | `'secondary'` | primary = акцентный фон; secondary = `--c-surface-button`; ghost = прозрачный. |
-| `size` | `'sm' \| 'md' \| 'lg'` | `'lg'` | sm=`--control-h-md`(36), md/lg=`--control-h-lg`(40). |
-| `shape` | `'pill' \| 'rounded'` | `'pill'` | pill=`--radius-pill`; rounded=`--radius-md`. |
-| `disabled` | `boolean` | `false` | `opacity: var(--opacity-muted)`, `pointer-events: none`. |
-| `loading` | `boolean` | `false` | Спиннер вместо контента. |
-| `fullWidth` | `boolean` | `false` | `width: 100%`. |
-| `onclick` | `() => void` | — | Обработчик. |
+| `variant` | `'primary' \| 'secondary'` | `'secondary'` | primary — заливка `--c-accent-btn` с тёмной подписью `--c-text-inverse` (AA 5.5:1 / 5.8:1); secondary — `--c-surface-button`. |
+| `size` | `'sm' \| 'md' \| 'lg'` | `'md'` | sm = 36px / паддинг 16; md = 40px / 20; lg = 40px / 24. |
+| `icon` | `boolean` | `false` | Квадратная иконо-кнопка (нужен `ariaLabel`). |
+| `block`, `disabled`, `type`, `title`, `onclick` | | | |
 
-**Состояния:** default / hover (`--c-accent-hover` или `--c-surface-button-hover`) / active (press `transform`/`--dur-instant`) / focus-visible (`--shadow-focus-ring`) / disabled.
-**Токены:** высота `--control-h-*`, паддинг `--control-pad-x-*`, текст `--text-control` + `--weight-control`, радиус `--radius-pill`, переход `--trans-fast`.
-
-```svelte
-<Button variant="primary" size="lg" onclick={save}>Сохранить</Button>
-<Button variant="secondary" shape="rounded">Отмена</Button>
-```
+**Регистр — один для всех вариантов:** подпись как написана, Title Case («Play All», «To Queue», «Stop Stream», «Save»), вес `--weight-control` (600). Раньше primary был КАПСОМ с трекингом, а secondary рядом — нет: две кнопки одного хедера читались как две системы. Primary отличает заливка, а не регистр. Капс с трекингом — только у eyebrow.
+**Primary — только для действия, которое что-то совершает** (Play All, Save, Stop Stream). Смотреть/копировать/обновить (диагностика) — secondary.
+**Состояния:** hover под `(hover: hover)`; press `scale(.97)` на `--dur-instant`; focus — общая серая плашка (у primary — акцентная, чтобы не стереть смысл); disabled `--opacity-muted`. **Тач:** под `(pointer: coarse)` `min-height: var(--target-touch)` (44px), у `icon` — и `min-width`.
 
 ### 4.2. `IconButton`
-«Голая» иконо-кнопка. Покрывает `.btn-icon`, `.vol-btn`, `.side-btn`, `.mode-btn`, `.card-menu-btn`, `.clear-icon-btn`, `.hamburger-btn`.
+Иконо-кнопка без текста (`src/components/ui/IconButton.svelte`): `size` называет **хит-зону**, а не глиф.
 
-**Props**
-| Prop | Тип | Дефолт | Описание |
-|---|---|---|---|
-| `size` | `'xs' \| 'sm' \| 'md' \| 'lg'` | `'lg'` | Глиф: `--icon-size-xs/sm/md/lg`. |
-| `pad` | `'sm' \| 'md' \| 'lg'` | `'md'` | `--icon-btn-pad-sm/--icon-btn-pad/--icon-btn-pad-lg`. |
-| `circle` | `boolean` | `false` | `--radius-circle`; диаметр `--circle-btn-sm/md`. |
-| `active` | `boolean` | `false` | Подсветка активного состояния (`--c-icon-hover`/`--c-accent`). |
-| `label` | `string` | — | `aria-label` (обязательно для a11y). |
-| `disabled`, `onclick` | | | как в Button. |
+| Prop | Дефолт | Описание |
+|---|---|---|
+| `size` `'xs'\|'sm'\|'md'\|'lg'` | `'lg'` | Бокс `--ibtn-box`: 40px (32px у `xs`); глиф 16/18/20/24px. |
+| `variant` `'naked'\|'filled'\|'overlay'` | `'naked'` | naked — прозрачная; filled — `--c-surface-button` (хедеры); overlay — чип на обложке. |
+| `tone` `'default'\|'accent'\|'heart'` | `'default'` | Цвет **только активного** состояния. |
+| `active`, `disabled`, `ariaLabel` (обяз.), `icon`/children, `class` | | |
 
-**Состояния:** idle (`--c-icon-idle`) / hover (`--c-icon-hover` + `--c-surface-hover`) / active / disabled.
-**Слот:** один `<svg>` (размер задаётся токеном на слотном svg, без `!important`).
-
-```svelte
-<IconButton size="lg" pad="md" label="Меню" onclick={openMenu}>
-  <MenuIcon />
-</IconButton>
-```
+- **`--ibtn-box`** — custom property бокса на самом элементе (40px мышью, 44px на таче), чтобы вызывающий мог выровнять **глиф**, а не бокс.
+- **Тач:** под `(pointer: coarse)` бокс = `--target-touch` (44px); `xs`-чип на обложке остаётся 32px визуально и получает невидимую 44px хит-зону через `::after`.
+- `:hover` — только под `(hover: hover)` (после тапа на тач-экране плашка «залипала» на кнопке под пальцем).
 
 ### 4.3. `PlayButton`
 Круглая транспортная кнопка play/pause. Покрывает `.play-btn`, `.play-btn-large`.
@@ -449,71 +438,77 @@ Wave UI — однокартиночный плеер. Интерфейс ори
 **Props:** `checked: boolean`, `disabled?: boolean`, `onchange?: (v: boolean) => void`, `label?: string`.
 **Токены:** дорожка `--switch-w`×`--switch-h`, ручка `--switch-knob` (`--radius-circle`), ход `translateX(var(--switch-knob))` ≈ w − knob − инсет, цвет вкл `--c-accent`, переход `--trans-fast`.
 
-### 4.5. `Pill` / `Tag` / `Badge`
-Капсульная метка (`.meta-tag`, count-pill, badges).
+### 4.5. Бейдж и строка фактов (`.badge`, `.meta-line`) — `src/styles/shared.css`
+**Бейдж говорит что-то О предмете — его качество или состояние — и никогда не счётчик.** Раньше у этой роли было восемь обликов: залитый `.meta-tag`, контурный `.meta-tag.quality`, 10px `.card-badge` и его контурный близнец, красная пилюля очереди, светящиеся капсы на обложке радио, тонированный статус настроек и акцентные моно-часы.
 
-**Props:** `variant: 'neutral' | 'accent' | 'outline'`, `size: 'sm' | 'md'`.
-**Токены:** радиус `--radius-pill`, текст `--text-2xs/xs` + `--weight-bold` + `--tracking-wide`, паддинг `--space-0_5 var(--space-2)`.
+| Класс | Смысл | Вид |
+|---|---|---|
+| `.badge` | качество: FLAC 24/192, MP3, 320 kbps, Mixed | 11px/600, tabular, контур `--c-border-bright`, радиус `--radius-sm`, 21px высотой |
+| `.badge--sm` | тот же, на строке/карточке | 10px, «шапка» 2px, радиус `--radius-xs` |
+| `.badge__lead` | квалификатор перед текстом в акценте: «Hi-Res │ FLAC 24/192» | переносится вместе с бейджем |
+| `.badge--accent` + `.badge--live` | живой поток (очередь), Live во FullPlayer | акцентный текст и кольцо, пульсирующая точка (`--dur-pulse`) |
+| `.badge--solid` | поверх ОБЛОЖКИ (статус станции) | непрозрачная `--c-bg-glass`, читается на любой картинке |
+| `.badge--success` / `--danger` | состояние подключения | точка и кольцо цвета статуса, **текст — основной цвет** (цветной текст на своей тонировке давал 3.7:1 на карточке gruvbox) |
 
-### 4.6. `Modal` (существует)
-Диалог поверх backdrop.
+Без капса: имя формата уже прописное (FLAC, MP3), трекнутые капсы — только у eyebrow.
 
-**Текущее/целевое API:** `open: boolean`, `title?: string`, `onclose?: () => void`, слоты `default` (тело) и `footer` (кнопки).
-**Токены:** `--c-bg-card`, `--radius-lg`, `--shadow-2xl`/`--shadow-xl`, header-высота `--control-h-2xl`, z `--z-modal`, backdrop `--c-overlay-backdrop` + `--z-modal − 1`, ошибка `--shadow-error-ring`, текст `--leading-normal`.
+**Строка фактов** — год, счётчики, длительность текстом, одной строкой:
+```html
+<p class="meta-line">
+  <span class="meta-text"><span class="meta-item">1986</span><span class="meta-item">2 tracks</span><span class="meta-item">7 min</span></span>
+  <span class="badge">MP3</span>
+</p>
+```
+Flex на обоих уровнях (пробелы шаблона не удваивают интервал), общая базовая линия; «·» генерируется и принадлежит **предыдущему** факту, так что перенос никогда не начинает строку с точки; бейджи — следующая группа (8px), на узком хедере переносятся целиком на свою строку от левого края. Каждый факт — свой `<span>` (один текстовый узел для тестов и скринридера). Строка фактов карточки — `.card-meta` (MediaCard, снипет `meta`).
 
-### 4.7. `Skeleton` (существует)
-Плейсхолдер загрузки.
+**Качество** — только через `src/lib/quality.ts` (`formatQuality`, `summarizeQuality`): moOde хранит `encoded_at` как «FLAC 24/192,h,2»; буква класса (l/s/h) никогда не печатается, стерео не упоминается, моно/5.1/7.1 — упоминаются, hi-res — отдельным акцентным `badge__lead`. Хедер альбома/плейлиста сводит качество всех треков: одна метка, общий кодек, либо «Mixed».
 
-**Props:** `width?`, `height?`, `radius?` (дефолт `var(--radius-sm)`), `circle?`.
-**Токены:** фон `--c-skeleton-base`, анимация `--ease-linear` + `--dur-*`, `--opacity-ghost`.
+### 4.6. `Modal`
+Диалог поверх backdrop (`src/components/Modal.svelte`): `--c-bg-card`, `--radius-lg`, `--shadow-xl`, шапка `--control-h-2xl`, ошибка `--shadow-error-ring`, текст `--leading-normal`. Вход — `in:scale` 0.96 на `MOTION.fast`, выход — `out:fade` на `MOTION.instant`.
+**Фокус при открытии:** prompt — всегда поле ввода; confirm — кнопка подтверждения **только если диалог открыт с клавиатуры** (у триггера был `:focus-visible`), иначе сама карточка (без кольца): после тапа плашка фокуса на «Play» выглядела уже выбранной.
+
+### 4.7. `Skeleton`
+Плейсхолдер загрузки: `width?`, `height?`, `radius?` (дефолт `var(--radius-sm)`); фон `--c-skeleton-base`, пульс `--opacity-muted ↔ --opacity-ghost`.
 
 ### 4.8. `ContextMenu`
-Всплывающее меню действий.
+Поповер действий (`src/components/ContextMenu.svelte`): карточка 220px, `--c-bg-card`, `--radius-lg`, `--shadow-xl`, z `--z-context-menu`; шапка — предмет меню (item-роль 14/600 + исполнитель в meta-роли); строки 14px с иконкой `--icon-size-md`, паддинг `--space-3 var(--space-14px)` (≈44px — тач-порог выполняется). Вход `in:scale` 0.96 от угла-якоря на `MOTION.fast`, выход `out:fade` на `MOTION.instant`.
+**Фокус при открытии:** с клавиатуры — первая строка (как положено меню); пальцем или мышью — сама карточка (без кольца; Escape и ↓ работают). Chromium считает скриптовый фокус во время тач-лонгпресса `:focus-visible`, и «Play Next» выглядел предвыбранным — воспроизведено настоящим CDP-лонгпрессом.
 
-**Props:** `items: MenuItem[]`, `x`, `y`, `onclose`.
-**Токены:** фон `--c-bg-glass`, `--radius-lg`, `--shadow-xl`, z `--z-context-menu`, строки высотой ~`--control-h-lg` с паддингом `--space-3 var(--space-14px)`, header `--control-h-2xl`, текст `--text-base-sm`.
-
-### 4.9. `LikeButton` / `PlayModeButton` (существуют)
-Специализированные иконо-кнопки. Внутри переиспользуют `IconButton` + цвет `--c-heart` (like) / `--c-accent` (active mode).
+### 4.9. `LikeButton` / `PlayModeButton`
+Специализированные `IconButton`: `tone="heart"` (`--c-heart`, короткий «pop» при лайке) / `tone="accent"` + точка активного режима.
 
 ---
 
 ## 5. Паттерны
 
-### 5.1. Карточка (album/playlist card)
-- Контейнер: `--c-bg-card`, `--radius-lg`, hover-тень `--shadow-lg`, переход `--trans-fast`.
-- Внутренний паддинг: `--space-3`/`--space-4`. Между карточками в гриде: `gap: var(--space-3)`.
-- Обложка: `--radius-md`, плейсхолдер `--c-bg-placeholder`.
-- Заголовок: `--text-md` + `--weight-medium`; мета: `--text-sm` + `--c-text-secondary`.
-- Кнопка-меню в углу: `IconButton circle size="xs"` (`--circle-btn-sm`).
+### 5.1. Карточка (`MediaCard` + `.music-card`)
+- Столбец: обложка (`--radius-md`) → 12px → **заголовок** (item: 16/500, одна строка) → 4px → **исполнитель** (`.card-sub`, body 14, secondary, **своя строка**) → 2px → **факты** (`.card-meta`: «1986 · FLAC», meta 12px tabular).
+- Раньше год и формат были двумя 10px-чипами в строке исполнителя, и «George Michael» резался до «George Mic…» («Geo…» в поиске).
+- Контекст: на странице артиста строка исполнителя не выводится (все карточки — его), остаются заголовок и факты.
+- Hover-подъём `translateY(-4px)` только под `(hover: hover)`; на таче — `:active` `scale(.98)` + плашка.
+- Чип меню на обложке: `IconButton variant="overlay" size="xs"` (32px вид, 44px хит-зона на таче).
 
-### 5.2. Строка списка (TrackRow и т.п.)
-- Высота строки ~`--control-h-lg`; паддинг `--space-2 var(--space-4)`.
-- Текст: `--text-base-sm` (плотный body), `--leading-snug`, многострочный clamp.
-- Разделитель: `--border-default-dim` (`border-bottom`).
-- Hover: `--c-surface-hover`. Активный трек: акцент `--c-accent` + индикатор воспроизведения (`--radius-xs`).
-- Drag: фантом `--c-surface-drag-phantom` + `--shadow-2xl` + `--z-drag-item`; зона приземления `--c-surface-drag-land`.
+### 5.2. Строка трека (`TrackRow`)
+- Высота `--row-h` (56px), паддинг `0 var(--space-4)`, разделитель `--border-default-dim`.
+- **Анатомия:** номер/индикатор (28px, tabular) · миниатюра 40px · [заголовок 16/500 + формат (`.badge--sm`) / исполнитель] · 8px воздуха · знак сервиса («Я») · «…» · ♡ · длительность (12px, secondary, tabular). Правая группа **всегда видна целиком** — на любой ширине, мышью и на таче, в Favorites тоже; «…» приглушён (muted). Промежутки в группе 8px, на таче 4px (44px-боксы и так разносят глифы на 24px).
+- **Режим редактирования ничего не сдвигает:** ручка ⠿ встаёт ровно в след номера (28px; её 40/44px-бокс свешивается поровну в паддинг и зазор), корзина — в тот же слот, где была длительность: последний слот во всех списках шириной `max(4.5ch, бокс кнопки)`, поэтому «…» и ♡ стоят на одной вертикали в альбоме, очереди и плейлисте. Миниатюра, заголовок, «Я», «…» и ♡ остаются на своих пикселях.
+- **Одна строка на все списки:** в альбоме, очереди, плейлисте и поиске строка одинаковая — миниатюра, заголовок, исполнитель, та же правая группа, — так что при переходе между ними меняются только песни. Альбом убирает лишь формат у каждой строки: качество альбома уже в хедере («Mixed», если разное).
+- **Играющий трек** — одинаково везде: акцентный заголовок + эквалайзер в колонке номера (и в альбоме/плейлисте тоже, не только в очереди). Серой плашки нет: акцент на ней был 2.7:1; на фоне страницы — 4.9:1. Движущиеся полосы убраны.
+- Фокус строки: общая плашка, и всё, что на ней написано, берёт её цвет подписи.
 
 ### 5.3. Контекст-меню / sort-меню
-- Подложка: `--c-bg-glass`, `--radius-lg`, `--shadow-xl`.
-- Строки: высота ~`--control-h-lg`, паддинг `--space-3 var(--space-14px)`, иконка `--icon-size-md`, текст `--text-base-sm`.
-- Выбранный пункт: `--weight-medium` + `--c-accent`.
-- z: меню `--z-menu`, контекст-меню `--z-context-menu`.
+- Поверхность `--c-bg-card`, `--radius-lg`, `--shadow-xl`; строки паддинг `--space-3 var(--space-14px)`, иконка `--icon-size-md`, текст `--text-base`; выбранный пункт sort-меню — `--weight-medium` + `--c-surface-active`.
+- Триггер sort-меню — `nowrap` (метка «A–Z» ломалась по тире).
+- z: sort-меню `--z-menu`, контекст-меню `--z-context-menu`.
 
 ### 5.4. Модалка
-- Backdrop `--c-overlay-backdrop`; панель `--c-bg-card`/`--radius-lg`/`--shadow-2xl`.
-- Header `--control-h-2xl` + `--text-xl`; тело `--leading-normal` + `--space-4`/`--space-5`.
-- Футер: кнопки `Button` (`primary` + `secondary`), `gap: var(--space-3)`.
-- Ошибка валидации: `--shadow-error-ring`.
+- Backdrop `--c-overlay-dim` + blur; панель `--c-bg-card`/`--radius-lg`/`--shadow-xl`; шапка `--control-h-2xl`; тело `--leading-normal`; кнопки футера — полосой на всю ширину.
 
 ### 5.5. Плеер (MiniPlayer / FullPlayer)
-- MiniPlayer: высота `--mini-player-height` (90px), z `--z-miniplayer`, тень `--shadow-sm`, play `--circle-play-md` (48).
-- FullPlayer: заголовок `--text-3xl`; play `--circle-play-lg` (64) с глифом `--icon-size-xl`; docked play `--circle-play-sm` (44).
-- Транспортные иконо-кнопки: `IconButton size="lg" pad="lg"` (`--icon-btn-pad-lg`); компактные docked — `pad="sm"`.
-- MainScreen имеет `padding-bottom: var(--space-50px)` под зазор мини-плеера (концептуально привязан к `--mini-player-height`).
-- **Исправить** (не паритет): сломанные `box-shadow` FullPlayer (см. §2.7) → `--shadow-md`/`--shadow-xl`.
-
----
+- **MiniPlayer (док):** 90px; заголовок item 16/500, исполнитель 14, пара на `--leading-snug`; прогресс — 2px-рельс (наведение 4px) и ручка на транслируемой «каретке». Тонировка всего дока до плейхеда (`.progress-shadow`) **удалена** — она делила док на два тона ровно по точке прогресса и читалась как артефакт; прогресс несёт рельс. Телефон: только транспорт, 44px цели с 8px между ними; планшет 769–900px: без сердца и режима, колонка громкости — по содержимому.
+- **FullPlayer (шторка):** на любом экране одна колонка по центру (`--player-col-max`): обложка сверху (до `--player-art-max`), под ней заголовок, ползунок, транспорт и громкость. На низком окне обложка ужимается: `clamp(160px, 100dvh − остальная колонка − 2 × полоса шеврона, --player-art-max)` — иначе на 1366×768 она заезжала под шеврон закрытия, а на 1024×700 колонка была 739px в 700px окне. От ~850px высоты это прежние 400px.
+- Время — `--text-sm` tabular; для радио вместо длительности — бейдж Live.
+- Docked (Pi, `max-height: 600px` landscape) — прежний, flex-колонка.
 
 ## 6. Правила использования
 
@@ -535,11 +530,8 @@ Wave UI — однокартиночный плеер. Интерфейс ори
 
 ### 6.4. Где CSS-переменные не работают
 - **`@media`**: CSS-var нельзя в feature-запросах. Источник правды — `BREAKPOINTS` в `constants.ts` (`matchMedia`), литералы в `@media` остаются; `--bp-*` — только документация.
-- **Svelte JS-переходы** (`fade`/`fly`/`scale` с `duration: 100/150/200/300`): не читают `var()`. Зеркалить в `constants.ts`:
-  ```ts
-  export const MOTION = { instant: 100, fast: 200, base: 300 } as const;
-  export const BREAKPOINTS = { sm: 600, md: 768, lg: 800 } as const;
-  ```
+- **Svelte JS-переходы** (`fade`/`fly`/`scale`/`crossfade`): не читают `var()`. Длительности — `MOTION` из `src/lib/transitions.ts` (зеркало `--dur-*`, возвращает 0 при `prefers-reduced-motion`), кривая — `EASE_EMPHASIZED`. Сырые миллисекунды в `transition:`/`in:`/`out:` не пишутся.
+- **Контейнерные запросы** (`@container`) там, где раскладка зависит от ширины, доставшейся блоку, а не окну: секции настроек (480px).
 
 ---
 
@@ -566,61 +558,23 @@ Wave UI — однокартиночный плеер. Интерфейс ори
 
 ---
 
-## 8. Открытые вопросы рационализации
+## 8. Открытые вопросы рационализации — статус
 
-> Это кандидаты на **будущие визуальные изменения** (этап Claude Design). Сейчас всё сохранено под паритет.
+> Большая часть кандидатов закрыта проходами «Claude Design» и «типографика/движение». Ниже — что осталось, и что решено.
 
-### 8.1. Главный: `--radius-xl` theme split
-`default`+`shared.css` = **20px**, `gruvbox` = **16px**. Радиус — инвариантная ось, значит это БАГ. **Решение:** унифицировать на **20px** в `tokens.css`. Для gruvbox это согласованное мелкое визуальное изменение (карточки/модалки чуть круглее). Явно отмечено и принято как часть выравнивания инвариантной оси — **не** нарушение паритета default.
-
-### 8.2. Pill radius drift
-Пилл-кнопки хардкодят `border-radius: 20px` (== default `--radius-xl`, но на gruvbox `--radius-xl`=16) — на gruvbox литерал расходился с токеном. `--radius-pill: var(--radius-full)` убирает дрейф **и** сохраняет default-паритет (капсула для коротких контролов). Если нужен строгий байт-паритет литерала 20px → `--radius-pill: 20px`.
-
-### 8.3. Отступы off-scale
-- `6px` (`--space-2xs`, gap ×5) → 4 или 8.
-- `10px` (`--space-2_5`, **самый частый gap** ×15) → 8 или 12.
-- `3/5/7/14/15/30px` → ближайший шаг (2/4, 4/6, 8, 12/16, 16, 32).
-- `50px` (`--space-50px`, MainScreen `padding-bottom`) — привязать к `--mini-player-height` вместо `--space-*`.
-
-### 8.4. Типографика off-scale
-- `13px`/`15px` (`--text-base-sm`/`--text-md`) — между 12/14/16, кандидаты на схлопывание шкалы.
-- `28px` (`--text-4xl`), `60px` (`--text-8xl`) — одиночные нестандартные шаги.
-- `--leading-tight` (1.1) ≈ `--leading-snug` (1.2) — слить.
-- `--tracking-tight` (0.2px) ≈ `--tracking-wide` (0.5px) — слить/удалить.
-
-### 8.5. Радиусы off-scale
-`1px`/`3px` → `--radius-xs` (2px); `6px` (`--radius-6px`) → sm/md; `10px` count-pill / `30px` toast → `--radius-pill`/`--radius-full`.
-
-### 8.6. Тени off-scale
-- `--shadow-md-popover` (blur 15) → слить с `--shadow-md` (12).
-- `0 2px 5px` (MiniPlayer) → `--shadow-sm` (4); `0 10px 30px` → `--shadow-lg` (24).
-- Сырые `rgba` в `box-shadow` (ServicesSettings/AlarmSettings 0.3, main.css 0.5, SortMenu 0.7) обходят `--c-shadow-*` и **не адаптируются под gruvbox** — токенизация изменит именно gruvbox; проверить значение в обеих темах перед заменой.
-- Цвета `--c-black-50/70` vs семантические `--c-shadow-*` — для строгого паритета `--shadow-xs/sm` нужны `-strong`-варианты.
-
-### 8.7. Z-index off-scale
-- MiniPlayer `101/105/110` (`--z-miniplayer`) — формализовать как база 100 + смещения через `calc`, либо литералы.
-- Локальные `2/3/4/5/10` — формализовать малую локальную шкалу.
-- `shared.css :root` недосчитывает `--z-sidebar/--z-menu/--z-context-menu` — добавить в `tokens.css`.
-
-### 8.8. Анимации off-scale
-- `--dur-slow-2` (0.25s), `0.5s` — снап к `--dur-fast/base/slow`.
-- `--ease-soft` ≈ `--ease-emphasized` — слить.
-
-### 8.9. Прозрачность off-scale
-`0.1/0.2/0.4` → `--opacity-ghost`; `0.85/0.9/0.95` → `--opacity-strong`/1. Рамп.
-
-### 8.10. Размеры контролов off-scale
-`28px`/`44px` (`circle-btn-sm`/`circle-play-sm`) между 24/32/48/64; `50px` (`control-h-2xl`) vs 48; `icon-btn-pad` 10 vs 8.
-
-### 8.11. Брейкпоинты
-`800px` (`--bp-lg`) — одиночный, консолидировать в `768px` (`--bp-md`).
-
-### 8.12. Цвета вне моих осей — ВЫПОЛНЕНО (фаза Claude Design)
-- Legacy `#4cd964` — устранён вместе с `main.css`. ✓
-- Семантические error/warn/success токенизированы: `--c-error/--c-warn/--c-success` в обеих темах (`theme.ts` + `shared.css` fallback); потребители (`Modal`, `ServicesSettings`, Yandex-градиенты) переведены на токены. ✓
-
-### 8.13. Дублирование (устраняется выносом в `tokens.css`)
-Инвариантные токены (`--radius-*`, `--z-*`, `--trans-*`, `--header-height`, `--mini-player-height`, `--icon-stroke-width`) определены **дважды** — в `theme.ts.colors` (инжект `ui.ts`) и `shared.css :root`. Вынос в `tokens.css` устраняет дублирование и рассинхрон.
+- **8.1 `--radius-xl` theme split — ЗАКРЫТО:** инвариантен, 16px.
+- **8.2 Pill radius drift — ЗАКРЫТО:** `--radius-pill: var(--radius-full)`.
+- **8.3 Отступы — ЗАКРЫТО:** лестница /4 + четыре не-кратных с владельцами (§2.2).
+- **8.4 Типографика — ЗАКРЫТО:** 13/15px схлопнуты; роли (§2.3); лестница leading `1 / 1.15 / 1.3 / 1.45`; трекинг только `--tracking-caps` (0.06em) и `--tracking-display` (−0.02em); `--text-8xl` удалён; добавлены `--text-4xl` (32px, desktop-плеер) и `--weight-regular`.
+- **8.5 Радиусы — ЗАКРЫТО.**
+- **8.6 Тени — ЗАКРЫТО:** `--shadow-md-popover` слит с `--shadow-md`; `--shadow-glow` и цвет `--c-shadow-popover` удалены (0 потребителей).
+- **8.7 Z-index — ЗАКРЫТО:** внутри дока локальная шкала `--z-base/--z-above` вместо 101/105/110.
+- **8.8 Анимации — ЗАКРЫТО:** `--dur-slow-2` → `--dur-tick` (= интервал тикера, не выбор дизайна), `--dur-pulse` для «живых» петель, JS-зеркало `MOTION` с reduced-motion.
+- **8.9 Прозрачность — ОТКРЫТО (низкий приоритет):** `0.85/0.9/0.95` в фантоме drag и `.volume-row` (0.9) — не трогались.
+- **8.10 Размеры контролов — ЗАКРЫТО:** `--target-touch` (44px) для `(pointer: coarse)`; `--knob-size` (14px).
+- **8.11 Брейкпоинты — ОТКРЫТО, сознательно:** 800px — это ширина экрана Pi, её блок и есть раскладка Pi. Там, где важна ширина блока, а не окна, используются контейнерные запросы (§6.4).
+- **8.12 Цвета — ВЫПОЛНЕНО** (семантический триплет в обеих темах).
+- **8.13 Дублирование — ВЫПОЛНЕНО** (`tokens.css`); `shared.css :root` держит только дефолтные цвета.
 
 ---
 

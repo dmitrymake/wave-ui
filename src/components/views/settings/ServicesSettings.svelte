@@ -3,6 +3,7 @@
 <script lang="ts">
   import Card from "../../ui/Card.svelte";
   import { fade } from "svelte/transition";
+  import { MOTION } from "../../../lib/transitions";
   import { showToast } from "../../../lib/store";
   import { isYandexEnabled, yandexAuthStatus } from "../../../lib/stores/yandex";
   import { YandexService } from "../../../lib/yandexService";
@@ -58,7 +59,7 @@
   </div>
   <Card>
     <div class="row space-between">
-      <span class="label-text">Enable Yandex Music (Beta)</span>
+      <span class="row-label">Enable Yandex Music (Beta)</span>
       <Toggle
         checked={$isYandexEnabled}
         ariaLabel="Enable Yandex Music"
@@ -67,26 +68,26 @@
     </div>
 
     {#if $isYandexEnabled}
-      <div class="separator" in:fade></div>
+      <div class="separator" in:fade={{ duration: MOTION.fast }}></div>
 
-      <div class="row space-between" in:fade>
-        <span>Connection Status</span>
+      <div class="row space-between" in:fade={{ duration: MOTION.fast }}>
+        <span class="row-label">Connection Status</span>
         {#if $yandexAuthStatus}
-          <span class="status-badge connected">Connected</span>
+          <span class="badge badge--success">Connected</span>
         {:else}
-          <span class="status-badge disconnected">Not Connected</span>
+          <span class="badge badge--danger">Not Connected</span>
         {/if}
       </div>
 
-      <div class="separator" in:fade></div>
+      <div class="separator" in:fade={{ duration: MOTION.fast }}></div>
 
-      <div class="row" in:fade>
-        <span class="label-text">OAuth Token</span>
+      <div class="row" in:fade={{ duration: MOTION.fast }}>
+        <span class="row-label">OAuth Token</span>
         <div class="input-group">
           <Input
             type="password"
             bind:value={inputToken}
-            placeholder="Paste token here..."
+            placeholder="Paste token here…"
             ariaLabel="OAuth Token"
           />
           <Button
@@ -95,33 +96,35 @@
             disabled={isChecking}
             onclick={handleSaveToken}
           >
-            {isChecking ? "Checking..." : "Save"}
+            {isChecking ? "Checking…" : "Save"}
           </Button>
         </div>
       </div>
 
-      <p class="hint" in:fade>Token is stored securely on the device.</p>
+      <p class="hint" in:fade={{ duration: MOTION.fast }}>Token is stored securely on the device.</p>
 
       {#if $yandexAuthStatus}
-        <div class="separator" in:fade></div>
-        <div class="row space-between" in:fade>
-          <span class="label-text">Diagnostics</span>
-          <Button variant="primary" size="sm" onclick={toggleDiag}>
+        <div class="separator" in:fade={{ duration: MOTION.fast }}></div>
+        <div class="row space-between" in:fade={{ duration: MOTION.fast }}>
+          <span class="row-label">Diagnostics</span>
+          <!-- Secondary: the accent fill is for the one action that commits
+               something (Save). Show / Refresh / Copy only look. -->
+          <Button variant="secondary" size="sm" onclick={toggleDiag}>
             {diagOpen ? "Hide" : "Show"}
           </Button>
         </div>
 
         {#if diagOpen}
-          <div class="diag-box" in:fade>
+          <div class="diag-box" in:fade={{ duration: MOTION.fast }}>
             {#if diagLoading}
               <span class="hint">Loading…</span>
             {:else}
               <pre class="diag-pre">{diagText}</pre>
               <div class="row-gap">
-                <Button variant="primary" size="sm" onclick={loadDiagnostics}>
+                <Button variant="secondary" size="sm" onclick={loadDiagnostics}>
                   Refresh
                 </Button>
-                <Button variant="primary" size="sm" onclick={copyDiagnostics}>
+                <Button variant="secondary" size="sm" onclick={copyDiagnostics}>
                   Copy
                 </Button>
               </div>
@@ -134,26 +137,8 @@
 </div>
 
 <style>
-  .section {
-    margin-bottom: var(--space-8);
-  }
-
-  .section-header {
-    display: flex;
-    align-items: center;
-    gap: var(--space-2);
-    font-size: var(--text-xl);
-    font-weight: var(--weight-bold);
-    color: var(--c-text-primary);
-    margin-bottom: var(--space-3);
-    padding-left: var(--space-1);
-  }
-
-  .label-text {
-    font-size: var(--text-base);
-    color: var(--c-text-secondary);
-    font-weight: var(--weight-semibold);
-  }
+  /* .section / .section-header live in settings.css (they were copied into all
+     five sections). */
 
   .diag-box {
     display: flex;
@@ -176,18 +161,5 @@
     margin: 0;
   }
 
-  .status-badge {
-    font-size: var(--text-sm);
-    padding: var(--space-1) var(--space-2);
-    border-radius: var(--radius-sm);
-    font-weight: var(--weight-bold);
-  }
-  .connected {
-    background: color-mix(in srgb, var(--c-success) 18%, transparent);
-    color: var(--c-success);
-  }
-  .disconnected {
-    background: color-mix(in srgb, var(--c-error) 18%, transparent);
-    color: var(--c-error);
-  }
+  /* The connection state is the shared .badge (--success / --danger). */
 </style>

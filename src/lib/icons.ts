@@ -8,6 +8,7 @@
 import arrowsShuffle2 from "./svg/arrows-shuffle-2.svg?raw";
 import chevronCompactDown from "./svg/chevron-compact-down.svg?raw";
 import chevronLeft from "./svg/chevron-left.svg?raw";
+import chevronRight from "./svg/chevron-right.svg?raw";
 import disc from "./svg/disc.svg?raw";
 import gripHorizontal from "./svg/grip-horizontal.svg?raw";
 import heartEmpty from "./svg/heart-empty.svg?raw";
@@ -66,6 +67,8 @@ export const ICONS: Record<string, string> = {
   CLOSE: x,
   MENU: menu2,
   BACK: chevronLeft,
+  // A disclosure ("opens something"), never the next-track glyph.
+  CHEVRON_RIGHT: chevronRight,
   CHEVRON_DOWN: chevronCompactDown,
   DRAG_HANDLE: gripHorizontal,
   REMOVE: trash,

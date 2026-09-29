@@ -63,19 +63,7 @@
 </div>
 
 <style>
-  .section {
-    margin-bottom: var(--space-8);
-  }
-
-  .section-header {
-    display: flex;
-    align-items: center;
-    gap: var(--space-2);
-    font-size: var(--text-xl);
-    font-weight: var(--weight-bold);
-    color: var(--c-text-primary);
-    margin-bottom: var(--space-3);
-    padding-left: var(--space-1);
-  }
+  /* .section / .section-header live in settings.css (they were copied into all
+     five sections). */
 
 </style>
