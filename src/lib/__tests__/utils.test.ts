@@ -90,16 +90,17 @@ describe("formatTotalDuration (collection runtime)", () => {
     expect(formatTotalDuration(NaN)).toBe("");
   });
 
+  // The unit is bound to its number by a no-break space (U+00A0).
   it("renders only minutes under an hour", () => {
-    expect(formatTotalDuration(125)).toBe("2 min");
+    expect(formatTotalDuration(125)).toBe("2\u00a0min");
   });
 
   it("renders hours and minutes past an hour", () => {
     // 1h 1m
-    expect(formatTotalDuration(3660)).toBe("1 hr 1 min");
+    expect(formatTotalDuration(3660)).toBe("1\u00a0hr 1\u00a0min");
   });
 
   it("drops residual seconds (rounds toward the minute)", () => {
-    expect(formatTotalDuration(7259)).toBe("2 hr 0 min");
+    expect(formatTotalDuration(7259)).toBe("2\u00a0hr 0\u00a0min");
   });
 });

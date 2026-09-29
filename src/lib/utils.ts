@@ -23,10 +23,11 @@ export function formatClock(seconds: number | null | undefined): string {
 
 // Coarse "X hr Y min" / "Y min" summary used for a collection's total runtime
 // (queue, playlist, album header). Empty string for a zero/unknown total so the
-// caller can omit the line entirely.
+// caller can omit the line entirely. Each number is bound to its unit by a
+// no-break space, so a wrapping meta line never strands "7" from "min".
 export function formatTotalDuration(totalSeconds: number): string {
   if (!totalSeconds || totalSeconds <= 0) return "";
   const h = Math.floor(totalSeconds / 3600);
   const m = Math.floor((totalSeconds % 3600) / 60);
-  return h > 0 ? `${h} hr ${m} min` : `${m} min`;
+  return h > 0 ? `${h}\u00a0hr ${m}\u00a0min` : `${m}\u00a0min`;
 }

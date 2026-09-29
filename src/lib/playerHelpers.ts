@@ -6,6 +6,7 @@ import { LibraryActions } from "./playback/library";
 import { resolveSourceForTrack } from "./sources/trackSource";
 import { yandexFavorites } from "./stores/yandex";
 import { isRemoteUrl, formatClock } from "./utils";
+import { bitrateLabel } from "./format";
 import type { Track, MpdStatus } from "./types";
 
 /**
@@ -98,6 +99,7 @@ export function isRadioStream(song: Track | null): boolean {
   return !resolveSourceForTrack(song)?.streamsHaveElapsed;
 }
 
+// "320 kbps" (unit bound by a no-break space) or the stream's bit depth.
 export function getQualityLabel(status: MpdStatus): string {
-  return status.bitrate ? `${status.bitrate} kbps` : status.format || "";
+  return bitrateLabel(status.bitrate) || status.format || "";
 }

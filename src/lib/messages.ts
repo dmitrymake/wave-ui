@@ -1,10 +1,15 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2025 dmitrymake
+import { countLabel } from "./format";
+
+// UI copy. Typography: the real ellipsis (…) for anything still in progress,
+// curly quotes around a quoted name, and a count bound to its noun by a
+// no-break space with the noun agreeing ("1 track", "12 tracks").
 export const MSG = {
   // Sync
-  SYNC_REQUESTING: "Requesting library...",
-  SYNC_DOWNLOADING: "Downloading data...",
-  SYNC_PROCESSING: "Processing metadata...",
+  SYNC_REQUESTING: "Requesting library…",
+  SYNC_DOWNLOADING: "Downloading data…",
+  SYNC_PROCESSING: "Processing metadata…",
   SYNC_FAILED: "Sync Failed",
   SYNC_WORKER_CRASHED: "Sync worker crashed",
 
@@ -17,7 +22,7 @@ export const MSG = {
   PLAY_FAILED_SET_NEXT: "Failed to set next",
   PLAY_FAILED_REMOVE: "Failed to remove",
   PLAY_MOVE_FAILED: "Move failed",
-  PLAY_PLAYING: "Playing...",
+  PLAY_PLAYING: "Playing…",
   PLAY_NO_TRACKS: "No tracks to play",
   PLAY_ERROR_STARTING: "Error starting playback",
   PLAY_NETWORK_ERROR: "Network error",
@@ -52,7 +57,7 @@ export const MSG = {
   RADIO_FAILED_START_VIBE: "Failed to start Vibe",
 
   // Settings
-  SETTINGS_IP_SAVED: "IP Saved. Reloading...",
+  SETTINGS_IP_SAVED: "IP saved. Reloading…",
   SETTINGS_IP_INVALID: "Invalid IP / host address",
   SETTINGS_THEME_UPDATED: "Theme updated",
   SETTINGS_FAILED_ALARM_SYNC: "Failed to sync alarm settings",
@@ -75,22 +80,22 @@ export const MSG = {
   APP_DB_ERROR: "Local DB error. Please update library manually.",
 
   // Dynamic messages (functions)
-  syncSaving: (count: number) => `Saving ${count} tracks...`,
-  libraryUpdated: (count: number) => `Library updated: ${count} tracks`,
+  syncSaving: (count: number) => `Saving ${countLabel(count, "track")}…`,
+  libraryUpdated: (count: number) => `Library updated: ${countLabel(count, "track")}`,
   syncFailed: (message: string) => `Sync Failed: ${message}`,
-  playlistSaved: (name: string) => `Playlist "${name}" saved`,
-  playlistOverwritten: (name: string) => `Playlist "${name}" overwritten`,
-  playlistCreated: (name: string) => `Playlist "${name}" created`,
-  addedToPlaylist: (name: string) => `Added to "${name}"`,
-  playingTracks: (count: number) => `Playing ${count} tracks`,
-  addedTracks: (count: number) => `Added ${count} tracks`,
-  addingTracks: (count: number) => `Adding ${count} tracks...`,
-  startingRadio: (title: string) => `Starting radio based on "${title}"...`,
-  searchingArtist: (artist: string) => `Searching artist "${artist}"...`,
-  startingVibeFor: (name: string) => `Starting Vibe for ${name}...`,
-  startingContext: (name: string) => `Starting ${name}...`,
+  playlistSaved: (name: string) => `Playlist “${name}” saved`,
+  playlistOverwritten: (name: string) => `Playlist “${name}” overwritten`,
+  playlistCreated: (name: string) => `Playlist “${name}” created`,
+  addedToPlaylist: (name: string) => `Added to “${name}”`,
+  playingTracks: (count: number) => `Playing ${countLabel(count, "track")}`,
+  addedTracks: (count: number) => `Added ${countLabel(count, "track")}`,
+  addingTracks: (count: number) => `Adding ${countLabel(count, "track")}…`,
+  startingRadio: (title: string) => `Starting radio based on “${title}”…`,
+  searchingArtist: (artist: string) => `Searching artist “${artist}”…`,
+  startingVibeFor: (name: string) => `Starting Vibe for ${name}…`,
+  startingContext: (name: string) => `Starting ${name}…`,
   startingVibe: (title: string) => `Starting vibe: ${title}`,
-  startingMyVibe: "Starting My Vibe...",
-  startingTypeVibe: (type: string) => `Starting ${type} Vibe...`,
+  startingMyVibe: "Starting My Vibe…",
+  startingTypeVibe: (type: string) => `Starting ${type} Vibe…`,
   alarmSet: (time: string) => `Alarm set for ${time}`,
 } as const;
