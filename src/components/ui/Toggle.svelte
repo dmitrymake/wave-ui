@@ -104,9 +104,13 @@
     border-color: var(--c-accent-btn);
   }
   .toggle.is-checked .toggle__knob {
-    /* travel = --switch-w - --switch-knob - 2 * 1px inset = 20px */
+    /* The knob sits 2px from the track's OUTER edge on each side: the 1px
+       border plus the 1px inset (absolute positioning starts inside the
+       border). travel = 44 - 20 - 2 * (1 + 1) = 20px. It used to leave the
+       border out (22px), so a checked knob ran into the right edge with 0px to
+       spare against 2px on the left. */
     transform: translateX(
-      calc(var(--switch-w) - var(--switch-knob) - 2 * var(--space-px))
+      calc(var(--switch-w) - var(--switch-knob) - 2 * (var(--border-width-thin) + var(--space-px)))
     );
   }
 
