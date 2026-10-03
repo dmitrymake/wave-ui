@@ -21,6 +21,7 @@ echo "-------------------------------------------------------"
 # 1. Stop Services to release file locks
 echo ">>> [1/5] Stopping services..."
 sudo systemctl stop wave-yandex.service || true
+sudo systemctl stop wave-youtube.service || true
 # mpd/websockify stay up unless their configs change; restart at the end for safety
 
 # 2. Fetching Code
@@ -57,6 +58,8 @@ sudo chown -R www-data:www-data "/dev/shm/yandex_music"
 # Daemon execute bit
 sudo chmod +x "$BIN_DIR/yandex-daemon.php"
 sudo chmod -R 777 "/dev/shm/yandex_music"
+
+bash "$TEMP_DIR/scripts/install-youtube.sh" "$TEMP_DIR"
 
 # 4. Frontend Update
 echo ">>> [4/5] Updating Frontend Assets..."
@@ -110,3 +113,4 @@ echo "-------------------------------------------------------"
 echo "URL: http://$(hostname -I | awk '{print $1}'):$PORT"
 echo "Daemon Status:"
 sudo systemctl status wave-yandex.service --no-pager
+sudo systemctl status wave-youtube.service --no-pager

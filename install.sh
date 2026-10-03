@@ -21,6 +21,7 @@ echo "-------------------------------------------------------"
 # 1. Cleaning up previous mess
 echo ">>> [1/7] Cleaning environment..."
 sudo systemctl stop wave-yandex.service || true
+sudo systemctl stop wave-youtube.service || true
 sudo systemctl stop websockify-mpd.service || true
 sudo rm -rf /dev/shm/yandex_music/
 sudo rm -f /tmp/wave_daemon.log
@@ -59,6 +60,9 @@ sudo chown -R www-data:www-data "/dev/shm/yandex_music"
 # Daemon execute bit and SHM access
 sudo chmod +x "$BIN_DIR/yandex-daemon.php"
 sudo chmod -R 777 "/dev/shm/yandex_music"
+
+# Install/update the loopback YouTube API/audio bridge and its Python dependencies.
+bash "$TEMP_DIR/scripts/install-youtube.sh" "$TEMP_DIR"
 
 # 5. Frontend Installation
 echo ">>> [5/7] Installing Frontend Assets..."
@@ -226,3 +230,4 @@ echo "Daemon Log: tail -f /tmp/wave_daemon.log"
 echo "-------------------------------------------------------"
 
 sudo systemctl status wave-yandex.service --no-pager
+sudo systemctl status wave-youtube.service --no-pager

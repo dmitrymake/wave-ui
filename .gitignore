@@ -8,6 +8,8 @@ pnpm-debug.log*
 lerna-debug.log*
 
 node_modules
+__pycache__/
+*.pyc
 dist-ssr
 *.local
 
@@ -23,4 +25,3 @@ dist-ssr
 *.sw?
 
 .vscode
-

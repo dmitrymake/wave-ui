@@ -1,0 +1,3 @@
+ytmusicapi==1.12.3
+# Keep the extractor and its matching JavaScript challenge solver together.
+yt-dlp[default]==2026.8.19
