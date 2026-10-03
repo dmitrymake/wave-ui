@@ -36,6 +36,8 @@ vi.mock("../../lib/store", () => ({
   status,
   currentSong,
   isQueueLocked,
+  isQueueLoading: writable(false),
+  queueLoadError: writable(false),
   // ui domain
   showModal: vi.fn(),
   // navigation domain (BaseList)

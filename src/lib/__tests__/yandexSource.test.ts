@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2025 dmitrymake
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { get } from "svelte/store";
 import type { Track } from "../types";
 
 // Capture MPD commands and feed canned responses. MpdParser is left REAL so the
@@ -28,6 +29,7 @@ vi.mock("../store", () => {
     status: writable({ duration: 0 }),
     currentSong: writable({ file: "" }),
     queue: writable([]),
+    activePlaylistTracks: writable([]),
     activeMenuTab: writable("library"),
     navigationStack: writable([]),
     showToast: vi.fn(),
@@ -50,6 +52,14 @@ vi.mock("../stores/yandex", () => {
 import { yandexSource } from "../sources/yandexSource";
 import type { TrackSource } from "../sources/trackSource";
 import { yandexContext } from "../stores/yandex";
+import { queue, currentSong, activePlaylistTracks, status } from "../store";
+import { METADATA_RETRY_DELAY } from "../sources/metadataRequest";
+
+const fetchMock = vi.hoisted(() => vi.fn());
+vi.mock("../http", async (original) => ({
+  ...await original<typeof import("../http")>(),
+  fetchWithTimeout: fetchMock,
+}));
 
 // These TrackSource methods are optional on the interface but always implemented by
 // the Yandex source; narrow them so the tests can call them without `?.`/`!` noise.
@@ -171,6 +181,125 @@ describe("src.enrichQueueTrack", () => {
 
     expect(result).toBeNull();
     expect(toFetch).toContain("yandex:404");
+  });
+});
+
+describe("queue metadata loading", () => {
+  const file = (id: number) => `/dev/shm/yandex_music/tracks/${id}.mp3`;
+  const pending = (id: number) => baseTrack({ file: file(id), id: String(id), isMetadataPending: true });
+  const response = (data: unknown) => ({ ok: true, json: async () => data });
+
+  beforeEach(() => {
+    vi.useFakeTimers();
+    fetchMock.mockReset();
+    queue.set([]);
+    activePlaylistTracks.set([]);
+    currentSong.set(baseTrack({}));
+  });
+
+  afterEach(() => vi.useRealTimers());
+
+  it("keeps numeric filenames hidden through a failed batch and retries once", async () => {
+    const first = file(700001);
+    const second = file(700002);
+    queue.set([pending(700001), pending(700002)]);
+    fetchMock.mockRejectedValueOnce(new Error("Offline")).mockResolvedValueOnce(response({
+      [first]: { id: "700001", title: "First", artist: "Artist", image: "cover.jpg", time: 180 },
+      [second]: { id: "700002", title: "Second", artist: "Artist" },
+    }));
+    const request = yandexSource.fetchQueueMeta?.([first, first, second]);
+    await vi.advanceTimersByTimeAsync(METADATA_RETRY_DELAY - 1);
+    expect(get(queue).every((row) => row.isMetadataPending)).toBe(true);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(JSON.parse(fetchMock.mock.calls[0][1].body).urls).toEqual([first, second]);
+    await vi.advanceTimersByTimeAsync(1);
+    await request;
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(get(queue)[0]).toMatchObject({ title: "First", artist: "Artist", image: "cover.jpg", isMetadataPending: false });
+    expect(get(queue)[1]).toMatchObject({ title: "Second", isMetadataPending: false });
+  });
+
+  it("retains successful rows and retries only the invalid or omitted metadata", async () => {
+    const first = file(700003);
+    const second = file(700004);
+    queue.set([pending(700003), pending(700004)]);
+    activePlaylistTracks.set([pending(700004)]);
+    currentSong.set(pending(700004));
+    fetchMock.mockResolvedValueOnce(response({ [first]: { id: "700003", title: "Ready", artist: "Artist" }, [second]: { title: [] } }))
+      .mockResolvedValueOnce(response({}));
+    const request = yandexSource.fetchQueueMeta?.([first, second]);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(get(queue)[0]).toMatchObject({ title: "Ready", isMetadataPending: false });
+    expect(get(queue)[1].isMetadataPending).toBe(true);
+    await vi.advanceTimersByTimeAsync(METADATA_RETRY_DELAY);
+    await request;
+    expect(fetchMock.mock.calls[1][0]).toContain("action=get_meta");
+    expect(fetchMock.mock.calls[1][0]).toContain(encodeURIComponent(second));
+    expect(get(queue)[1]).toMatchObject({ title: "700004.mp3", artist: "Unknown Artist", isMetadataPending: false });
+    expect(get(activePlaylistTracks)[0].isMetadataPending).toBe(false);
+    expect(get(currentSong).isMetadataPending).toBe(false);
+
+    const song = pending(700004);
+    yandexSource.enrichCurrentSong?.(song, get(status));
+    expect(song).toMatchObject({ title: "700004.mp3", artist: "Unknown Artist", isMetadataPending: false });
+    const toFetch: string[] = [];
+    expect(yandexSource.enrichQueueTrack?.(pending(700004), toFetch)?.isMetadataPending).toBe(false);
+    expect(toFetch).toEqual([]);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("shares an in-flight batch with current-song and overlapping queue requests", async () => {
+    const first = file(700005);
+    const second = file(700006);
+    let finish!: (value: ReturnType<typeof response>) => void;
+    fetchMock.mockImplementation(() => new Promise((resolve) => { finish = resolve; }));
+    queue.set([pending(700005), pending(700006)]);
+    currentSong.set(pending(700005));
+    const batch = yandexSource.fetchQueueMeta?.([first, second]);
+    const duplicate = yandexSource.fetchQueueMeta?.([first]);
+    yandexSource.enrichCurrentSong?.(pending(700005), get(status));
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(get(queue).every((row) => row.isMetadataPending)).toBe(true);
+    finish(response({ [first]: { id: "700005", title: "First", artist: "Artist" }, [second]: { id: "700006", title: "Second", artist: "Artist" } }));
+    await Promise.all([batch, duplicate]);
+    expect(get(queue).every((row) => !row.isMetadataPending)).toBe(true);
+    expect(get(currentSong).title).toBe("First");
+  });
+
+  it("patches pending rows from metadata that was cached before the fetch began", async () => {
+    const url = file(700007);
+    queue.set([pending(700007)]);
+    activePlaylistTracks.set([pending(700007)]);
+    currentSong.set(pending(700007));
+    yandexContext.set({ streamCache: { [url]: { id: "700007", file: url, title: "Cached", artist: "Artist", isYandex: true } } });
+    await yandexSource.fetchQueueMeta?.([url]);
+    expect(get(queue)[0]).toMatchObject({ title: "Cached", isMetadataPending: false });
+    expect(get(activePlaylistTracks)[0].isMetadataPending).toBe(false);
+    expect(get(currentSong).isMetadataPending).toBe(false);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("releases all pending rows after malformed batch responses", async () => {
+    queue.set([pending(700008), pending(700009)]);
+    fetchMock.mockResolvedValue(response([]));
+    const request = yandexSource.fetchQueueMeta?.([file(700008), file(700009)]);
+    await vi.advanceTimersByTimeAsync(METADATA_RETRY_DELAY);
+    await request;
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(get(queue).map((row) => row.title)).toEqual(["700008.mp3", "700009.mp3"]);
+    expect(get(queue).every((row) => !row.isMetadataPending)).toBe(true);
+  });
+
+  it("bounds stalled response-body decoding and eventually releases the skeleton", async () => {
+    queue.set([pending(700010)]);
+    fetchMock.mockResolvedValue({ ok: true, json: () => new Promise<never>(() => {}) });
+    const request = yandexSource.fetchQueueMeta?.([file(700010)]);
+    await vi.advanceTimersByTimeAsync(24_000 + METADATA_RETRY_DELAY);
+    await request;
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(get(queue)[0]).toMatchObject({ title: "700010.mp3", artist: "Unknown Artist", isMetadataPending: false });
+    expect(fetchMock.mock.calls.every(([, options]) => options.signal.aborted)).toBe(true);
   });
 });
 

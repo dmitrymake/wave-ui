@@ -17,11 +17,15 @@ const currentSong = vi.hoisted(() => {
   const { writable: w } = require("svelte/store") as typeof import("svelte/store");
   return w<Partial<Track>>({ file: "" });
 });
+const nav = vi.hoisted(() => {
+  const { writable: w } = require("svelte/store") as typeof import("svelte/store");
+  return { stack: w([{ view: "root" }]), tab: w("artists") };
+});
 vi.mock("../store", () => ({
   currentSong,
   stations: writable([]),
-  navigationStack: writable([{ view: "queue" }]),
-  activeMenuTab: writable("queue"),
+  navigationStack: nav.stack,
+  activeMenuTab: nav.tab,
   favorites: writable<Set<string>>(new Set()),
   getTrackThumbUrl: () => "/images/default_icon.png",
   getTrackCoverUrl: () => "/images/default_cover.png",
@@ -58,6 +62,7 @@ const testSource: TrackSource = {
 registerTrackSource(testSource);
 
 import TrackRow from "../../components/TrackRow.svelte";
+import { pendingPlayback } from "../stores/playback";
 
 const baseTrack = (over: Partial<Track>): Track =>
   ({
@@ -73,6 +78,9 @@ const baseTrack = (over: Partial<Track>): Track =>
 
 beforeEach(() => {
   currentSong.set({ file: "" });
+  nav.stack.set([{ view: "root" }]);
+  nav.tab.set("artists");
+  pendingPlayback.set(null);
 });
 
 describe("TrackRow — content", () => {
@@ -89,6 +97,33 @@ describe("TrackRow — content", () => {
       props: { track: baseTrack({ file: "Music/a.flac", title: "Solo" }), index: 0 },
     });
     expect(getByText("Unknown Artist")).toBeInTheDocument();
+  });
+});
+
+describe("TrackRow — metadata loading", () => {
+  it("skeletonizes title, artist, and cover until metadata arrives", async () => {
+    const track = baseTrack({ file: "/dev/shm/yandex_music/tracks/4649437.mp3", title: "4649437.mp3", artist: "Unknown Artist", isMetadataPending: true });
+    const { container, queryByText, getByRole, rerender } = render(TrackRow, { props: { track, index: 0 } });
+    expect(getByRole("listitem", { name: "Loading track" })).toHaveAttribute("aria-busy", "true");
+    expect(queryByText("4649437.mp3")).not.toBeInTheDocument();
+    expect(queryByText("Unknown Artist")).not.toBeInTheDocument();
+    expect(container.querySelectorAll(".skeleton")).toHaveLength(3);
+    expect(container.querySelector(".thumb img")).toBeNull();
+
+    await rerender({ track: { ...track, title: "Loaded song", artist: "Loaded artist", isMetadataPending: false } });
+    expect(getByRole("listitem", { name: "Loaded song by Loaded artist" })).toHaveAttribute("aria-busy", "false");
+    expect(container.querySelector(".thumb > .skeleton")).toBeNull();
+    expect(container.querySelector(".thumb img")).not.toBeNull();
+  });
+
+  it("renders a filename fallback for a resolved stream with incomplete metadata", () => {
+    const { getByText, container } = render(TrackRow, { props: {
+      track: baseTrack({ file: "teststream:4649437", service: "teststream", isMetadataPending: false }), index: 0,
+    } });
+    expect(getByText("teststream:4649437")).toBeInTheDocument();
+    expect(getByText("Unknown Artist")).toBeInTheDocument();
+    expect(container.querySelector(".info .skeleton")).toBeNull();
+    expect(container.querySelector(".row")).toHaveAttribute("aria-busy", "false");
   });
 });
 
@@ -147,6 +182,7 @@ describe("TrackRow — now-playing highlight via source capability", () => {
   });
 
   it("marks the exact queue index as active (not striped) when it is the playing position", () => {
+    nav.tab.set("queue");
     currentSong.set({ file: "Music/now.flac" });
     const { container } = render(TrackRow, {
       props: {
@@ -160,6 +196,26 @@ describe("TrackRow — now-playing highlight via source capability", () => {
     expect(row).toHaveClass("active");
     // active row suppresses the moving stripes.
     expect(row).not.toHaveClass("striped");
+  });
+  it("shows only the actual queue position even when the optimistic file points to the next song", () => {
+    nav.tab.set("queue");
+    currentSong.set({ file: "Music/next.flac" });
+    const first = render(TrackRow, { props: { track: baseTrack({ file: "Music/old.flac", title: "Old" }), index: 0, playingIndex: 0, isPlaying: true } });
+    const second = render(TrackRow, { props: { track: baseTrack({ file: "Music/next.flac", title: "Next" }), index: 1, playingIndex: 0, isPlaying: true } });
+    expect(first.container.querySelector('.eq-anim')).not.toBeNull();
+    expect(second.container.querySelector('.eq-anim')).toBeNull();
+    expect(second.container.querySelector('.row.striped')).toBeNull();
+  });
+  it("shows a loading indicator for the selected queue row and suppresses the old equalizer", () => {
+    nav.tab.set("queue");
+    const target = baseTrack({ file: "Music/next.flac", title: "Next" });
+    pendingPlayback.set({ sequence: 1, track: target, position: 1, phase: "preparing" });
+    const first = render(TrackRow, { props: { track: baseTrack({ file: "Music/old.flac", title: "Old" }), index: 0, playingIndex: 0, isPlaying: true } });
+    const second = render(TrackRow, { props: { track: target, index: 1, playingIndex: 0, isPlaying: true } });
+    expect(first.container.querySelector('.eq-anim')).toBeNull();
+    expect(second.getByRole('status', { name: 'Loading track 2' })).toBeInTheDocument();
+    expect(second.container.querySelector('.row')).toHaveAttribute('aria-busy', 'true');
+    pendingPlayback.set(null);
   });
 });
 

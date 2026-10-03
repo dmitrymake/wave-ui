@@ -2,6 +2,7 @@
 <!-- Copyright (c) 2025 dmitrymake -->
 <script lang="ts">
   import { ICONS } from "../lib/icons";
+  import PlaybackSpinner from "./PlaybackSpinner.svelte";
 
   // Coarse pointer = touchscreen: there is no hover state to react to, so the
   // glyph has to come from the row's own state instead.
@@ -12,10 +13,11 @@
     isExactActive?: boolean;
     isPlaying?: boolean;
     isHovering?: boolean;
+    loading?: boolean;
     onaction?: () => void;
   }
 
-  let { index, isExactActive = false, isPlaying = false, isHovering = false, onaction }: Props = $props();
+  let { index, isExactActive = false, isPlaying = false, isHovering = false, loading = false, onaction }: Props = $props();
 
   // On a touchscreen :hover never fires, so the play/pause glyph swapped only
   // for a mouse user. Hover still wins when it happens; otherwise the row's own
@@ -30,10 +32,14 @@
 <button
   class="num-box"
   onclick={onaction}
-  aria-label={isActivePlaying ? "Pause" : `Play track ${index + 1}`}
+  aria-label={loading ? `Loading track ${index + 1}` : isActivePlaying ? "Pause" : `Play track ${index + 1}`}
   aria-current={isExactActive}
+  aria-busy={loading}
+  disabled={loading}
 >
-  {#if showEq}
+  {#if loading}
+    <PlaybackSpinner size="var(--icon-size-xs)" label={`Loading track ${index + 1}`} />
+  {:else if showEq}
     <div class="eq-anim">
       <span class="bar b1"></span>
       <span class="bar b2"></span>

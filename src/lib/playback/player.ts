@@ -13,6 +13,8 @@ import {
   queueVersion,
   queue,
   isQueueLocked,
+  isQueueLoading,
+  queueLoadError,
 } from "../store";
 import { db } from "../db";
 import { resolveSource } from "../sources/trackSource";
@@ -21,26 +23,123 @@ import { findStationByStream } from "../radio";
 import { MSG } from "../messages";
 import { logger } from "../logger";
 import type { Track, MpdStatus, CurrentSong, Station } from "../types";
+import { pendingPlayback } from "../stores/playback";
+import { withMetadataDeadline } from "../sources/metadataRequest";
 
 const POLLER_INTERVAL: number = 1000;
 const TICKER_INTERVAL: number = 250;
+const QUEUE_LOADING_TIMEOUT = 30_000;
+const QUEUE_HYDRATION_TIMEOUT = 5_000;
+const QUEUE_METADATA_TIMEOUT = 125_000;
 
 let statusPoller: ReturnType<typeof setInterval> | null = null;
 let playbackTicker: ReturnType<typeof setInterval> | null = null;
 let lastTickTime: number = 0;
 let timeDriftSpeed: number = 1.0;
+// Server-position tracking used to detect MPD buffering: while a track is still
+// loading, MPD reports state "play" but its elapsed does not move.
+let lastServerElapsed: number = -1;
+let lastServerElapsedAt: number = 0;
+
+function resetElapsedTracking(): void {
+  lastServerElapsed = -1;
+  lastServerElapsedAt = 0;
+}
 
 let isInitialSync: boolean = true;
 let forceHardSync: boolean = false;
 let ignoreUpdatesUntil: number = 0;
 let queueUnlockTimer: ReturnType<typeof setTimeout> | null = null;
+let playbackSequence = 0;
+let playbackAbort: AbortController | null = null;
+let playbackDeadline: ReturnType<typeof setTimeout> | null = null;
+let playbackFallback: { song: CurrentSong; status: MpdStatus } | null = null;
+let lastPrefetched = "";
+let pollerGeneration = 0;
+let queueSyncTask: object | null = null;
+let queueLoadingDeadline: ReturnType<typeof setTimeout> | null = null;
+
+function settleQueueLoading(failed: boolean = false): void {
+  if (queueLoadingDeadline) clearTimeout(queueLoadingDeadline);
+  queueLoadingDeadline = null;
+  isQueueLoading.set(false);
+  queueLoadError.set(failed);
+}
+
+function releaseQueueMetadata(files: string[]): void {
+  const missing = new Set(files);
+  queue.update((rows) => rows.map((track) => track.isMetadataPending && missing.has(track.file)
+    ? { ...track, title: track.title || track.file.split("/").pop() || track.file,
+        artist: track.artist || "Unknown Artist", isMetadataPending: false }
+    : track));
+}
+
+function beginPlayback(track: Track, position: number | null): number {
+  if (!get(pendingPlayback)) playbackFallback = { song: get(currentSong), status: get(status) };
+  playbackAbort?.abort();
+  if (playbackDeadline) clearTimeout(playbackDeadline);
+  const sequence = ++playbackSequence;
+  playbackAbort = new AbortController();
+  pendingPlayback.set({ sequence, track, position, phase: "preparing" });
+  applyOptimisticTrack(track);
+  status.update((s) => ({ ...s, state: "play", elapsed: 0, duration: track.time || 0, bitrate: 0, format: "", song: position ?? -1, songId: -1 }));
+  stopTicker();
+  playbackDeadline = setTimeout(() => failPlayback(sequence, new Error("Audio took too long to start; try again")), 75000);
+  return sequence;
+}
+
+function isCurrentPlayback(sequence: number): boolean {
+  return get(pendingPlayback)?.sequence === sequence;
+}
+
+function completePlayback(): void {
+  if (playbackDeadline) clearTimeout(playbackDeadline);
+  playbackDeadline = null;
+  playbackAbort = null;
+  playbackFallback = null;
+  pendingPlayback.set(null);
+}
+
+function failPlayback(sequence: number, error: unknown): void {
+  if (!isCurrentPlayback(sequence)) return;
+  const previous = playbackFallback;
+  playbackAbort?.abort();
+  completePlayback();
+  if (previous) { currentSong.set(previous.song); status.set(previous.status); }
+  isQueueLocked.set(false);
+  showToast(error instanceof Error ? error.message : MSG.PLAY_FAILED_TO_PLAY, "error");
+  forceHardSync = true;
+  void refreshStatus();
+}
+
+async function preparePlayback(sequence: number, uri: string): Promise<boolean> {
+  if (!isCurrentPlayback(sequence)) return false;
+  const source = resolveSource(uri);
+  await source?.prepareUri?.(uri, playbackAbort?.signal);
+  return isCurrentPlayback(sequence);
+}
+
+function startingPlayback(sequence: number, position: number | null): void {
+  if (!isCurrentPlayback(sequence)) return;
+  pendingPlayback.update((pending) => pending ? { ...pending, phase: "starting", position } : pending);
+  status.update((s) => ({ ...s, song: position ?? s.song }));
+  isQueueLocked.set(false);
+  forceHardSync = true;
+  void refreshStatus();
+}
 
 export function startStatusPoller(): void {
   stopStatusPoller();
   isInitialSync = true;
   forceHardSync = false;
   ignoreUpdatesUntil = 0;
+  resetElapsedTracking();
   isQueueLocked.set(false);
+  queueLoadError.set(false);
+  isQueueLoading.set(get(queue).length === 0);
+  if (get(isQueueLoading)) {
+    queueLoadingDeadline = setTimeout(() => settleQueueLoading(true), QUEUE_LOADING_TIMEOUT);
+  }
 
   refreshStatus();
   statusPoller = setInterval(() => {
@@ -53,17 +152,27 @@ export function startStatusPoller(): void {
 }
 
 export function stopStatusPoller(): void {
+  pollerGeneration++;
+  queueSyncTask = null;
+  if (queueLoadingDeadline) clearTimeout(queueLoadingDeadline);
+  queueLoadingDeadline = null;
+  isQueueLoading.set(false);
   if (statusPoller) {
     clearInterval(statusPoller);
     statusPoller = null;
   }
   stopTicker();
+  playbackAbort?.abort();
+  completePlayback();
 }
 
 async function refreshStatus(): Promise<void> {
+  const generation = pollerGeneration;
   try {
     const statusText: string = await mpdClient.send("status");
+    if (generation !== pollerGeneration) return;
     const songText: string = await mpdClient.send("currentsong");
+    if (generation !== pollerGeneration) return;
 
     const newStatus: MpdStatus = MpdParser.parseStatus(statusText);
     const newSong: CurrentSong = MpdParser.parseCurrentSong(songText);
@@ -75,23 +184,29 @@ async function refreshStatus(): Promise<void> {
 
     if (locked) return;
 
-    if (
-      (newStatus.playlistLength > 0 && newStatus.playlistVersion !== oldVer) ||
-      (newStatus.playlistLength > 0 && get(queue).length === 0)
-    ) {
-      syncQueue(newStatus.playlistVersion);
+    if (newStatus.playlistLength === 0) {
+      queueSyncTask = null;
+      if (get(queue).length) queue.set([]);
+      queueVersion.set(newStatus.playlistVersion);
+      settleQueueLoading();
+    } else if (newStatus.playlistVersion !== oldVer || get(queue).length === 0) {
+      void syncQueue(newStatus.playlistVersion);
     }
   } catch (e) {
+    if (generation !== pollerGeneration) return;
+    if (get(isQueueLoading)) settleQueueLoading(true);
     logger.warn("[MPD] Status refresh failed:", e);
   }
 }
 
 async function syncQueue(newVersion: number): Promise<void> {
-  if (get(isQueueLocked)) return;
+  if (get(isQueueLocked) || queueSyncTask) return;
+  const task = {};
+  queueSyncTask = task;
 
   try {
-    const text: string = await mpdClient.send("playlistinfo");
-    if (get(isQueueLocked)) return;
+    const text: string = await withMetadataDeadline(() => mpdClient.send("playlistinfo"), QUEUE_LOADING_TIMEOUT);
+    if (get(isQueueLocked) || queueSyncTask !== task) return;
 
     const rawTracks: Track[] = MpdParser.parseTracks(text);
 
@@ -102,11 +217,14 @@ async function syncQueue(newVersion: number): Promise<void> {
     let cachedMap = new Map<string, Track>();
     if (filesToLookup.length > 0) {
       try {
-        cachedMap = await db.getFilesMap(filesToLookup);
+        // A blocked IndexedDB upgrade must not prevent the MPD queue from rendering.
+        cachedMap = await withMetadataDeadline(() => db.getFilesMap(filesToLookup), QUEUE_HYDRATION_TIMEOUT);
       } catch (dbErr) {
         logger.warn("Failed to hydrate queue from DB", dbErr);
       }
     }
+
+    if (get(isQueueLocked) || queueSyncTask !== task || get(status).playlistVersion !== newVersion) return;
 
     const toFetch: string[] = [];
 
@@ -119,7 +237,20 @@ async function syncQueue(newVersion: number): Promise<void> {
       // The owning source gets first chance to enrich from its own cache.
       if (source?.enrichQueueTrack) {
         const enriched = source.enrichQueueTrack(t, toFetch);
-        if (enriched) return enriched;
+        if (enriched) return { ...enriched, isMetadataPending: false };
+        if (!source.fetchQueueMeta) return { ...t, service, isMetadataPending: false };
+        toFetch.push(fileUrl);
+        // Cache misses stay on skeletons until the bounded metadata request settles.
+        return {
+          ...t,
+          title: "",
+          artist: "",
+          album: "",
+          image: undefined,
+          service,
+          _uid: String(t.id ?? `${t.pos}:${t.file}`),
+          isMetadataPending: true,
+        };
       }
 
       const lookupKey: string = fileUrl.normalize("NFC");
@@ -147,12 +278,28 @@ async function syncQueue(newVersion: number): Promise<void> {
 
     queue.set(tracks);
     queueVersion.set(newVersion);
+    settleQueueLoading();
 
     if (toFetch.length) {
-      resolveSource(toFetch[0])?.fetchQueueMeta?.(toFetch);
+      // A queue can contain several streaming services. Each source receives
+      // only its own missing URLs; the first track no longer owns the whole batch.
+      const batches = new Map<NonNullable<ReturnType<typeof resolveSource>>, string[]>();
+      for (const file of new Set(toFetch)) {
+        const source = resolveSource(file);
+        if (source) batches.set(source, [...(batches.get(source) ?? []), file]);
+      }
+      for (const [source, files] of batches) {
+        void withMetadataDeadline(() => Promise.resolve(source.fetchQueueMeta?.(files)), QUEUE_METADATA_TIMEOUT)
+          .catch((e) => logger.warn("Queue metadata error", e))
+          .finally(() => releaseQueueMetadata(files));
+      }
     }
   } catch (e) {
+    if (queueSyncTask !== task) return;
+    settleQueueLoading(true);
     logger.error("Queue sync error", e);
+  } finally {
+    if (queueSyncTask === task) queueSyncTask = null;
   }
 }
 
@@ -192,6 +339,7 @@ function reconcileStatus(
 
     if (serverStatus.state === "pause" || localStatus.state === "pause") {
       manageTicker(false);
+      resetElapsedTracking();
       return now < ignoreUpdatesUntil ? localStatus : serverStatus;
     }
 
@@ -199,6 +347,7 @@ function reconcileStatus(
       isInitialSync = false;
       forceHardSync = false;
       timeDriftSpeed = 1.0;
+      resetElapsedTracking();
       if (isRadio && !streamsHaveElapsed) serverStatus.elapsed = 0;
       manageTicker(isPlaying && hasElapsed);
       return serverStatus;
@@ -209,11 +358,29 @@ function reconcileStatus(
     if (forceHardSync) {
       forceHardSync = false;
       timeDriftSpeed = 1.0;
+      resetElapsedTracking();
       manageTicker(isPlaying && hasElapsed);
       return serverStatus;
     }
 
     if (isPlaying && hasElapsed) {
+      // MPD flips to "play" before the decoder actually feeds audio: while the
+      // track is still loading (a network stream, a slow mount) its elapsed
+      // stays put. Running the local ticker freely in that window makes the bar
+      // start moving and then snap back once the drift exceeds 2s, so freeze the
+      // local clock until the server position advances again. A large negative
+      // jump is a real reposition (seek/restart), not buffering — let the drift
+      // logic below handle it.
+      const wallSeconds = (now - lastServerElapsedAt) / 1000;
+      const advanced = serverStatus.elapsed - lastServerElapsed;
+      const stalled = lastServerElapsed >= 0 && wallSeconds > 0.3 &&
+        advanced > -0.5 && advanced < wallSeconds * 0.25;
+      lastServerElapsed = serverStatus.elapsed;
+      lastServerElapsedAt = now;
+      if (stalled) {
+        timeDriftSpeed = 0;
+        return { ...serverStatus, elapsed: localStatus.elapsed };
+      }
       const diff = serverStatus.elapsed - localStatus.elapsed;
       if (Math.abs(diff) > 2.0) {
         timeDriftSpeed = 1.0;
@@ -228,6 +395,7 @@ function reconcileStatus(
     }
 
     manageTicker(false);
+    resetElapsedTracking();
     return serverStatus;
   });
 }
@@ -242,6 +410,23 @@ function updateStores(serverStatus: MpdStatus, serverSong: CurrentSong): void {
   const streamsHaveElapsed = !!source?.streamsHaveElapsed;
 
   resolveStationName(serverSong, oldSong, get(stations), streamsHaveElapsed);
+  const pending = get(pendingPlayback);
+  if (pending) {
+    playbackFallback = { song: serverSong, status: serverStatus };
+    const matches = !pending.track.file || serverSong.file === pending.track.file ||
+      resolveSource(pending.track.file)?.matchesPlaying?.(pending.track, serverSong.file);
+    const positionMatches = pending.position === null || serverStatus.song === pending.position;
+    if (pending.phase === "starting" && matches && positionMatches && serverStatus.state === "play" &&
+      (serverStatus.elapsed > 0 || (!streamsHaveElapsed && serverStatus.bitrate > 0))) {
+      completePlayback();
+    } else {
+      // Polls describe the old physical song while audio is being prepared.
+      // Keep the selected artwork/title and its spinner until MPD starts it.
+      status.update((s) => ({ ...s, volume: serverStatus.volume, playlistLength: serverStatus.playlistLength,
+        playlistVersion: serverStatus.playlistVersion }));
+      return;
+    }
+  }
   // serverSong is a fresh object every 1s poll, so an unconditional set re-runs
   // isPlayingFile across every list row each second even when the track is unchanged.
   // Optimistic paths set currentSong explicitly, so skipping a no-op poll is safe.
@@ -251,13 +436,22 @@ function updateStores(serverStatus: MpdStatus, serverSong: CurrentSong): void {
     oldSong.id !== serverSong.id ||
     oldSong.title !== serverSong.title ||
     oldSong.artist !== serverSong.artist ||
-    oldSong.stationName !== serverSong.stationName
+    oldSong.stationName !== serverSong.stationName ||
+    oldSong.isMetadataPending !== serverSong.isMetadataPending
   ) {
     currentSong.set(serverSong);
   }
 
   const isRadio = !!isRemoteUrl(serverSong.file);
   reconcileStatus(serverStatus, serverSong, oldSong, isRadio, streamsHaveElapsed);
+  const next = get(queue)[serverStatus.song + 1];
+  if (serverStatus.state === "play" && next?.file && resolveSource(next.file)?.prepareUri) {
+    const key = `${serverSong.file}:${next.file}`;
+    if (key !== lastPrefetched) {
+      lastPrefetched = key;
+      void resolveSource(next.file)?.prepareUri?.(next.file).catch((error) => logger.warn("[Player] Next track preparation failed", error));
+    }
+  }
 }
 
 function manageTicker(shouldRun: boolean): void {
@@ -356,6 +550,7 @@ function rollbackOptimistic(context: string, e: unknown): void {
 
 export const PlayerActions = {
   async togglePlay(): Promise<void> {
+    if (get(pendingPlayback)) return;
     const s: MpdStatus = get(status);
     const isPlaying: boolean = s.state === "play";
     ignoreUpdatesUntil = performance.now() + 800;
@@ -384,12 +579,12 @@ export const PlayerActions = {
     if (current) {
       resolveSource(current.file)?.onSkip?.(current, s.elapsed);
     }
-
-    if (nextPos < q.length && q[nextPos].title) {
-      applyOptimisticTrack(q[nextPos]);
-    } else {
-      currentSong.update((s) => ({ ...s, title: "Loading...", artist: "" }));
+    if (!s.random && nextPos >= 0 && nextPos < q.length) {
+      await this.playQueuePosition(nextPos);
+      return;
     }
+
+    const sequence = beginPlayback({ ...get(currentSong), file: "", title: "Loading…", artist: "" }, null);
 
     ignoreUpdatesUntil = performance.now() + 600;
     status.update((s) => ({ ...s, elapsed: 0 }));
@@ -397,10 +592,11 @@ export const PlayerActions = {
     try {
       await mpdClient.send("next");
     } catch (e) {
+      failPlayback(sequence, e);
       rollbackOptimistic("next", e);
       return;
     }
-    refreshStatus();
+    startingPlayback(sequence, null);
   },
 
   async previous(): Promise<void> {
@@ -409,11 +605,12 @@ export const PlayerActions = {
     const q: Track[] = get(queue);
     const prevPos = s.song - 1;
 
-    if (prevPos >= 0 && q[prevPos] && q[prevPos].title) {
-      applyOptimisticTrack(q[prevPos]);
-    } else {
-      currentSong.update((s) => ({ ...s, title: "Loading...", artist: "" }));
+    if (!s.random && prevPos >= 0 && prevPos < q.length) {
+      await this.playQueuePosition(prevPos);
+      return;
     }
+
+    const sequence = beginPlayback({ ...get(currentSong), file: "", title: "Loading…", artist: "" }, null);
 
     ignoreUpdatesUntil = performance.now() + 600;
     status.update((s) => ({ ...s, elapsed: 0 }));
@@ -421,10 +618,11 @@ export const PlayerActions = {
     try {
       await mpdClient.send("previous");
     } catch (e) {
+      failPlayback(sequence, e);
       rollbackOptimistic("previous", e);
       return;
     }
-    refreshStatus();
+    startingPlayback(sequence, null);
   },
 
   async setVolume(val: number): Promise<void> {
@@ -439,6 +637,7 @@ export const PlayerActions = {
   },
 
   async seek(seconds: number): Promise<void> {
+    if (get(pendingPlayback)) return;
     forceHardSync = true;
     ignoreUpdatesUntil = performance.now() + 500;
     const duration: number = get(status).duration;
@@ -476,37 +675,29 @@ export const PlayerActions = {
   },
 
   async playUri(uri: string, meta: Partial<Track> = {}): Promise<void> {
+    if (get(pendingPlayback)?.track.file === uri) return;
     isQueueLocked.set(true);
     const safeUri: string = escapePath(uri);
     forceHardSync = true;
 
-    // Snapshot for rollback: on socket failure the UI must not stick on Loading…
-    const prevSong: CurrentSong = get(currentSong);
-    const prevStatus: MpdStatus = get(status);
-    status.update((s) => ({ ...s, state: "play", elapsed: 0 }));
-    currentSong.set({
-      title: meta.title || "Loading...",
-      artist: meta.artist || "",
-      album: meta.album || "",
-      file: uri,
-      genre: "",
-      time: 0,
-      track: "",
-    });
-    stopTicker();
+    const sequence = beginPlayback({ title: "Loading…", artist: "", album: "", genre: "", time: 0,
+      track: "", ...meta, file: uri }, null);
 
     try {
+      if (!await preparePlayback(sequence, uri)) return;
       const songData: string = await mpdClient.send("currentsong");
       const currentPos: number = parseInt(MpdParser.parseKeyValue(songData).pos);
+      if (!isCurrentPlayback(sequence)) return;
+      const targetPos = Number.isFinite(currentPos) ? currentPos + 1 : 0;
 
       const source = resolveSource(uri);
-      const handled = source?.playUri ? await source.playUri(uri, currentPos) : false;
+      const handled = source?.playUri ? await source.playUri(uri, currentPos, () => isCurrentPlayback(sequence)) : false;
       if (!handled) {
         const res: string = await mpdClient.send(`addid "${safeUri}"`);
         const newId: number = parseInt(MpdParser.parseKeyValue(res).id);
 
         if (!isNaN(newId)) {
-          const targetPos: number = isNaN(currentPos) ? 0 : currentPos + 1;
+          if (!isCurrentPlayback(sequence)) { await mpdClient.send(`deleteid ${newId}`); return; }
           await mpdClient.send(`moveid ${newId} ${targetPos}`);
           await mpdClient.send(`playid ${newId}`);
         } else {
@@ -514,15 +705,14 @@ export const PlayerActions = {
           await mpdClient.send("play");
         }
       }
+      startingPlayback(sequence, targetPos);
     } catch (e) {
       logger.error("Play error", e);
       // Roll back the optimistic Loading… row so the previous track returns.
-      currentSong.set(prevSong);
-      status.set(prevStatus);
-      showToast(MSG.PLAY_FAILED_TO_PLAY, "error");
+      failPlayback(sequence, e);
     }
 
-    isQueueLocked.set(false);
+    if (isCurrentPlayback(sequence)) isQueueLocked.set(false);
     setTimeout(() => refreshStatus(), 500);
   },
 
@@ -625,11 +815,31 @@ export const PlayerActions = {
   },
 
   async playQueuePosition(pos: number): Promise<void> {
+    const track = get(queue)[pos];
+    if (!track) {
+      try { await mpdClient.send(`play ${pos}`); } catch (e) { showToast(MSG.PLAY_FAILED_TO_PLAY, "error"); }
+      return;
+    }
+    const pending = get(pendingPlayback);
+    if (pending?.position === pos && pending.track.file === track.file) return;
+    const sequence = beginPlayback(track, pos);
     try {
-      await mpdClient.send(`play ${pos}`);
+      // Capture MPD's stable id before a potentially slow provider request.
+      const id = await this.getQueueItemIdAt(pos);
+      if (!await preparePlayback(sequence, track.file)) return;
+      if (Number.isFinite(id)) {
+        const details = MpdParser.parseKeyValue(await mpdClient.send(`playlistid ${id}`));
+        if (!isCurrentPlayback(sequence)) return;
+        const position = Number.parseInt(details.pos);
+        await mpdClient.send(`playid ${id}`);
+        startingPlayback(sequence, Number.isFinite(position) ? position : pos);
+      } else {
+        await mpdClient.send(`play ${pos}`);
+        startingPlayback(sequence, pos);
+      }
     } catch (e) {
       logger.error("[Player] playQueuePosition failed", e);
-      showToast(MSG.PLAY_FAILED_TO_PLAY, "error");
+      failPlayback(sequence, e);
     }
   },
 
@@ -686,14 +896,20 @@ export const PlayerActions = {
     }, 1000);
   },
 
-  async playAllTracks(tracks: Track[]): Promise<void> {
+  async playAllTracks(tracks: Track[], beforeReplace?: () => Promise<void>): Promise<void> {
     if (!tracks || tracks.length === 0) return;
+    const sequence = beginPlayback(tracks[0], 0);
     try {
+      if (!await preparePlayback(sequence, tracks[0].file)) return;
+      await beforeReplace?.();
+      if (!isCurrentPlayback(sequence)) return;
       await mpdClient.send("stop");
       await mpdClient.send("clear");
       await sendTracksInChunks(tracks, true);
+      startingPlayback(sequence, 0);
     } catch (e) {
       logger.error(e);
+      failPlayback(sequence, e);
     }
   },
 

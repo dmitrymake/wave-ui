@@ -23,6 +23,9 @@
   import PlayModeButton from "./PlayModeButton.svelte";
   import LikeButton from "./LikeButton.svelte";
   import IconButton from "./ui/IconButton.svelte";
+  import PlaybackSpinner from "./PlaybackSpinner.svelte";
+  import Skeleton from "./Skeleton.svelte";
+  import { pendingPlayback } from "../lib/stores/playback";
 
   let isHoveringBar = $state(false);
   let progressBar: HTMLElement;
@@ -36,8 +39,13 @@
   let elapsed = $derived($status.elapsed || 0);
   let isPlaying = $derived($status.state === "play");
   let isRadio = $derived(isRadioStream($currentSong));
-  let displayTitle = $derived($currentSong.title || "Not Playing");
-  let displayArtist = $derived($currentSong.stationName || $currentSong.artist || "Moode");
+  let isMetaPending = $derived(!!$currentSong.isMetadataPending);
+  let displayTitle = $derived(
+    isMetaPending ? "" : $currentSong.title || "Not Playing",
+  );
+  let displayArtist = $derived(
+    isMetaPending ? "" : $currentSong.stationName || $currentSong.artist || "Moode",
+  );
   let artSrc = $derived(getTrackCoverUrl($currentSong, $stations, $currentSong.stationName));
 
   // The dock keeps mouse drags on `window` so they keep following the cursor
@@ -197,26 +205,35 @@
 
         <div class="meta">
           <div class="title-row">
-            <div class="title text-ellipsis" title={displayTitle}>
-              {displayTitle}
-            </div>
+            {#if isMetaPending}
+              <Skeleton width="140px" height="15px" radius="4px" />
+            {:else}
+              <div class="title text-ellipsis" title={displayTitle}>
+                {displayTitle}
+              </div>
+            {/if}
             <IconButton
               class="tiny-dots"
               size="sm"
-              ariaLabel={`More actions for ${displayTitle}`}
+              ariaLabel={`More actions for ${displayTitle || "loading track"}`}
               title="More actions"
               icon={ICONS.DOTS}
               onclick={handleContext}
             />
           </div>
           <div class="artist-row">
-            <div class="artist text-ellipsis" title={displayArtist}>
-              {displayArtist}
-            </div>
+            {#if isMetaPending}
+              <Skeleton width="90px" height="13px" radius="4px" />
+            {:else}
+              <div class="artist text-ellipsis" title={displayArtist}>
+                {displayArtist}
+              </div>
+            {/if}
             {#if qualityLabel}
               <span class="badge">{qualityLabel}</span>
             {/if}
           </div>
+          {#if $pendingPlayback}<span class="loading-label" role="status">Loading audio…</span>{/if}
         </div>
       </div>
 
@@ -227,8 +244,10 @@
           {@html ICONS.PREVIOUS}
         </IconButton>
 
-        <button class="play-btn flex-center" onclick={stop(togglePlay)} aria-label={$status.state === "play" ? "Pause" : "Play"} title={$status.state === "play" ? "Pause" : "Play"}>
-          {@html $status.state === "play" ? ICONS.PAUSE : ICONS.PLAY}
+        <button class="play-btn flex-center" onclick={stop(togglePlay)} disabled={!!$pendingPlayback} aria-busy={!!$pendingPlayback}
+          aria-label={$pendingPlayback ? "Loading audio" : $status.state === "play" ? "Pause" : "Play"}
+          title={$pendingPlayback ? "Loading audio…" : $status.state === "play" ? "Pause" : "Play"}>
+          {#if $pendingPlayback}<PlaybackSpinner label="Loading audio" />{:else}{@html $status.state === "play" ? ICONS.PAUSE : ICONS.PLAY}{/if}
         </button>
 
         <IconButton ariaLabel="Next" onclick={stop(() => nav("next"))}>
@@ -248,6 +267,7 @@
 {/if}
 
 <style>
+  .loading-label { color: var(--c-text-muted); font-size: var(--text-xs); line-height: var(--leading-none); }
   .dock {
     position: fixed; bottom: var(--space-0); left: var(--space-0); right: var(--space-0);
     height: var(--mini-player-height);

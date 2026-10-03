@@ -6,6 +6,7 @@ import {
   status,
   currentSong,
   queue,
+  activePlaylistTracks,
   showToast,
   activeMenuTab,
   resetNavigation,
@@ -22,13 +23,14 @@ import { logger } from "../logger";
 import { registerTrackSource, type TrackSource, type SourceRoute } from "./trackSource";
 import { trimStreamCache, lookupStreamCache } from "./streamCache";
 import { normalizeStreamMeta, isRecord } from "../validate";
+import { METADATA_FAILURE_COOLDOWN, metadataRetryAllowed, retryMetadataRequest } from "./metadataRequest";
 import type { Track, MpdStatus, CurrentSong } from "../types";
 import type { YandexContext, YandexTrack } from "../types/yandex";
 
 export const YANDEX_SOURCE_ID = "yandex";
 
-// Ids with a fetch already in flight (see fetchMetaForTrack below).
-const inFlightMeta = new Set<string>();
+const inFlightMeta = new Map<string, Promise<void>>();
+const failedMeta = new Map<string, number>();
 
 // Bridge a Yandex source-list row to a full Track for TrackRow. YandexTrack omits
 // the local-library fields (file/genre/track), so they get neutral defaults — the
@@ -50,10 +52,11 @@ export function yandexTrackToTrack(item: YandexTrack, service: string): Track {
   };
 }
 
-async function getYandexMeta(url: string): Promise<Record<string, unknown> | null> {
+async function getYandexMeta(url: string, signal: AbortSignal): Promise<Record<string, unknown> | null> {
   try {
     const res = await fetchWithTimeout(
       YANDEX_ENDPOINT.URL + "?action=get_meta&url=" + encodeURIComponent(url),
+      { signal },
     );
     if (res.ok) {
       const data: unknown = await res.json();
@@ -68,6 +71,7 @@ async function getYandexMeta(url: string): Promise<Record<string, unknown> | nul
 
 async function batchGetYandexMeta(
   urls: string[],
+  signal: AbortSignal,
 ): Promise<Record<string, Record<string, unknown> | null>> {
   if (!urls.length) return {};
   try {
@@ -75,6 +79,7 @@ async function batchGetYandexMeta(
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ urls }),
+      signal,
     });
     if (res.ok) {
       const data: unknown = await res.json();
@@ -105,8 +110,7 @@ function buildYandexCacheEntry(url: string, meta: Record<string, unknown>) {
   };
 }
 
-// Shape of a Yandex stream-cache entry as produced by buildYandexCacheEntry.
-type YandexCacheEntry = NonNullable<ReturnType<typeof buildYandexCacheEntry>>;
+type YandexCacheEntry = YandexTrack & { file: string };
 
 // Store the entry in the stream cache under both its url and (if present) its id.
 function cacheYandexMeta(
@@ -130,107 +134,121 @@ function applyYandexMetaToQueue(
   cacheEntry: YandexCacheEntry,
   withId: boolean,
 ): void {
-  queue.update((q) =>
-    q.map((t) => {
-      if (t.file !== url) return t;
-      const patched = {
-        ...t,
-        title: cacheEntry.title || t.title,
-        artist: cacheEntry.artist || t.artist,
-        album: cacheEntry.album || t.album,
-        image: cacheEntry.image,
-        service: YANDEX_SOURCE_ID,
-        time: cacheEntry.time || t.time,
-      };
-      return withId ? { ...patched, id: cacheEntry.id || t.id } : patched;
-    }),
-  );
-}
-
-async function fetchMetaBatch(urls: string[]): Promise<void> {
-  const yCtx: YandexContext = get(yandexContext);
-  const missing = urls.filter((u) => {
-    if (lookupStreamCache(yCtx.streamCache, u, getYandexIdFromUrl)) return false;
-    return true;
-  });
-  if (!missing.length) return;
-
-  const results = await batchGetYandexMeta(missing);
-  for (const url of Object.keys(results)) {
-    const meta = results[url];
-    if (!meta) continue;
-    const cacheEntry = buildYandexCacheEntry(url, meta);
-    if (!cacheEntry) {
-      logger.warn("[Yandex] Skipping invalid meta for", url);
-      continue;
-    }
-    cacheYandexMeta(url, meta, cacheEntry);
-    applyYandexMetaToQueue(url, cacheEntry, true);
-  }
-
-  const song: CurrentSong = get(currentSong);
-  if (song.file && results[song.file]) {
-    const norm = normalizeStreamMeta(song.file, results[song.file]);
-    if (norm) {
-      currentSong.update((s) => ({
-        ...s,
-        // Truthy fallback so an empty Yandex title does not blank the display.
-        title: norm.title || s.title,
-        artist: norm.artist || s.artist,
-        album: norm.album ?? s.album,
-        image: norm.image,
-        service: YANDEX_SOURCE_ID,
-      }));
-      status.update((s) => {
-        if (norm.time && (s.duration === 0 || isNaN(s.duration))) {
-          return { ...s, duration: norm.time };
-        }
-        return s;
-      });
-    }
-  }
-}
-
-async function fetchMetaForTrack(url: string): Promise<void> {
-  const yCtx: YandexContext = get(yandexContext);
-  if (lookupStreamCache(yCtx.streamCache, url, getYandexIdFromUrl)) return;
-  // enrichCurrentSong runs on every 1s poll while uncached: dedupe in-flight
-  // fetches per url so overlapping responses can't interleave writes.
-  if (inFlightMeta.has(url)) return;
-  inFlightMeta.add(url);
+  const patch = (t: Track) => {
+    if (t.file !== url) return t;
+    const patched = {
+      ...t,
+      title: cacheEntry.title || t.title,
+      artist: cacheEntry.artist || t.artist,
+      album: cacheEntry.album || t.album,
+      image: cacheEntry.image,
+      service: YANDEX_SOURCE_ID,
+      time: cacheEntry.time || t.time,
+      isMetadataPending: false as const,
+    };
+    return withId ? { ...patched, id: cacheEntry.id ? String(cacheEntry.id) : t.id } : patched;
+  };
+  queue.update((q) => q.map(patch));
+  // Playlist details rows share the same pending flag; clear it there too so a
+  // saved playlist with Yandex tracks resolves its skeletons as well.
   try {
-    const meta = await getYandexMeta(url);
-    if (!meta) return;
-    const cacheEntry = buildYandexCacheEntry(url, meta);
-    if (!cacheEntry) {
-      logger.warn("[Yandex] Skipping invalid meta for", url);
-      return;
-    }
-    cacheYandexMeta(url, meta, cacheEntry);
-
-    const song: CurrentSong = get(currentSong);
-    if (song.file === url) {
-      currentSong.update((s) => ({
-        ...s,
-        title: cacheEntry.title,
-        artist: cacheEntry.artist,
-        album: cacheEntry.album || s.album,
-        image: cacheEntry.image,
-        service: YANDEX_SOURCE_ID,
-      }));
-
-      status.update((s) => {
-        if (cacheEntry.time && (s.duration === 0 || isNaN(s.duration))) {
-          return { ...s, duration: cacheEntry.time };
-        }
-        return s;
-      });
-    }
-
-    applyYandexMetaToQueue(url, cacheEntry, false);
-  } finally {
-    inFlightMeta.delete(url);
+    activePlaylistTracks?.update?.((list: Track[]) => list.map(patch));
+  } catch {
+    // store barrel unavailable in unit tests — queue patch above is enough.
   }
+}
+
+function metadataFallback(track: Track): Track {
+  return {
+    ...track,
+    title: track.title || track.file.split("/").pop() || track.file,
+    artist: track.artist || "Unknown Artist",
+    isMetadataPending: false,
+  };
+}
+
+function fallbackPendingToFilename(url: string): void {
+  const fallbackPatch = (t: Track) => t.file === url && t.isMetadataPending ? metadataFallback(t) : t;
+  queue.update((q) => q.map(fallbackPatch));
+  try {
+    activePlaylistTracks?.update?.((list: Track[]) => list.map(fallbackPatch));
+  } catch {
+    // unit tests without the store barrel — queue patch above is enough.
+  }
+  currentSong.update(fallbackPatch);
+}
+
+function applyYandexMeta(url: string, meta: YandexCacheEntry, withId: boolean): void {
+  applyYandexMetaToQueue(url, meta, withId);
+  if (get(currentSong).file !== url) return;
+  currentSong.update((song) => ({
+    ...song,
+    title: meta.title || song.title || url.split("/").pop() || url,
+    artist: meta.artist || song.artist || "Unknown Artist",
+    album: meta.album || song.album,
+    image: meta.image,
+    service: YANDEX_SOURCE_ID,
+    isMetadataPending: false,
+  }));
+  status.update((s) => meta.time && (s.duration === 0 || isNaN(s.duration)) ? { ...s, duration: meta.time } : s);
+}
+
+async function loadMissingMetadata(urls: string[]): Promise<void> {
+  let missing = urls;
+  const withId = urls.length > 1;
+  try {
+    await retryMetadataRequest(async (signal) => {
+      const requested = missing;
+      const results = requested.length === 1
+        ? { [requested[0]]: await getYandexMeta(requested[0], signal) }
+        : await batchGetYandexMeta(requested, signal);
+      if (signal.aborted) throw new Error("Yandex metadata request expired");
+      const unresolved: string[] = [];
+      for (const url of requested) {
+        const meta = results[url];
+        const entry = meta ? buildYandexCacheEntry(url, meta) : null;
+        if (!entry || !meta) {
+          unresolved.push(url);
+          continue;
+        }
+        cacheYandexMeta(url, meta, entry);
+        failedMeta.delete(url);
+        applyYandexMeta(url, entry, withId);
+      }
+      missing = unresolved;
+      if (missing.length) throw new Error("Incomplete Yandex metadata response");
+    });
+  } catch (e) {
+    logger.warn("[Yandex] Queue metadata unavailable after retry", e);
+  } finally {
+    for (const url of urls) {
+      const cached = lookupStreamCache(get(yandexContext).streamCache, url, getYandexIdFromUrl);
+      if (cached) applyYandexMeta(url, cached, withId);
+      else {
+        failedMeta.set(url, Date.now() + METADATA_FAILURE_COOLDOWN);
+        fallbackPendingToFilename(url);
+      }
+      inFlightMeta.delete(url);
+    }
+  }
+}
+
+async function fetchQueueMetadata(urls: string[]): Promise<void> {
+  const requests = new Set<Promise<void>>();
+  const missing: string[] = [];
+  for (const url of new Set(urls)) {
+    const cached = lookupStreamCache(get(yandexContext).streamCache, url, getYandexIdFromUrl);
+    if (cached) applyYandexMeta(url, cached, urls.length > 1);
+    else if (inFlightMeta.has(url)) requests.add(inFlightMeta.get(url)!);
+    else if (!metadataRetryAllowed(failedMeta, url)) fallbackPendingToFilename(url);
+    else missing.push(url);
+  }
+  if (missing.length) {
+    const request = loadMissingMetadata(missing);
+    for (const url of missing) inFlightMeta.set(url, request);
+    requests.add(request);
+  }
+  await Promise.all(requests);
 }
 
 // The track is appended server-side (the PHP daemon adds it to MPD), so we cannot
@@ -365,17 +383,18 @@ export const yandexSource: TrackSource = {
         id: String(yMeta.id),
         time: currentT > 0 ? currentT : metaTime,
         _uid: String(t.id ?? t.pos) + "y",
+        isMetadataPending: false,
       };
     }
 
+    if (!metadataRetryAllowed(failedMeta, fileUrl)) {
+      return metadataFallback({ ...t, service: YANDEX_SOURCE_ID, _uid: String(t.id ?? `${t.pos}:${t.file}`) });
+    }
     toFetch.push(fileUrl);
     return null;
   },
 
-  fetchQueueMeta(urls: string[]): void {
-    if (urls.length === 1) fetchMetaForTrack(urls[0]);
-    else if (urls.length > 1) fetchMetaBatch(urls);
-  },
+  fetchQueueMeta: fetchQueueMetadata,
 
   enrichCurrentSong(serverSong: CurrentSong, serverStatus: MpdStatus): void {
     if (!serverSong.file) return;
@@ -390,11 +409,23 @@ export const yandexSource: TrackSource = {
       serverSong.image = yMeta.image;
       serverSong.service = YANDEX_SOURCE_ID;
       serverSong.id = String(yMeta.id);
+      serverSong.isMetadataPending = false;
       if (serverStatus.duration === 0 || isNaN(serverStatus.duration)) {
         if (yMeta.time) serverStatus.duration = parseFloat(String(yMeta.time));
       }
     } else if (this.matches(serverSong.file)) {
-      fetchMetaForTrack(serverSong.file);
+      if (!metadataRetryAllowed(failedMeta, serverSong.file)) {
+        Object.assign(serverSong, metadataFallback({ ...serverSong, service: YANDEX_SOURCE_ID }));
+        return;
+      }
+      // Cache miss: hide the raw RAM-cache filename until the backend answers.
+      serverSong.title = "";
+      serverSong.artist = "";
+      serverSong.album = "";
+      serverSong.image = undefined;
+      serverSong.service = YANDEX_SOURCE_ID;
+      serverSong.isMetadataPending = true;
+      void fetchQueueMetadata([serverSong.file]);
     }
   },
 

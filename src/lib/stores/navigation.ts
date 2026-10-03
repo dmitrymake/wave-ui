@@ -183,6 +183,9 @@ export function navIdentityKey(
     if (uid && kind) return `${view}#${uid}/${kind}`;
     const name = asIdPart(data.name);
     if (name) return `${view}#${name}`;
+  } else if (/(^|_)playlist$/.test(view) || /(^|_)radio$/.test(view)) {
+    const id = asIdPart(data.id);
+    if (id) return `${view}#${id}`;
   } else if (view === "albums_by_artist") {
     const name = asIdPart(data.name);
     if (name) return `${view}#${name}`;
@@ -193,6 +196,7 @@ export function navIdentityKey(
       return artist ? `${view}#${artist}/${name}` : `${view}#${name}`;
     }
   } else if (view === "search" || /(^|_)search$/.test(view)) {
+    if (data.filter) return `${view}#${JSON.stringify([String(data.query ?? ""), String(data.filter)])}`;
     return `${view}#${String(data.query ?? "")}`;
   }
   return `${view}#${stableStringify(data)}`;

@@ -26,6 +26,10 @@ export interface Track {
   year?: number;
   _uid?: string;
   playlistPos?: number;
+  // Streaming tracks (Yandex/YouTube) whose metadata hasn't arrived from the
+  // backend yet. The UI renders skeleton placeholders instead of the raw
+  // filename + "Unknown Artist" while this is true; enrichment clears it.
+  isMetadataPending?: boolean;
 }
 
 // Minimal shape the artwork resolver (cover/thumb URLs) reads off a row. Track,

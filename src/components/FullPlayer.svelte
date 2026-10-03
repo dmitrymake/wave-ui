@@ -20,6 +20,9 @@
   import PlayModeButton from "./PlayModeButton.svelte";
   import LikeButton from "./LikeButton.svelte";
   import IconButton from "./ui/IconButton.svelte";
+  import PlaybackSpinner from "./PlaybackSpinner.svelte";
+  import Skeleton from "./Skeleton.svelte";
+  import { pendingPlayback } from "../lib/stores/playback";
 
   let { isDocked = false }: { isDocked?: boolean } = $props();
 
@@ -78,6 +81,7 @@
   let elapsed = $derived($status.elapsed || 0);
   let isRadio = $derived(isRadioStream($currentSong));
   let isPlaying = $derived($status.state === "play");
+  let isMetaPending = $derived(!!$currentSong.isMetadataPending);
 
   const seekCtl = createSeekController({
     getElement: () => progressBar,
@@ -179,13 +183,21 @@
     <div class="controls-area" style="--drag-op: {1 - currentY / 400}" transition:fadeVar|global={{ duration: MOTION.base }}>
       <div class="meta">
         <h1 class="title">
-          <Marquee text={$currentSong.title || "Not Playing"} />
+          {#if isMetaPending}
+            <Skeleton width="60%" height="28px" radius="6px" />
+          {:else}
+            <Marquee text={$currentSong.title || "Not Playing"} />
+          {/if}
         </h1>
         <div class="artist-row">
           <h2 class="artist">
-            <Marquee
-              text={$currentSong.stationName || $currentSong.artist || "Moode Audio"}
-            />
+            {#if isMetaPending}
+              <Skeleton width="40%" height="18px" radius="4px" />
+            {:else}
+              <Marquee
+                text={$currentSong.stationName || $currentSong.artist || "Moode Audio"}
+              />
+            {/if}
           </h2>
           {#if qualityLabel}
             <span class="badge">{qualityLabel}</span>
@@ -243,8 +255,10 @@
 
         <IconButton size="lg" ariaLabel="Previous track" title="Previous" icon={ICONS.PREVIOUS} onclick={() => nav("previous")} />
 
-        <button class="play-btn-large flex-center" bind:this={playBtn} onclick={togglePlay} aria-label={$status.state === "play" ? "Pause" : "Play"} title={$status.state === "play" ? "Pause" : "Play"}>
-          {@html $status.state === "play" ? ICONS.PAUSE : ICONS.PLAY}
+        <button class="play-btn-large flex-center" bind:this={playBtn} onclick={togglePlay} disabled={!!$pendingPlayback} aria-busy={!!$pendingPlayback}
+          aria-label={$pendingPlayback ? "Loading audio" : $status.state === "play" ? "Pause" : "Play"}
+          title={$pendingPlayback ? "Loading audio…" : $status.state === "play" ? "Pause" : "Play"}>
+          {#if $pendingPlayback}<PlaybackSpinner label="Loading audio" size="var(--icon-size-lg)" />{:else}{@html $status.state === "play" ? ICONS.PAUSE : ICONS.PLAY}{/if}
         </button>
 
         <IconButton size="lg" ariaLabel="Next track" title="Next" icon={ICONS.NEXT} onclick={() => nav("next")} />

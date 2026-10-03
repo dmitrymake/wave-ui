@@ -63,6 +63,8 @@ vi.mock("../../store", () => {
     queue: writable([]),
     queueVersion: writable(0),
     isQueueLocked: writable(false),
+    isQueueLoading: writable(false),
+    queueLoadError: writable(false),
     showToast: vi.fn(),
     activeMenuTab: writable("library"),
     navigationStack: writable([]),
@@ -102,18 +104,296 @@ vi.mock("../../yandex", () => ({
 
 // Registering the Yandex source lets resolveSource() route Yandex tracks in tests.
 import "../../sources/yandexSource";
-import { PlayerActions } from "../../playback/player.js";
-import { status, currentSong, queue, isQueueLocked } from "../../store";
+import { PlayerActions, startStatusPoller, stopStatusPoller } from "../../playback/player.js";
+import { status, currentSong, queue, queueVersion, isQueueLocked, isQueueLoading, queueLoadError } from "../../store";
 import type { MpdStatus, Track } from "../../types";
+import { registerTrackSource } from "../../sources/trackSource";
+import { yandexSource } from "../../sources/yandexSource";
+import { MpdParser } from "../../mpd/parser";
+import { pendingPlayback } from "../../stores/playback";
+import { db } from "../../db";
 
 beforeEach(() => {
   vi.clearAllMocks();
   vi.useFakeTimers();
   mockSend.mockResolvedValue("");
+  queue.set([]);
+  queueVersion.set(0);
+  isQueueLocked.set(false);
+  isQueueLoading.set(false);
+  queueLoadError.set(false);
+  status.set({ state: "stop", volume: 50, elapsed: 0, duration: 0, song: 0, songId: -1,
+    random: false, repeat: false, playlistLength: 0, playlistVersion: 0, bitrate: 0, format: "" });
 });
 
 afterEach(() => {
+  stopStatusPoller();
   vi.useRealTimers();
+});
+
+describe("queue loading", () => {
+  const baseStatus = MpdParser.parseStatus("");
+  const baseTracks = MpdParser.parseTracks("");
+  const track: Track = { file: "music/song.mp3", title: "Song", artist: "Artist", album: "", genre: "", track: "", time: 180, id: "1" };
+
+  beforeEach(() => {
+    vi.mocked(MpdParser.parseStatus).mockReturnValue({ ...baseStatus, playlistLength: 1, playlistVersion: 10 });
+    vi.mocked(MpdParser.parseTracks).mockReturnValue([track]);
+    vi.mocked(db.getFilesMap).mockResolvedValue(new Map());
+  });
+
+  afterEach(() => {
+    vi.mocked(MpdParser.parseStatus).mockReturnValue(baseStatus);
+    vi.mocked(MpdParser.parseTracks).mockReturnValue(baseTracks);
+    vi.mocked(db.getFilesMap).mockResolvedValue(new Map());
+  });
+
+  it("loads an empty snapshot once without overlapping playlist requests", async () => {
+    let finish!: (text: string) => void;
+    const playlist = new Promise<string>((resolve) => { finish = resolve; });
+    mockSend.mockImplementation((command: string) => command === "playlistinfo" ? playlist : Promise.resolve(""));
+    startStatusPoller();
+    expect(get(isQueueLoading)).toBe(true);
+    await vi.advanceTimersByTimeAsync(3000);
+    expect(mockSend.mock.calls.filter(([command]) => command === "playlistinfo")).toHaveLength(1);
+    expect(get(isQueueLoading)).toBe(true);
+    finish("");
+    await vi.advanceTimersByTimeAsync(0);
+    expect(get(queue)).toMatchObject([track]);
+    expect(get(isQueueLoading)).toBe(false);
+    await vi.advanceTimersByTimeAsync(3000);
+    expect(get(isQueueLoading)).toBe(false);
+    expect(mockSend.mock.calls.filter(([command]) => command === "playlistinfo")).toHaveLength(1);
+  });
+
+  it("keeps an existing queue visible during a later synchronization", async () => {
+    queue.set([track]);
+    mockSend.mockImplementation((command: string) => command === "playlistinfo" ? new Promise<string>(() => {}) : Promise.resolve(""));
+    startStatusPoller();
+    await vi.advanceTimersByTimeAsync(2000);
+    expect(get(queue)).toMatchObject([track]);
+    expect(get(isQueueLoading)).toBe(false);
+  });
+
+  it("settles to the empty state when MPD has no tracks", async () => {
+    vi.mocked(MpdParser.parseStatus).mockReturnValue(baseStatus);
+    startStatusPoller();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(get(queue)).toEqual([]);
+    expect(get(isQueueLoading)).toBe(false);
+    expect(get(queueLoadError)).toBe(false);
+    expect(mockSend).not.toHaveBeenCalledWith("playlistinfo");
+  });
+
+  it("releases the skeleton on sync failure and recovers on the next poll", async () => {
+    let failed = true;
+    mockSend.mockImplementation((command: string) => command === "playlistinfo" && failed
+      ? Promise.reject(new Error("Connection lost")) : Promise.resolve(""));
+    startStatusPoller();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(get(isQueueLoading)).toBe(false);
+    expect(get(queueLoadError)).toBe(true);
+    expect(get(queue)).toEqual([]);
+    failed = false;
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(get(queue)).toMatchObject([track]);
+    expect(get(queueLoadError)).toBe(false);
+    expect(get(isQueueLoading)).toBe(false);
+  });
+
+  it("releases the initial skeleton when status refresh fails", async () => {
+    mockSend.mockRejectedValue(new Error("Connection lost"));
+    startStatusPoller();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(get(isQueueLoading)).toBe(false);
+    expect(get(queueLoadError)).toBe(true);
+  });
+
+  it("bounds the initial skeleton if the MPD connection never responds", async () => {
+    mockSend.mockImplementation(() => new Promise<string>(() => {}));
+    startStatusPoller();
+    await vi.advanceTimersByTimeAsync(30_000);
+    expect(get(isQueueLoading)).toBe(false);
+    expect(get(queueLoadError)).toBe(true);
+  });
+
+  it("renders the MPD snapshot when IndexedDB hydration remains blocked", async () => {
+    vi.mocked(db.getFilesMap).mockImplementation(() => new Promise(() => {}));
+    startStatusPoller();
+    await vi.advanceTimersByTimeAsync(5000);
+    expect(get(queue)).toMatchObject([track]);
+    expect(get(isQueueLoading)).toBe(false);
+    expect(get(queueLoadError)).toBe(false);
+  });
+
+  it("retries a queue synchronization that exceeded its deadline without flashing skeletons", async () => {
+    let stalled = true;
+    mockSend.mockImplementation((command: string) => command === "playlistinfo" && stalled
+      ? new Promise<string>(() => {}) : Promise.resolve(""));
+    startStatusPoller();
+    await vi.advanceTimersByTimeAsync(30_000);
+    expect(get(isQueueLoading)).toBe(false);
+    expect(get(queueLoadError)).toBe(true);
+    stalled = false;
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(get(queue)).toMatchObject([track]);
+    expect(get(queueLoadError)).toBe(false);
+    expect(get(isQueueLoading)).toBe(false);
+  });
+
+  it("does not publish a stale hydration result after polling is stopped", async () => {
+    let hydrate!: (map: Map<string, Track>) => void;
+    vi.mocked(db.getFilesMap).mockImplementation(() => new Promise((resolve) => { hydrate = resolve; }));
+    startStatusPoller();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(get(isQueueLoading)).toBe(true);
+    stopStatusPoller();
+    hydrate(new Map());
+    await vi.advanceTimersByTimeAsync(0);
+    expect(get(queue)).toEqual([]);
+    expect(get(isQueueLoading)).toBe(false);
+  });
+
+  it("shows numeric Yandex cache files as pending until their metadata request finishes", async () => {
+    let finish!: () => void;
+    const fetch = vi.spyOn(yandexSource, "fetchQueueMeta").mockImplementation(() => new Promise<void>((resolve) => { finish = resolve; }));
+    vi.mocked(MpdParser.parseTracks).mockReturnValue([{ ...track, file: "/dev/shm/yandex_music/tracks/4649437.mp3", title: "4649437.mp3", artist: "Unknown Artist" }]);
+    try {
+      startStatusPoller();
+      await vi.advanceTimersByTimeAsync(0);
+      expect(get(queue)[0]).toMatchObject({ title: "", artist: "", service: "yandex", isMetadataPending: true });
+      expect(get(isQueueLoading)).toBe(false);
+      finish();
+      await vi.advanceTimersByTimeAsync(0);
+      expect(get(queue)[0]).toMatchObject({ title: "4649437.mp3", artist: "Unknown Artist", isMetadataPending: false });
+    } finally {
+      fetch.mockRestore();
+    }
+  });
+
+  it("releases pending rows even when their source never finishes", async () => {
+    const fetch = vi.spyOn(yandexSource, "fetchQueueMeta").mockImplementation(() => new Promise<void>(() => {}));
+    vi.mocked(MpdParser.parseTracks).mockReturnValue([{ ...track, file: "yandex:999001" }]);
+    try {
+      startStatusPoller();
+      await vi.advanceTimersByTimeAsync(0);
+      expect(get(queue)[0].isMetadataPending).toBe(true);
+      await vi.advanceTimersByTimeAsync(125_000);
+      expect(get(queue)[0]).toMatchObject({ title: "yandex:999001", artist: "Unknown Artist", isMetadataPending: false });
+    } finally {
+      fetch.mockRestore();
+    }
+  });
+});
+
+describe("metadata in a mixed streaming queue", () => {
+  it("dispatches each missing file to its owning source", async () => {
+    const otherFetch = vi.fn();
+    const yandexFetch = vi.spyOn(yandexSource, "fetchQueueMeta").mockImplementation(() => {});
+    registerTrackSource({
+      id: "other-test-stream",
+      matches: (file) => file.startsWith("https://other.test/"),
+      enrichQueueTrack: (track, missing) => { missing.push(track.file); return null; },
+      fetchQueueMeta: otherFetch,
+    });
+    const previousStatus = MpdParser.parseStatus("");
+    const previousTracks = MpdParser.parseTracks("");
+    vi.mocked(MpdParser.parseStatus).mockReturnValue({ ...previousStatus, playlistLength: 2, playlistVersion: 50 });
+    const base = { title: "", artist: "", album: "", genre: "", track: "", time: 0 };
+    vi.mocked(MpdParser.parseTracks).mockReturnValue([
+      { ...base, file: "https://storage.yandex.net/get-mp3?id=123", id: "1" },
+      { ...base, file: "https://other.test/song", id: "2" },
+    ]);
+    queue.set([]);
+    try {
+      startStatusPoller();
+      await vi.waitFor(() => expect(otherFetch).toHaveBeenCalledWith(["https://other.test/song"]));
+      expect(yandexFetch).toHaveBeenCalledWith(["https://storage.yandex.net/get-mp3?id=123"]);
+    } finally {
+      stopStatusPoller();
+      yandexFetch.mockRestore();
+      vi.mocked(MpdParser.parseStatus).mockReturnValue(previousStatus);
+      vi.mocked(MpdParser.parseTracks).mockReturnValue(previousTracks);
+    }
+  });
+});
+
+describe("pending playback selection", () => {
+  it("shows the selected title immediately and keeps it while MPD still reports the old song", async () => {
+    let resolve!: () => void;
+    const ready = new Promise<void>((done) => { resolve = done; });
+    registerTrackSource({ id: "pending-playback-test", matches: (uri) => uri.startsWith("https://pending-playback.test/"),
+      prepareUri: () => ready, playUri: async () => true });
+    startStatusPoller();
+    const uri = "https://pending-playback.test/song";
+    const action = PlayerActions.playUri(uri, { title: "Selected song", artist: "Artist", image: "https://example.test/art.jpg", time: 204 });
+    expect(get(currentSong)).toMatchObject({ title: "Selected song", artist: "Artist", file: uri });
+    expect(get(pendingPlayback)?.phase).toBe("preparing");
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(get(currentSong).title).toBe("Selected song");
+    expect(get(pendingPlayback)?.track.file).toBe(uri);
+    resolve();
+    await action;
+  });
+
+  it("does not start an earlier selection after a newer one has been requested", async () => {
+    let resolveOld!: () => void;
+    const old = new Promise<void>((done) => { resolveOld = done; });
+    const play = vi.fn(async (_uri: string) => true);
+    registerTrackSource({ id: "playback-race-test", matches: (uri) => uri.startsWith("https://playback-race.test/"),
+      prepareUri: (uri) => uri.endsWith("old") ? old : Promise.resolve(), playUri: play });
+    const first = PlayerActions.playUri("https://playback-race.test/old", { title: "Old selection" });
+    await PlayerActions.playUri("https://playback-race.test/new", { title: "Latest selection" });
+    resolveOld();
+    await first;
+    expect(play).toHaveBeenCalledTimes(1);
+    expect(play.mock.calls[0]?.[0]).toBe("https://playback-race.test/new");
+    expect(get(currentSong).title).toBe("Latest selection");
+  });
+});
+
+describe("progress bar while the track is still buffering", () => {
+  it("freezes the local elapsed instead of running ahead and snapping back", async () => {
+    const defaultStatus = MpdParser.parseStatus("");
+    const defaultSong = MpdParser.parseCurrentSong("");
+    let serverElapsed = 0;
+    vi.mocked(MpdParser.parseStatus).mockImplementation(() => ({ ...defaultStatus,
+      state: "play", elapsed: serverElapsed, duration: 100, song: 0, songId: 1,
+      playlistLength: 1, playlistVersion: 1, bitrate: 320 } as MpdStatus));
+    vi.mocked(MpdParser.parseCurrentSong).mockImplementation(() => ({ ...defaultSong,
+      file: "music/song.mp3", title: "Buffering song", time: 100, id: "1", pos: "0" }));
+
+    const samples: number[] = [];
+    const unsubscribe = status.subscribe((s) => samples.push(s.elapsed));
+
+    try {
+      startStatusPoller();
+      await vi.advanceTimersByTimeAsync(1); // initial hard sync: elapsed 0, ticker on
+
+      // MPD already reports "play" but the decoder is still loading the track:
+      // the server elapsed stays at 0 while polls keep coming.
+      await vi.advanceTimersByTimeAsync(5000);
+      const frozen = get(status).elapsed;
+      expect(frozen).toBeGreaterThan(0); // never snapped back to the server's 0
+      await vi.advanceTimersByTimeAsync(2000);
+      expect(get(status).elapsed).toBeCloseTo(frozen, 5); // frozen, not marching on
+
+      // Audio finally starts: the server position advances again.
+      for (let i = 0; i < 4; i++) {
+        serverElapsed += 1;
+        await vi.advanceTimersByTimeAsync(1000);
+      }
+
+      // The bar only ever moved forward — no rollback at any point.
+      for (let i = 1; i < samples.length; i++) {
+        expect(samples[i]).toBeGreaterThanOrEqual(samples[i - 1] - 1e-6);
+      }
+    } finally {
+      unsubscribe();
+      vi.mocked(MpdParser.parseStatus).mockReturnValue(defaultStatus);
+      vi.mocked(MpdParser.parseCurrentSong).mockReturnValue(defaultSong);
+    }
+  });
 });
 
 describe("PlayerActions.togglePlay", () => {

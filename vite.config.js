@@ -21,6 +21,13 @@ export default defineConfig({
         changeOrigin: true,
         secure: false,
       },
+      "/wave-youtube-api.php": {
+        target: MOODE_TARGET,
+        changeOrigin: true,
+        secure: false,
+        // The proxy rewrites Host, so forward the matching origin as well.
+        configure: (proxy) => proxy.on("proxyReq", (request) => request.setHeader("Origin", MOODE_TARGET)),
+      },
       "/coverart.php": {
         target: MOODE_TARGET,
         changeOrigin: true,

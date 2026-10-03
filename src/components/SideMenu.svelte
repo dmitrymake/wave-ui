@@ -13,6 +13,7 @@
     assignHash,
   } from "../lib/store";
   import { isYandexEnabled } from "../lib/stores/yandex";
+  import { isYoutubeEnabled } from "../lib/stores/youtube";
   import { ApiActions } from "../lib/api";
   import { FAVORITES_PLAYLIST } from "../lib/constants";
   import IconButton from "./ui/IconButton.svelte";
@@ -31,10 +32,12 @@
     { id: "playlists", label: "Playlists", icon: ICONS.PLAYLISTS },
     { id: "radio", label: "Radio", icon: ICONS.RADIO },
     { id: "yandex", label: "Yandex Music", icon: ICONS.YANDEX },
+    { id: "youtube", label: "YouTube Music", icon: ICONS.YOUTUBE },
   ];
 
   let visibleMenuItems = $derived(ALL_MENU_ITEMS.filter((item) => {
     if (item.id === "yandex") return $isYandexEnabled;
+    if (item.id === "youtube") return $isYoutubeEnabled;
     return true;
   }));
 

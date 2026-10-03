@@ -39,6 +39,7 @@ import dots from "./svg/dots.svg?raw";
 import sortDescending from "./svg/sort-descending.svg?raw";
 import sortAscending from "./svg/sort-ascending.svg?raw";
 import brandYandex from "./svg/yandex.svg?raw";
+import brandYoutube from "./svg/youtube.svg?raw";
 
 export const ICONS: Record<string, string> = {
   ARTISTS: music,
@@ -86,4 +87,5 @@ export const ICONS: Record<string, string> = {
   SORT_ASC: sortAscending,
 
   YANDEX: brandYandex,
+  YOUTUBE: brandYoutube,
 };

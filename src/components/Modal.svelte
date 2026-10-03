@@ -124,6 +124,7 @@
   >
     <div
       class="modal-card"
+      class:info-dialog={$modal.type === "alert"}
       bind:this={cardEl}
       in:scale={{ start: 0.96, duration: MOTION.fast, easing: EASE_EMPHASIZED }}
       out:fade={{ duration: MOTION.instant }}
@@ -275,6 +276,10 @@
     line-height: var(--leading-normal);
     color: var(--c-text-primary);
   }
+  .info-dialog { max-width: 480px; max-height: calc(100dvh - var(--space-10)); }
+  .info-dialog .modal-body { min-height: 0; overflow-y: auto; }
+  .info-dialog .modal-message { white-space: pre-wrap; }
+  .info-dialog .modal-actions { flex-shrink: 0; }
 
   .input-wrapper {
     margin-top: var(--space-4);

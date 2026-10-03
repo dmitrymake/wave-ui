@@ -25,6 +25,7 @@
   import SettingsView from "./views/SettingsView.svelte";
   import QueueView from "./views/QueueView.svelte";
   import YandexView from "./views/YandexView.svelte";
+  import YoutubeView from "./views/YoutubeView.svelte";
 
   import MiniPlayer from "./MiniPlayer.svelte";
   import FullPlayer from "./FullPlayer.svelte";
@@ -101,6 +102,7 @@
             {:else if $activeMenuTab === "playlists"}Playlists
             {:else if $activeMenuTab === "search"}Search
             {:else if $activeMenuTab === "yandex"}Yandex Music
+            {:else if $activeMenuTab === "youtube"}YouTube Music
             {:else if $activeMenuTab === "queue"}Queue
             {:else if $activeMenuTab === "favorites"}Favorites
             {:else if $activeMenuTab === "settings"}Settings
@@ -122,6 +124,8 @@
             <RadioView />
           {:else if $activeMenuTab === "yandex"}
             <YandexView />
+          {:else if $activeMenuTab === "youtube"}
+            <YoutubeView />
           {:else if $activeMenuTab === "queue"}
             <QueueView />
           {:else if $activeMenuTab === "playlists" || $activeMenuTab === "favorites"}

@@ -8,6 +8,8 @@
     currentSong,
     status,
     isQueueLocked,
+    isQueueLoading,
+    queueLoadError,
   } from "../../lib/store";
   import {
     playQueuePosition,
@@ -50,6 +52,7 @@
   let playingIndex = $derived(optimisticPlayingIndex);
   let playingFile = $derived($currentSong.file);
   let isPlaying = $derived($status.state === "play");
+  let isInitialQueueLoading = $derived($isQueueLoading && $queue.length === 0);
 
   $effect(() => {
     const totalSec = $queue.reduce(
@@ -129,7 +132,8 @@
   <BaseList
     itemsStore={queue}
     {isEditMode}
-    emptyText="Queue is empty"
+    isLoading={isInitialQueueLoading}
+    emptyText={$queueLoadError ? "Could not load queue. Retrying…" : "Queue is empty"}
     onMoveItem={handleMoveTrack}
   >
     {#snippet header()}
@@ -155,17 +159,19 @@
                    The title used to pulse and turn red as well (on the Pi and
                    the desktop), which with the red eyebrow and the red STOP
                    STREAM pill made four accents for one fact. -->
-              <p class="meta-line">
-                <span class="meta-text">
-                  <span class="meta-item">{countLabel($queue.length, "track")}</span>
-                  {#if headerTotalDuration}
-                    <span class="meta-item">{headerTotalDuration}</span>
+              {#if !isInitialQueueLoading}
+                <p class="meta-line">
+                  <span class="meta-text">
+                    <span class="meta-item">{countLabel($queue.length, "track")}</span>
+                    {#if headerTotalDuration}
+                      <span class="meta-item">{headerTotalDuration}</span>
+                    {/if}
+                  </span>
+                  {#if daemonState.active}
+                    <span class="badge badge--accent badge--live">Daemon Active</span>
                   {/if}
-                </span>
-                {#if daemonState.active}
-                  <span class="badge badge--accent badge--live">Daemon Active</span>
-                {/if}
-              </p>
+                </p>
+              {/if}
             </div>
 
             <div class="header-actions">

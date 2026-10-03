@@ -5,6 +5,7 @@ import { ICONS } from "./icons";
 import { LibraryActions } from "./playback/library";
 import { resolveSourceForTrack } from "./sources/trackSource";
 import { yandexFavorites } from "./stores/yandex";
+import { youtubeFavorites } from "./stores/youtube";
 import { isRemoteUrl, formatClock } from "./utils";
 import { bitrateLabel } from "./format";
 import type { Track, MpdStatus } from "./types";
@@ -19,8 +20,8 @@ import type { Track, MpdStatus } from "./types";
  * from shared components.
  */
 export const sourceLikesVersion: Readable<Set<string>> = derived(
-  yandexFavorites,
-  (favs) => favs,
+  [yandexFavorites, youtubeFavorites],
+  ([yandex, youtube]) => new Set([...yandex, ...youtube]),
 );
 
 // Thin alias kept for the player components; the clock format itself lives in utils.

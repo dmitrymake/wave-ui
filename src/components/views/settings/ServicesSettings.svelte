@@ -10,6 +10,7 @@
   import Toggle from "../../ui/Toggle.svelte";
   import Input from "../../ui/Input.svelte";
   import Button from "../../ui/Button.svelte";
+  import YoutubeMusicSettings from "./YoutubeMusicSettings.svelte";
 
   let inputToken = $state("");
   let isChecking = $state(false);
@@ -134,6 +135,7 @@
       {/if}
     {/if}
   </Card>
+  <YoutubeMusicSettings />
 </div>
 
 <style>

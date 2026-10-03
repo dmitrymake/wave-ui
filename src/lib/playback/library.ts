@@ -19,7 +19,11 @@ import { MSG } from "../messages";
 import { logger } from "../logger";
 import { getGradient, assignColorVar } from "../playlistColor";
 import { FAVORITES_PLAYLIST } from "../constants";
+import { resolveSource } from "../sources/trackSource";
+import { withMetadataDeadline } from "../sources/metadataRequest";
 import type { Track, Playlist } from "../types";
+
+const PLAYLIST_METADATA_TIMEOUT = 125_000;
 
 let _favActionQueue: Promise<void> = Promise.resolve();
 
@@ -142,7 +146,32 @@ export const LibraryActions = {
         }
       }
 
+      const toFetchBySource = new Map<
+        NonNullable<ReturnType<typeof resolveSource>>,
+        string[]
+      >();
       const enrichedTracks: Track[] = rawTracks.map((track) => {
+        const source = resolveSource(track.file);
+        if (source?.enrichQueueTrack) {
+          const toFetch: string[] = [];
+          const enriched = source.enrichQueueTrack(track, toFetch);
+          if (enriched) return { ...enriched, isMetadataPending: false, _uid: generateUid() };
+          if (toFetch.length) {
+            const list = toFetchBySource.get(source) ?? [];
+            list.push(...toFetch);
+            toFetchBySource.set(source, list);
+          }
+          return {
+            ...track,
+            title: "",
+            artist: "",
+            album: "",
+            image: undefined,
+            service: source.id,
+            _uid: generateUid(),
+            isMetadataPending: true,
+          };
+        }
         const cached = cachedMap.get(track.file);
         if (cached) {
           return {
@@ -162,6 +191,18 @@ export const LibraryActions = {
       });
 
       activePlaylistTracks.set(enrichedTracks);
+      const pendingUids = new Set(enrichedTracks.map((track) => track._uid));
+      for (const [source, files] of toFetchBySource) {
+        void withMetadataDeadline(() => Promise.resolve(source.fetchQueueMeta?.(files)), PLAYLIST_METADATA_TIMEOUT)
+          .catch((e) => logger.warn("Playlist metadata error", e))
+          .finally(() => {
+            const missing = new Set(files);
+            activePlaylistTracks.update((rows) => rows.map((track) => track.isMetadataPending && pendingUids.has(track._uid) && missing.has(track.file)
+              ? { ...track, title: track.title || track.file.split("/").pop() || track.file,
+                  artist: track.artist || "Unknown Artist", isMetadataPending: false }
+              : track));
+          });
+      }
     } catch (e) {
       logger.error(e);
       showToast(MSG.PL_COULD_NOT_LOAD, "error");

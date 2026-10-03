@@ -47,13 +47,16 @@ export interface TrackSource {
   enrichQueueTrack?(track: Track, toFetch: string[]): Track | null;
 
   /** Fetch metadata for queue files that missed the cache and patch the stores. */
-  fetchQueueMeta?(urls: string[]): void;
+  fetchQueueMeta?(urls: string[]): void | Promise<void>;
 
   /** Enrich the current song in place from cache (may schedule an async fetch). */
   enrichCurrentSong?(song: CurrentSong, status: MpdStatus): void;
 
   /** Play a uri this source owns. Returns true if fully handled. */
-  playUri?(uri: string, currentPos: number): Promise<boolean>;
+  playUri?(uri: string, currentPos: number, isCurrent?: () => boolean): Promise<boolean>;
+
+  /** Warm a provider's audio link before MPD is asked to open it. */
+  prepareUri?(uri: string, signal?: AbortSignal): Promise<void>;
 
   /** Append a uri this source owns to the queue. Returns true if handled. */
   addToQueue?(uri: string): Promise<boolean>;
@@ -72,6 +75,9 @@ export interface TrackSource {
 
   /** Start a radio/vibe seeded by a track's artist. */
   startRadioByArtist?(track: Track): Promise<void>;
+
+  /** Show lyrics through the source's provider, when supported. */
+  showLyrics?(track: Track): Promise<void>;
 
   /** Is this track currently liked/favourited within this source? */
   isLiked?(track: Track): boolean;

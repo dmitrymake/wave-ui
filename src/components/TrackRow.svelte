@@ -24,6 +24,7 @@
   import { isRemoteUrl, formatClock } from "../lib/utils";
   import { formatQuality } from "../lib/quality";
   import { resolveSourceForTrack } from "../lib/sources/trackSource";
+  import { pendingPlayback } from "../lib/stores/playback";
 
   let {
     track,
@@ -60,7 +61,10 @@
   let isQueueContext = $derived(
     currentView?.view === "queue" ||
     (currentView?.view === "root" && $activeMenuTab === "queue"));
-  let isExactActive = $derived(isQueueContext ? Number(index) === playingIndex : false);
+  let loadingRow = $derived(!!$pendingPlayback &&
+    (source?.matchesPlaying ? source.matchesPlaying(track, $pendingPlayback.track.file) : track.file === $pendingPlayback.track.file) &&
+    (!isQueueContext || $pendingPlayback.position === Number(index)));
+  let isExactActive = $derived(!$pendingPlayback && isQueueContext && Number(index) === playingIndex);
   // Delegate stream-source now-playing matching (e.g. `yandex:<id>` list uris vs
   // the RAM-cache/CDN url the player reports) to the source; fall back to a plain
   // file comparison for generic local/radio tracks.
@@ -69,13 +73,17 @@
       ? source.matchesPlaying(track, $currentSong.file)
       : track.file === playingFile,
   );
-  let showStripes = $derived(isPlayingFile && !isExactActive);
+  // Queue identity is its MPD position, including repeated copies of one song.
+  let showStripes = $derived(!$pendingPlayback && !isQueueContext && isPlayingFile);
   let isRadio = $derived(
     track.file &&
     (isRemoteUrl(track.file) || String(track.file).includes("RADIO")) &&
     !isStreamTrack);
-  let displayTitle = $derived(track.title || track.file?.split("/").pop());
-  let duration = $derived(formatDuration(track.time));
+  let displayTitle = $derived(
+    track.isMetadataPending ? "Loading…" : track.title || track.file?.split("/").pop(),
+  );
+  let isMetaPending = $derived(!!track.isMetadataPending);
+  let duration = $derived(isMetaPending ? "—" : formatDuration(track.time));
   let thumbKey = $derived(getTrackThumbUrl(track, "sm", $stations, null));
 
   // A row looks the same in every list (cover, title, artist, the same right
@@ -88,13 +96,14 @@
   function formatDuration(time: number | string | undefined) {
     if (isRadio) return "∞";
     const val = parseFloat(String(time));
-    if (!val || isNaN(val) || val === 0) return "0:00";
+    if (!val || isNaN(val) || val === 0) return isStreamTrack ? "—" : "0:00";
     return formatClock(Math.round(val));
   }
 
   function handleAction(e?: Event) {
     e?.stopPropagation();
-    if (isPlayingFile) togglePlay();
+    if (loadingRow) return;
+    if (isExactActive || (!isQueueContext && isPlayingFile && !$pendingPlayback)) togglePlay();
     else onplay?.();
   }
 
@@ -151,8 +160,9 @@
   class="row"
   class:active={isExactActive}
   class:striped={showStripes}
+  class:loading={loadingRow}
   class:editable={isEditable}
-  onclick={() => !isExactActive && onplay?.()}
+  onclick={() => !isExactActive && !loadingRow && onplay?.()}
   onkeydown={handleKeyDown}
   onmouseenter={() => (isHovering = true)}
   onmouseleave={() => (isHovering = false)}
@@ -160,8 +170,9 @@
   onlongpress={handleLongPress}
   role="listitem"
   tabindex="0"
-  aria-label={`${displayTitle ?? "Track"} by ${track.artist || "Unknown Artist"}`}
+  aria-label={isMetaPending ? "Loading track" : `${displayTitle ?? "Track"} by ${track.artist || "Unknown Artist"}`}
   aria-current={isExactActive ? "true" : undefined}
+  aria-busy={loadingRow || isMetaPending}
 >
   <div class="left">
     {#if isEditable}
@@ -183,6 +194,7 @@
       <TrackPlaybackIndicator
         {index}
         isExactActive={isExactActive || showStripes}
+        loading={loadingRow}
         {isPlaying}
         {isHovering}
         onaction={handleAction}
@@ -190,17 +202,23 @@
     {/if}
 
     <div class="thumb">
-      {#key thumbKey}
-        <TrackThumb {track} isRadio={!!isRadio} alt={displayTitle ?? ""} />
-      {/key}
+      {#if isMetaPending}
+        <Skeleton width="100%" height="100%" radius="var(--radius-sm)" />
+      {:else}
+        {#key thumbKey}
+          <TrackThumb {track} isRadio={!!isRadio} alt={displayTitle ?? ""} />
+        {/key}
+      {/if}
     </div>
   </div>
 
   <div class="info">
     <div class="title-row">
-      {#if track.title}
+      {#if isMetaPending}
+        <Skeleton width="60%" height="15px" radius="4px" />
+      {:else if track.title}
         <div class="title text-ellipsis" title={track.title}>{track.title}</div>
-      {:else if track.file && !isStreamTrack}
+      {:else if track.file}
         <div class="title text-ellipsis" title={track.file.split("/").pop()}>{track.file.split("/").pop()}</div>
       {:else}
         <Skeleton width="60%" height="15px" radius="4px" />
@@ -208,7 +226,12 @@
       {#if quality}<span class="badge badge--sm">{quality}</span>{/if}
     </div>
 
-    {#if track.artist}
+    {#if isMetaPending}
+      <!-- The 2px that separates the title from the artist is .info's own gap
+           (a real artist line gets exactly that), so the placeholder must not
+           add a second margin on top of it. -->
+      <Skeleton width="40%" height="13px" radius="4px" style="margin-top: var(--space-0);" />
+    {:else if track.artist}
       {#if !isRadio || isStreamTrack}
         <button
           class="artist text-ellipsis link"
@@ -223,7 +246,7 @@
           {track.artist}
         </div>
       {/if}
-    {:else if !track.artist && (track.title || (track.file && !isStreamTrack))}
+    {:else if !track.artist && (track.title || track.file)}
       <div class="artist text-ellipsis">Unknown Artist</div>
     {:else if !track.artist}
       <!-- The 2px that separates the title from the artist is .info's own gap
@@ -310,7 +333,8 @@
      is 4.9:1. The moving diagonal stripes are gone too — a second, louder
      now-playing signal that animated for as long as the song played. */
   .active .title,
-  .striped .title { color: var(--c-accent-btn); }
+  .striped .title,
+  .loading .title { color: var(--c-accent-btn); }
 
   .left, .info, .right { position: relative; z-index: 1; }
   .left {

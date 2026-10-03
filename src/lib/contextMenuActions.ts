@@ -160,6 +160,11 @@ export async function radioByArtist(track: Track | null): Promise<void> {
   }
 }
 
+export async function showLyrics(track: Track | null): Promise<void> {
+  closeContextMenu();
+  if (track) await resolveSourceForTrack(track)?.showLyrics?.(track);
+}
+
 export async function addToPlaylist(track: Track | null, playlistName: string): Promise<void> {
   if (!track) return;
   try {

@@ -11,6 +11,7 @@ import { listTrackSources } from "./trackSource";
 export * from "./trackSource";
 export * from "./streamCache";
 import "./yandexSource";
+import "./youtubeSource";
 
 /**
  * All daemons exposed by registered sources, in registration order. Most apps

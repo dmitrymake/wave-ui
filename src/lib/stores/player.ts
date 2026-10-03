@@ -40,3 +40,5 @@ export const currentSong = writable<Track>({
 export const queue = writable<Track[]>([]);
 export const queueVersion = writable<number>(0);
 export const isQueueLocked = writable<boolean>(false);
+export const isQueueLoading = writable<boolean>(false);
+export const queueLoadError = writable<boolean>(false);

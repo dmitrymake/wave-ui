@@ -15,6 +15,7 @@
   import { isRemoteUrl } from "../lib/utils";
   import { isTrackLiked, sourceLikesVersion } from "../lib/playerHelpers";
   import { resolveSourceForTrack } from "../lib/sources/trackSource";
+  import Skeleton from "./Skeleton.svelte";
   import { FAVORITES_PLAYLIST } from "../lib/constants";
 
   let innerWidth = $state(0);
@@ -91,6 +92,7 @@
   let isStreamTrack = $derived(
     $contextMenu.track &&
     !!resolveSourceForTrack($contextMenu.track));
+  let hasLyrics = $derived(!!resolveSourceForTrack($contextMenu.track)?.showLyrics);
 
   let isPlaylistContext = $derived($contextMenu.context?.type === "playlist");
   let isQueueContext = $derived($contextMenu.context?.type === "queue");
@@ -163,8 +165,15 @@
           </div>
         {:else}
           <div class="track-info">
-            <div class="title text-ellipsis" title={$contextMenu.track?.title}>{$contextMenu.track?.title}</div>
-            <div class="artist text-ellipsis" title={$contextMenu.track?.artist}>{$contextMenu.track?.artist}</div>
+            {#if $contextMenu.track?.isMetadataPending}
+              <div style="display: flex; flex-direction: column; gap: 4px;">
+                <Skeleton width="70%" height="14px" radius="4px" />
+                <Skeleton width="45%" height="12px" radius="4px" />
+              </div>
+            {:else}
+              <div class="title text-ellipsis" title={$contextMenu.track?.title}>{$contextMenu.track?.title}</div>
+              <div class="artist text-ellipsis" title={$contextMenu.track?.artist}>{$contextMenu.track?.artist}</div>
+            {/if}
           </div>
         {/if}
       </div>
@@ -224,6 +233,13 @@
             <button class="menu-row" role="menuitem" onclick={() => actions.radioByArtist($contextMenu.track)}>
               <span class="icon">{@html ICONS.ARTISTS}</span>
               <span>Vibe by Artist</span>
+            </button>
+          {/if}
+
+          {#if hasLyrics}
+            <button class="menu-row" role="menuitem" onclick={() => actions.showLyrics($contextMenu.track)}>
+              <span class="icon">{@html ICONS.EDIT}</span>
+              <span>Lyrics</span>
             </button>
           {/if}
 

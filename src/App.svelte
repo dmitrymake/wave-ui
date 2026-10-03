@@ -8,6 +8,7 @@
   import * as MPD from "./lib/playback";
   import { ApiActions } from "./lib/api";
   import { YandexService } from "./lib/yandexService";
+  import { YoutubeService } from "./lib/youtubeService";
   import { db, bumpLibraryRevision } from "./lib/db";
   import { Router } from "./lib/router";
   import {
@@ -18,6 +19,7 @@
     modal,
   } from "./lib/store";
   import { isYandexEnabled } from "./lib/stores/yandex";
+  import { isYoutubeEnabled } from "./lib/stores/youtube";
   import { MSG } from "./lib/messages";
   import { logger } from "./lib/logger";
   import "./styles/tokens.css";
@@ -43,6 +45,12 @@
 
     MPD.connect();
     ApiActions.loadRadioStations();
+
+    if (get(isYoutubeEnabled)) {
+      void YoutubeService.checkAuth().then((connected) => {
+        if (connected) void YoutubeService.syncFavorites();
+      });
+    }
 
     if (get(isYandexEnabled)) {
       await YandexService.checkYandexAuth();
