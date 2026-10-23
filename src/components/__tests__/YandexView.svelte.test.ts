@@ -15,20 +15,19 @@
 // playerActions gateway are all mocked at their resolved ids so the whole
 // YandexView -> BaseList -> YandexDashboard/SearchResults/ContentHeader/TrackRow
 // tree mounts without the real MPD / fetch / IndexedDB stack. IntersectionObserver
-// is stubbed on globalThis (jsdom has none) so the pagination observer is inert,
-// and the search debounce is driven with fake timers.
+// is stubbed on globalThis (jsdom has none); pagination fires only when a test
+// explicitly intersects the sentinel. Search debounce uses fake timers.
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, fireEvent } from "@testing-library/svelte";
+import { render, fireEvent, within } from "@testing-library/svelte";
 import { tick } from "svelte";
 import { writable } from "svelte/store";
 import type { NavigationEntry } from "../../lib/types/nav";
 
 // --- IntersectionObserver stub ----------------------------------------------
 // jsdom ships no IntersectionObserver; YandexView constructs one in onMount for
-// infinite-scroll pagination. A no-op stub lets the component mount and keeps the
-// observer inert (it never fires `loadMore`), which is exactly what these
-// non-scroll tests want.
+// infinite-scroll pagination. Tests trigger it explicitly, never through layout.
 class IOStub {
+  static intersect = () => {};
   observe = vi.fn();
   unobserve = vi.fn();
   disconnect = vi.fn();
@@ -36,7 +35,12 @@ class IOStub {
   root = null;
   rootMargin = "";
   thresholds: ReadonlyArray<number> = [];
-  constructor(_cb: unknown, _opts?: unknown) {}
+  constructor(callback: IntersectionObserverCallback) {
+    IOStub.intersect = () => callback(
+      [{ isIntersecting: true } as IntersectionObserverEntry],
+      this as unknown as IntersectionObserver,
+    );
+  }
 }
 globalThis.IntersectionObserver = IOStub as unknown as typeof IntersectionObserver;
 
@@ -222,12 +226,13 @@ const ALBUM_DETAILS = {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  IOStub.intersect = () => {};
   navStack.set([{ view: "root" }]);
   yandexAuthStatus.set(false);
   yandexFavorites.set(new Set());
   yandexSearchTrigger.set(null);
   ydxSearch.mockResolvedValue(SEARCH_RESULT);
-  ydxGetPlaylistTracks.mockResolvedValue(PLAYLIST_TRACKS);
+  ydxGetPlaylistTracks.mockReset().mockResolvedValue(PLAYLIST_TRACKS);
   ydxGetArtist.mockResolvedValue(ARTIST_DETAILS);
   ydxGetAlbum.mockResolvedValue(ALBUM_DETAILS);
 });
@@ -260,6 +265,31 @@ describe("YandexView — NOT CONNECTED screen", () => {
 });
 
 describe("YandexView — DASHBOARD mode", () => {
+  it("surfaces a failed My Vibe start instead of leaving an unhandled promise", async () => {
+    const { YandexApi, YandexApiError } = await import("../../lib/yandex");
+    const { MSG } = await import("../../lib/messages");
+    vi.mocked(YandexApi.playRadio).mockRejectedValueOnce(new YandexApiError(502));
+    yandexAuthStatus.set(true);
+    const { getByText } = render(YandexView);
+    await settle();
+    await fireEvent.click(getByText("My Vibe"));
+    await settle();
+    expect(showToast).toHaveBeenCalledWith(MSG.RADIO_ERROR_STARTING, "error");
+  });
+
+  it("shows reconnect when a station start rejects an expired token", async () => {
+    const { YandexApi, YandexApiError } = await import("../../lib/yandex");
+    const { MSG } = await import("../../lib/messages");
+    vi.mocked(YandexApi.playStation).mockRejectedValueOnce(new YandexApiError(401));
+    yandexAuthStatus.set(true);
+    const { getByText } = render(YandexView);
+    await settle();
+    await fireEvent.click(getByText("Rock Station"));
+    await settle();
+    expect(getByText("Yandex Music Not Connected")).toBeInTheDocument();
+    expect(showToast).toHaveBeenCalledWith(MSG.YANDEX_TOKEN_EXPIRED, "error");
+  });
+
   it("renders YandexDashboard (vibe + collection cards) when connected at the yandex root", async () => {
     yandexAuthStatus.set(true);
     navStack.set([{ view: "root" }]); // getModeFromStack(root) => "dashboard"
@@ -465,6 +495,17 @@ describe("YandexView — CONTENT modes (artist / album / playlist)", () => {
     expect(container.querySelector(".base-list-scroll-container")).not.toBeNull();
   });
 
+  it("never stringifies a stale description object into the artist subtitle", async () => {
+    ydxGetArtist.mockResolvedValue({ ...ARTIST_DETAILS,
+      artist: { name: "Detailed Artist", description: { text: "Legacy SDK object", uri: "https://example.com" } } });
+    yandexAuthStatus.set(true);
+    navStack.set([{ view: "root" }, { view: "yandex_artist_details", data: { id: "300", title: "Artist" } }]);
+    const { container, queryByText } = render(YandexView);
+    await settle();
+    expect(container.querySelector(".header-sub-text")).toBeNull();
+    expect(queryByText("[object Object]")).toBeNull();
+  });
+
   it("renders YandexContentHeader with the album header and the album's track list", async () => {
     yandexAuthStatus.set(true);
     navStack.set([
@@ -484,7 +525,12 @@ describe("YandexView — CONTENT modes (artist / album / playlist)", () => {
     expect(getByText("Album Track One")).toBeInTheDocument();
   });
 
-  it("renders a playlist's track list from getPlaylistTracks", async () => {
+  it("renders a filtered playlist and hands Play All the original source cursor", async () => {
+    const { YandexApi } = await import("../../lib/yandex");
+    const tracks = Array.from({ length: 50 }, (_, i) => ({
+      id: String(i + 1), title: `Playlist Track ${i + 1}`, artist: "PL Artist", isYandex: true as const,
+    })).filter((track) => track.id !== "10");
+    ydxGetPlaylistTracks.mockResolvedValue({ tracks, nextOffset: 50, hasMore: true });
     yandexAuthStatus.set(true);
     navStack.set([
       { view: "root" },
@@ -494,12 +540,87 @@ describe("YandexView — CONTENT modes (artist / album / playlist)", () => {
     await settle();
 
     expect(ydxGetPlaylistTracks).toHaveBeenCalledWith("u1", "1001", 0);
-
-    // Playlist header title comes from the nav data; tracks come from the endpoint.
     expect(getByText("Road Trip")).toBeInTheDocument();
-    expect(getByText("Playlist Track A")).toBeInTheDocument();
-    expect(getByText("Playlist Track B")).toBeInTheDocument();
+    expect(getByText("Playlist Track 1")).toBeInTheDocument();
+    expect(getByText("Playlist Track 50")).toBeInTheDocument();
     expect(container.querySelector(".base-list-scroll-container")).not.toBeNull();
+    const actions = within(container.querySelector<HTMLElement>(".header-actions")!);
+    await fireEvent.click(actions.getByRole("button", { name: "Play All" }));
+    expect(YandexApi.playPlaylist).toHaveBeenCalledWith(tracks, "Road Trip", {
+      uid: "u1", kind: "1001", offset: 50,
+    });
+  });
+
+  it("restores source cursors and pages through empty windows without advancing Play All early", async () => {
+    const { YandexApi } = await import("../../lib/yandex");
+    let resolvePage!: (page: unknown) => void;
+    let resolveFinal!: (page: unknown) => void;
+    ydxGetPlaylistTracks
+      .mockResolvedValueOnce({ ...PLAYLIST_TRACKS, nextOffset: 50, hasMore: true })
+      .mockImplementationOnce(() => new Promise((resolve) => { resolvePage = resolve; }))
+      .mockImplementationOnce(() => new Promise((resolve) => { resolveFinal = resolve; }));
+    yandexAuthStatus.set(true);
+    const playlist = { view: "yandex_playlist", data: { uid: "u1", kind: "1001", title: "Road Trip" } };
+    navStack.set([{ view: "root" }, playlist]);
+    const { container } = render(YandexView);
+    await settle();
+    expect(container.querySelector(".load-more-sentinel")).not.toBeNull();
+
+    // Restore the complete cached page without deriving a cursor from its two rows.
+    navStack.set([{ view: "root" }]);
+    await settle();
+    navStack.set([{ view: "root" }, playlist]);
+    await settle();
+    expect(ydxGetPlaylistTracks).toHaveBeenCalledTimes(1);
+    const actions = within(container.querySelector<HTMLElement>(".header-actions")!);
+    const playAll = actions.getByRole("button", { name: "Play All" });
+
+    IOStub.intersect();
+    await settle();
+    expect(ydxGetPlaylistTracks).toHaveBeenLastCalledWith("u1", "1001", 50);
+    await fireEvent.click(playAll);
+    expect(YandexApi.playPlaylist).toHaveBeenLastCalledWith(PLAYLIST_TRACKS.tracks, "Road Trip", {
+      uid: "u1", kind: "1001", offset: 50,
+    });
+
+    // No second observer event: an empty window does not move the sentinel.
+    resolvePage({ tracks: [], nextOffset: 100, hasMore: true });
+    await settle();
+    expect(ydxGetPlaylistTracks).toHaveBeenLastCalledWith("u1", "1001", 100);
+    await fireEvent.click(playAll);
+    expect(YandexApi.playPlaylist).toHaveBeenLastCalledWith(PLAYLIST_TRACKS.tracks, "Road Trip", {
+      uid: "u1", kind: "1001", offset: 100,
+    });
+    resolveFinal({ tracks: [], nextOffset: 123, hasMore: false });
+    await settle();
+    await fireEvent.click(playAll);
+    expect(YandexApi.playPlaylist).toHaveBeenLastCalledWith(PLAYLIST_TRACKS.tracks, "Road Trip", {
+      uid: "u1", kind: "1001", offset: 123,
+    });
+    IOStub.intersect();
+    await settle();
+    expect(ydxGetPlaylistTracks).toHaveBeenCalledTimes(3);
+  });
+
+  it("loads past initially unavailable windows without any observer event", async () => {
+    const { YandexApi } = await import("../../lib/yandex");
+    const tracks = [{ id: "101", title: "First playable", artist: "PL Artist", isYandex: true as const }];
+    ydxGetPlaylistTracks
+      .mockResolvedValueOnce({ tracks: [], nextOffset: 50, hasMore: true })
+      .mockResolvedValueOnce({ tracks: [], nextOffset: 100, hasMore: true })
+      .mockResolvedValueOnce({ tracks, nextOffset: 101, hasMore: false });
+    yandexAuthStatus.set(true);
+    navStack.set([{ view: "root" }, {
+      view: "yandex_playlist", data: { uid: "u1", kind: "1001", title: "Road Trip" },
+    }]);
+    const { getByText, getByRole } = render(YandexView);
+    await settle();
+    expect(ydxGetPlaylistTracks.mock.calls).toEqual([["u1", "1001", 0], ["u1", "1001", 50], ["u1", "1001", 100]]);
+    expect(getByText("First playable")).toBeInTheDocument();
+    await fireEvent.click(getByRole("button", { name: "Play All" }));
+    expect(YandexApi.playPlaylist).toHaveBeenCalledWith(tracks, "Road Trip", {
+      uid: "u1", kind: "1001", offset: 101,
+    });
   });
 
   it("retries instead of showing a poisoned empty cache after leaving mid-load", async () => {

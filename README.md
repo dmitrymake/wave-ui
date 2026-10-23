@@ -42,6 +42,48 @@ The UI is served on **port 3000** (e.g., `http://moode.local:3000`).
 
 Wave-UI uses `websockify` to bridge the MPD protocol over WebSockets. This allows for near-zero latency when skipping tracks or adjusting volume, providing instant feedback.
 
+## Yandex Music
+
+Yandex Music uses the [unofficial `yandex-music` Python SDK](https://github.com/MarshalX/yandex-music-api), pinned in `src/api/yandex-requirements.txt`. Python **3.10+** is required by the Wave bridge. MPD remains the audio player; there is no browser playback or external player process.
+
+### Radio / My Vibe
+
+“My Vibe” and track/artist/album/activity stations use **rotor radio sessions**, not repeated legacy station-track requests. Each MPD queue item retains its own session and batch IDs. The worker reports actual starts, natural finishes and skips; the frontend's skip request is only an intent hint, not a second feedback sender. Pauses and seeks do not inflate listening time. Feedback is kept in a retry outbox; delivery is at-least-once with the original event timestamp across retries, not a claim of exactly-once upstream delivery.
+
+The last 500 played IDs are retained in `/var/local/www/yandex-music/history.json`; the most recent 100 plus queued tracks are excluded from radio refills. A duplicate-only response never disables this guard: the bridge attempts a replacement session, then backs off if Yandex still returns no new tracks. The history survives reboots and resets when the connected account changes. Radio owns a sequential sliding MPD window, so repeat, single, random and consume are disabled while it manages the queue. Selecting local music stops automatic Yandex replenishment.
+
+The existing “stop daemon” control stops **replenishment**, not the currently playing song. Favorites/playlist “Play all” continues paging beyond the first page. Removing a heart removes a favorite; it does not send a recommendation dislike.
+
+### Installation, credentials and rollback
+
+Both `install.sh` and `install_dev.sh` install `wave-yandex.service`, an isolated venv under `/opt/wave-yandex`, and the thin `/wave-yandex-api.php` proxy. To update only this backend from a local checkout **on moOde**:
+
+```bash
+bash scripts/install-yandex.sh
+sudo systemctl status wave-yandex.service
+journalctl -u wave-yandex.service -n 50
+```
+
+On the first upgrade, the existing `/var/local/www/yandex_token.dat` token is imported into `/var/local/www/yandex-music/token.dat` with mode `0600`; it is not returned to the browser or included in diagnostics. The original token and old PHP daemon files on the device are left in place for rollback, but are no longer executed or installed from this repository. Subsequent token changes affect the new private token file.
+
+The installer backs up the previous proxy, systemd unit and installed Python sources under `/var/backups/wave-yandex/<timestamp>-<pid>/` (root-only), and attempts to restore them and the dependency pins if installation or the startup health check fails. The [migration record](docs/YANDEX_MIGRATION.md) preserves device verification limits, the original backup locations and manual PHP rollback instructions. A manual rollback between Python dependency versions also requires reinstalling the saved requirements file into its venv.
+
+The bridge listens only on **`127.0.0.1:8767`**. MPD plays stable URLs such as `http://127.0.0.1:8767/yandex/stream/12345`; short-lived signed CDN links stay inside Python. MP3s are downloaded atomically to tmpfs, bounded to 8 completed files / 96 MiB plus at most one 32 MiB download, and support HTTP byte ranges for seeking. Nothing writes audio to the SD card. The first track is prepared before replacing the current MPD queue. Refills, audio downloads and feedback do not block MPD observation.
+
+The public proxy, like moOde's own APIs, is intended for a **trusted LAN**, not internet exposure. Existing GET playback controls are retained for compatibility; importing a token or posting tracks requires JSON POST. `/wave-yandex-api.php?action=get_state` exposes safe operational diagnostics (backend, pending feedback, accepted-event counts and last error), never a token or signed audio URL.
+
+Backend tests use a separate environment:
+
+```bash
+python3 -m venv /tmp/wave-yandex-venv
+/tmp/wave-yandex-venv/bin/pip install -r src/api/yandex-requirements.txt
+/tmp/wave-yandex-venv/bin/python -m unittest discover -s src/api/tests -p 'test_yandex*.py' -v
+npm run validate
+npm run build
+```
+
+Mocked tests cover the state machine and HTTP/audio protocol. Real recommendations, subscription/region restrictions and audio output still need verification on the moOde device with its connected account.
+
 ## YouTube Music (Beta)
 
 Enable **YouTube Music** in **Settings → Services**. The sidebar then shows a YouTube Music section with recommendations, your playlists, liked songs, and search categories for songs, videos, albums, artists, and playlists. Tracks support MPD playback, queue actions, likes, track/artist radio and lyrics when available. Radio loads the recommendations returned for a seed into the queue; it does not continuously refill it.

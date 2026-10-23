@@ -255,9 +255,9 @@
 
         <IconButton size="lg" ariaLabel="Previous track" title="Previous" icon={ICONS.PREVIOUS} onclick={() => nav("previous")} />
 
-        <button class="play-btn-large flex-center" bind:this={playBtn} onclick={togglePlay} disabled={!!$pendingPlayback} aria-busy={!!$pendingPlayback}
-          aria-label={$pendingPlayback ? "Loading audio" : $status.state === "play" ? "Pause" : "Play"}
-          title={$pendingPlayback ? "Loading audio…" : $status.state === "play" ? "Pause" : "Play"}>
+        <button class="play-btn-large flex-center" bind:this={playBtn} onclick={togglePlay} aria-busy={!!$pendingPlayback}
+          aria-label={$pendingPlayback ? "Cancel loading and pause" : $status.state === "play" ? "Pause" : "Play"}
+          title={$pendingPlayback ? "Cancel loading and pause" : $status.state === "play" ? "Pause" : "Play"}>
           {#if $pendingPlayback}<PlaybackSpinner label="Loading audio" size="var(--icon-size-lg)" />{:else}{@html $status.state === "play" ? ICONS.PAUSE : ICONS.PLAY}{/if}
         </button>
 

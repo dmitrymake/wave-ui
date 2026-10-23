@@ -244,9 +244,9 @@
           {@html ICONS.PREVIOUS}
         </IconButton>
 
-        <button class="play-btn flex-center" onclick={stop(togglePlay)} disabled={!!$pendingPlayback} aria-busy={!!$pendingPlayback}
-          aria-label={$pendingPlayback ? "Loading audio" : $status.state === "play" ? "Pause" : "Play"}
-          title={$pendingPlayback ? "Loading audio…" : $status.state === "play" ? "Pause" : "Play"}>
+        <button class="play-btn flex-center" onclick={stop(togglePlay)} aria-busy={!!$pendingPlayback}
+          aria-label={$pendingPlayback ? "Cancel loading and pause" : $status.state === "play" ? "Pause" : "Play"}
+          title={$pendingPlayback ? "Cancel loading and pause" : $status.state === "play" ? "Pause" : "Play"}>
           {#if $pendingPlayback}<PlaybackSpinner label="Loading audio" />{:else}{@html $status.state === "play" ? ICONS.PAUSE : ICONS.PLAY}{/if}
         </button>
 

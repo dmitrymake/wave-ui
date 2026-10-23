@@ -25,7 +25,14 @@
   // `image` lives on YandexAlbum/YandexArtist (not YandexPlaylist), `artist` only on YandexAlbum.
   // Narrow the union for access; runtime value is unchanged.
   const headerImage = $derived((headerData as YandexAlbum | YandexArtist | null)?.image);
-  const headerArtist = $derived((headerData as YandexAlbum | null)?.artist);
+  const headerSubtitle = $derived.by(() => {
+    const artist = (headerData as YandexAlbum | null)?.artist;
+    const description = headerData?.description;
+    // The API promises text, but stale navigation/cache entries may still carry
+    // an old SDK object. Never implicitly stringify it into [object Object].
+    if (typeof artist === "string" && artist) return artist;
+    return typeof description === "string" ? description : "";
+  });
 
   import { horizontalWheelScroll as handleHorizontalScroll } from "../../lib/horizontalScroll";
 
@@ -142,11 +149,11 @@
           <h1 class="header-title" title={headerData.title || headerData.name}>
             {headerData.title || headerData.name}
           </h1>
-          {#if headerArtist || headerData.description}
+          {#if headerSubtitle}
             <!-- Album: the performer, the row the library's album header uses. -->
             <div class="header-subtitle-row">
-              <h2 class="header-sub-text" title={headerArtist || headerData.description}>
-                {headerArtist || headerData.description}
+              <h2 class="header-sub-text" title={headerSubtitle}>
+                {headerSubtitle}
               </h2>
             </div>
           {/if}

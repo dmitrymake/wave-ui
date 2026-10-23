@@ -20,6 +20,7 @@ export default defineConfig({
         target: MOODE_TARGET,
         changeOrigin: true,
         secure: false,
+        configure: (proxy) => proxy.on("proxyReq", (request) => request.setHeader("Origin", MOODE_TARGET)),
       },
       "/wave-youtube-api.php": {
         target: MOODE_TARGET,

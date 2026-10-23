@@ -103,12 +103,38 @@ describe("src.playUri", () => {
     const handled = await src.playUri("yandex:777", 1);
 
     expect(handled).toBe(true);
-    expect(requestMock).toHaveBeenCalledWith("play_track", { id: "777", append: 1 });
+    expect(requestMock).toHaveBeenCalledWith("play_track", { id: "777", append: 1 }, "GET", 75_000);
     // The appended track sits at the new last position (lenAfter - 1 = 3); its stable
     // Id is read from playlistinfo and used for move/play — not the raw index.
     expect(sendMock).toHaveBeenCalledWith("playlistinfo 3");
     expect(sendMock).toHaveBeenCalledWith("moveid 42 2"); // targetPos = currentPos + 1
     expect(sendMock).toHaveBeenCalledWith("playid 42");
+  });
+
+  it("uses the bridge's actual MPD id even when a concurrent refill also grows the queue", async () => {
+    requestMock.mockResolvedValue({ mpd_id: 91 });
+    sendMock.mockResolvedValue("playlistlength: 3\nOK\n");
+    await src.playUri("yandex:777", 1);
+    expect(sendMock).toHaveBeenCalledWith("moveid 91 2");
+    expect(sendMock).toHaveBeenCalledWith("playid 91");
+    expect(sendMock.mock.calls.some(([cmd]) => cmd.startsWith("playlistinfo"))).toBe(false);
+  });
+
+  it("discards a late append after loading was cancelled instead of starting playback", async () => {
+    let current = true;
+    let resolveAppend!: (result: { mpd_id: number }) => void;
+    requestMock.mockImplementation(() => new Promise((resolve) => { resolveAppend = resolve; }));
+    sendMock.mockResolvedValue("playlistlength: 3\nOK\n");
+    const playback = src.playUri("yandex:777", 1, () => current);
+    await vi.waitFor(() => expect(requestMock).toHaveBeenCalledWith(
+      "play_track", { id: "777", append: 1 }, "GET", 75_000,
+    ));
+    current = false;
+    resolveAppend({ mpd_id: 91 });
+    await playback;
+    expect(sendMock).toHaveBeenCalledWith("deleteid 91");
+    expect(sendMock).not.toHaveBeenCalledWith("playid 91");
+    expect(sendMock.mock.calls.some(([cmd]) => cmd.startsWith("moveid"))).toBe(false);
   });
 
   it("does NOT move/play when the queue did not grow (append failed / raced)", async () => {
@@ -117,7 +143,7 @@ describe("src.playUri", () => {
     const handled = await src.playUri("yandex:9", 0);
 
     expect(handled).toBe(true);
-    expect(requestMock).toHaveBeenCalledWith("play_track", { id: "9", append: 1 });
+    expect(requestMock).toHaveBeenCalledWith("play_track", { id: "9", append: 1 }, "GET", 75_000);
     const issued = sendMock.mock.calls.map((c) => c[0]);
     expect(issued.some((c) => c.startsWith("moveid"))).toBe(false);
     expect(issued.some((c) => c.startsWith("playid"))).toBe(false);
@@ -308,6 +334,7 @@ describe("src.matches", () => {
     expect(src.matches("yandex:123")).toBe(true);
     expect(src.matches("/dev/shm/yandex_music/tracks/123.mp3")).toBe(true);
     expect(src.matches("https://x.storage.yandex.net/get-mp3/a")).toBe(true);
+    expect(src.matches("http://127.0.0.1:8767/yandex/stream/123")).toBe(true);
     expect(src.matches("Music/Artist/Album/01.flac")).toBe(false);
   });
 });

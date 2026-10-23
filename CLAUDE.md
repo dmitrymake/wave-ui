@@ -29,7 +29,7 @@ Run a single test file: `npx vitest run src/lib/__tests__/somefile.test.ts`
 - `src/lib/mpd/` — MPD WebSocket protocol client (direct binary protocol over websockify)
 - `src/lib/workers/` — Web Worker for background library sync (keeps UI unblocked)
 - `src/lib/` — Core logic: `api.ts` (sync orchestration), `db.ts` (IndexedDB), `router.ts` (hash-based routing), `theme.ts`, `types.ts`, `constants.ts`
-- `src/api/` — PHP backend files deployed to `/var/www/` on moOde
+- `src/api/` — moOde PHP endpoints/proxies plus Python streaming backends. Yandex: `yandex_client.py` (SDK adapter), `yandex_player.py` (single-owner MPD/session state), `yandex_audio.py` (bounded tmpfs cache), `yandex-music.py` (loopback HTTP). Installed under `/opt/wave-yandex` by `scripts/install-yandex.sh`; do not restore the retired PHP daemon.
 - `src/styles/` — Shared CSS; `MusicViews.css` is the largest shared stylesheet
 
 **Data flow**:
@@ -50,3 +50,5 @@ Production runs on moOde device: Nginx serves static files on port 3000 (SSL: 34
 ## Testing
 
 Vitest with jsdom environment and fake-indexeddb. Tests live in `src/lib/__tests__/`. Setup file imports fake-indexeddb polyfill. Path alias `$lib` maps to `src/lib` in test config.
+
+Yandex backend tests: create a separate Python venv, install `src/api/yandex-requirements.txt`, then run `python -m unittest discover -s src/api/tests -p 'test_yandex*.py' -v`. Do not install into system Python. Radio feedback belongs to each MPD queue occurrence's session/batch, not a global latest batch. A duplicate-only upstream response must never bypass play history.

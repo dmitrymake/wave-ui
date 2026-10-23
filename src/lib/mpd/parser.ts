@@ -50,7 +50,7 @@ export const MpdParser = {
       repeat: data.repeat === "1",
       song: parseInt(data.song) || 0,
 
-      songId: parseInt(data.songid) || -1,
+      songId: Number.isInteger(Number(data.songid)) && Number(data.songid) >= 0 ? Number(data.songid) : -1,
       playlistLength: parseInt(data.playlistlength) || 0,
       bitrate: parseInt(data.bitrate) || 0,
       format: format,
@@ -129,6 +129,7 @@ export const MpdParser = {
       file.split("/").pop() ||
       "Unknown";
 
+    const mpdId = Number(raw.Id ?? raw.id);
     return {
       file: file,
       title: title,
@@ -138,6 +139,7 @@ export const MpdParser = {
       time: parseFloat(raw.Time || raw.time || "0"),
       track: raw.Track || raw.track || "",
       id: raw.Id || raw.id,
+      ...(Number.isInteger(mpdId) && mpdId >= 0 ? { mpdId } : {}),
       pos: raw.Pos || raw.pos || null,
       // Name is a standard MPD tag local files can carry; only treat it as a
       // station name for remote (internet-radio) streams.

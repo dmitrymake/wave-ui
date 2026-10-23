@@ -18,6 +18,8 @@ import type {
 } from "./types/yandex";
 
 const getBaseUrl = (): string => resolveBaseUrl();
+// A cold start includes SDK session creation and preparing the first MP3 in RAM.
+const PLAYBACK_TIMEOUT = 75_000;
 
 /** Yandex daemon API endpoint. Lives in the Yandex domain (was in shared constants). */
 export const YANDEX_ENDPOINT = {
@@ -29,7 +31,8 @@ export const YANDEX_ENDPOINT = {
 /**
  * Pageable source descriptor for "Play All". Lets the daemon keep fetching
  * subsequent pages (favorites/playlists can have hundreds of tracks while the
- * UI only loads ~50 at a time). `offset` is where the daemon should continue.
+ * UI only loads ~50 at a time). `offset` is the backend's next source cursor,
+ * including unavailable entries, not the number of visible tracks.
  */
 export interface PlaylistSource {
   kind: string;
@@ -75,7 +78,7 @@ interface YandexApiType {
   // add_tracks, …). The caller names the parsed shape via the type parameter; the
   // default of `unknown` keeps untyped callers honest about narrowing first.
   // `timeoutMs` overrides the generic 12s deadline for heavy endpoints.
-  request<T = unknown>(action: string, params?: Record<string, unknown>, method?: string, timeoutMs?: number): Promise<T>;
+  request<T = unknown>(action: string, params?: Record<string, unknown>, method?: string, timeoutMs?: number, signal?: AbortSignal): Promise<T>;
   search(query: string): Promise<YandexSearchResponse>;
   getUserPlaylists(): Promise<YandexPlaylist[]>;
   getLanding(): Promise<YandexLandingResponse>;
@@ -127,13 +130,14 @@ export const YandexApi: YandexApiType = {
     params: Record<string, unknown> = {},
     method = "GET",
     timeoutMs?: number,
+    signal?: AbortSignal,
   ): Promise<T> {
     const baseUrl = YANDEX_ENDPOINT.URL;
     const url = new URL(baseUrl, window.location.origin);
 
     url.searchParams.append("action", action);
 
-    const options: RequestInit = { method };
+    const options: RequestInit = { method, ...(signal ? { signal } : {}) };
 
     if (method === "GET") {
       for (const key in params) {
@@ -214,15 +218,15 @@ export const YandexApi: YandexApiType = {
       else stationId = String(id);
     }
 
-    return await this.request<YandexMutationResponse>("play_station", { station: stationId });
+    return await this.request<YandexMutationResponse>("play_station", { station: stationId }, "GET", PLAYBACK_TIMEOUT);
   },
 
   async playStation(stationId: string): Promise<YandexMutationResponse> {
-    return await this.request<YandexMutationResponse>("play_station", { station: stationId });
+    return await this.request<YandexMutationResponse>("play_station", { station: stationId }, "GET", PLAYBACK_TIMEOUT);
   },
 
   async playTrack(trackId: string | number): Promise<YandexMutationResponse> {
-    return await this.request<YandexMutationResponse>("play_track", { id: trackId });
+    return await this.request<YandexMutationResponse>("play_track", { id: trackId }, "GET", PLAYBACK_TIMEOUT);
   },
 
   async playPlaylist(tracks: YandexTrack[], contextName: string, source: PlaylistSource | null = null): Promise<YandexMutationResponse> {
@@ -230,6 +234,7 @@ export const YandexApi: YandexApiType = {
       "play_playlist",
       { tracks, context: contextName, source },
       "POST",
+      PLAYBACK_TIMEOUT,
     );
   },
 

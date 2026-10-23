@@ -153,8 +153,8 @@
   --weight-bold: 700;      /* 700 x11 + 'bold' x4 -> 700 */
 
   /* ===========================================================================
-     6. FONT FAMILY — the platform's own UI face everywhere, no web font (see
-        DESIGN_AUDIT §3.10: the device lives on a LAN and may be offline).
+     6. FONT FAMILY — platform UI fonts, no network font dependency.
+        Offline/LAN and Pi font-metrics policy: DESIGN.md §2.3.
         `font-family: inherit` (buttons/inputs) stays literal (behavioral).
 
         The old stack had no Linux family at all, so on Linux Chromium fell
@@ -188,10 +188,8 @@
     "Liberation Mono", monospace;
 
   /* ===========================================================================
-     7. RADIUS — theme-invariant. Existing sm/md/lg/full preserved.
-        --radius-xl UNIFIED to 20px: was split (default 20 / gruvbox 16); radius
-        is an invariant axis, so gruvbox 16->20 is an accepted minor visual
-        change (cards/modals slightly rounder), explicitly flagged.
+     7. RADIUS — theme-invariant; --radius-xl is 16px in both themes.
+        Pills use --radius-pill rather than the artwork/card radius.
      ======================================================================== */
   --radius-xs: 2px;          /* tiny rails/scrollbar/progress (2px x7); 1px/3px snap here */
   --radius-sm: 4px;          /* EXISTS — migrate raw 4px x6 */
@@ -222,7 +220,7 @@
   /* ===========================================================================
      10. SHADOW (composite) — invariant geometry + per-theme color (var()).
          -strong variants keep --c-black-* parity where a darker color is used;
-         -header / -popover kept separate because the color diverges per theme
+         -header stays separate because its color diverges per theme
          (do NOT merge — would change gruvbox).
      ======================================================================== */
   --shadow-xs: 0 1px 3px var(--c-shadow-card);

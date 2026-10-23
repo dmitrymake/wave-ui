@@ -251,14 +251,15 @@ async function fetchQueueMetadata(urls: string[]): Promise<void> {
   await Promise.all(requests);
 }
 
-// The track is appended server-side (the PHP daemon adds it to MPD), so we cannot
-// capture its id from `addid` the way the generic player does. Instead: confirm the
-// queue actually grew, then resolve the appended track's STABLE MPD Id from its
-// position. Callers then move/play by id (moveid/playid), which is immune to the
-// index shifts that made the old `move playlistlength-1` target the wrong track.
+// The bridge appends server-side and returns MPD's addid result. For older device
+// backends without that field, fall back to confirming queue growth and reading
+// the appended position. Callers always move/play by stable MPD id.
 async function appendYandexTrack(id: string): Promise<number> {
   const lenBefore: number = await PlayerActions.getQueueLength();
-  await YandexApi.request("play_track", { id, append: 1 });
+  const result = await YandexApi.request<{ mpd_id?: number }>("play_track", { id, append: 1 }, "GET", 75_000);
+  // The Python bridge returns the actual addid result, avoiding a race with a
+  // concurrent radio refill. Keep the queue-position fallback for older devices.
+  if (typeof result?.mpd_id === "number" && Number.isInteger(result.mpd_id) && result.mpd_id >= 0) return result.mpd_id;
   const lenAfter: number = await PlayerActions.getQueueLength();
 
   const before: number = isNaN(lenBefore) ? 0 : lenBefore;
@@ -359,6 +360,7 @@ export const yandexSource: TrackSource = {
       file.includes("get-mp3") ||
       file.startsWith("yandex:") ||
       file.includes("storage.yandex.net") ||
+      file.startsWith("http://127.0.0.1:8767/yandex/stream/") ||
       file.includes("/dev/shm/yandex_music/tracks/")
     );
   },
@@ -429,7 +431,16 @@ export const yandexSource: TrackSource = {
     }
   },
 
-  async playUri(uri: string, currentPos: number): Promise<boolean> {
+  async prepareUri(uri: string, signal?: AbortSignal): Promise<void> {
+    // Only the new bridge's URLs support this endpoint. Prepare BEFORE playid:
+    // a cold CDN download must not stall MPD's command/status processing.
+    if (!uri.startsWith("http://127.0.0.1:8767/yandex/stream/")) return;
+    const id = getYandexIdFromUrl(uri);
+    if (!id) return;
+    await YandexApi.request("prepare_track", { track_id: id }, "POST", 75_000, signal);
+  },
+
+  async playUri(uri: string, currentPos: number, isCurrent: () => boolean = () => true): Promise<boolean> {
     if (!uri.startsWith("yandex:")) return false;
     const id: string = uri.split(":")[1];
 
@@ -444,10 +455,17 @@ export const yandexSource: TrackSource = {
       return true;
     }
 
+    const discardCancelled = async (): Promise<boolean> => {
+      if (isCurrent()) return false;
+      try { await PlayerActions.deleteById(newId); } catch { /* already removed from MPD */ }
+      return true;
+    };
+    if (await discardCancelled()) return true;
     // Move/play BY ID (moveid/playid). The old code moved playlistlength-1 read from
     // a separate status, so a concurrent queue change made len-1 the wrong track.
     const targetPos: number = isNaN(currentPos) ? 0 : currentPos + 1;
     await PlayerActions.moveById(newId, targetPos);
+    if (await discardCancelled()) return true;
     await PlayerActions.playById(newId);
     return true;
   },
@@ -570,7 +588,7 @@ export const yandexSource: TrackSource = {
     }
   },
 
-  // Background daemon banner: the PHP daemon keeps a vibe/queue alive server-side.
+  // Background daemon banner: the Python bridge keeps a vibe/queue alive server-side.
   // The banner reflects yandexState and lets the UI poll for / stop the daemon.
   daemon: {
     state: derived(yandexState, ($s) => ({

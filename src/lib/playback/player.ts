@@ -119,9 +119,10 @@ async function preparePlayback(sequence: number, uri: string): Promise<boolean> 
   return isCurrentPlayback(sequence);
 }
 
-function startingPlayback(sequence: number, position: number | null): void {
+function startingPlayback(sequence: number, position: number | null, songId?: number): void {
   if (!isCurrentPlayback(sequence)) return;
-  pendingPlayback.update((pending) => pending ? { ...pending, phase: "starting", position } : pending);
+  pendingPlayback.update((pending) => pending ? { ...pending, phase: "starting", position,
+    songId: songId ?? pending.track.mpdId } : pending);
   status.update((s) => ({ ...s, song: position ?? s.song }));
   isQueueLocked.set(false);
   forceHardSync = true;
@@ -413,10 +414,14 @@ function updateStores(serverStatus: MpdStatus, serverSong: CurrentSong): void {
   const pending = get(pendingPlayback);
   if (pending) {
     playbackFallback = { song: serverSong, status: serverStatus };
-    const matches = !pending.track.file || serverSong.file === pending.track.file ||
-      resolveSource(pending.track.file)?.matchesPlaying?.(pending.track, serverSong.file);
-    const positionMatches = pending.position === null || serverStatus.song === pending.position;
-    if (pending.phase === "starting" && matches && positionMatches && serverStatus.state === "play" &&
+    const targetId = pending.songId ?? pending.track.mpdId;
+    // A radio refill/prune can move the selected item to another position between
+    // playid and this poll. Confirm its occurrence, never its obsolete position.
+    const matches = typeof targetId === "number" && targetId >= 0
+      ? serverStatus.songId === targetId
+      : !pending.track.file || serverSong.file === pending.track.file ||
+        resolveSource(pending.track.file)?.matchesPlaying?.(pending.track, serverSong.file);
+    if (pending.phase === "starting" && matches && serverStatus.state === "play" &&
       (serverStatus.elapsed > 0 || (!streamsHaveElapsed && serverStatus.bitrate > 0))) {
       completePlayback();
     } else {
@@ -434,6 +439,7 @@ function updateStores(serverStatus: MpdStatus, serverSong: CurrentSong): void {
     !oldSong ||
     oldSong.file !== serverSong.file ||
     oldSong.id !== serverSong.id ||
+    oldSong.mpdId !== serverSong.mpdId ||
     oldSong.title !== serverSong.title ||
     oldSong.artist !== serverSong.artist ||
     oldSong.stationName !== serverSong.stationName ||
@@ -452,6 +458,18 @@ function updateStores(serverStatus: MpdStatus, serverSong: CurrentSong): void {
       void resolveSource(next.file)?.prepareUri?.(next.file).catch((error) => logger.warn("[Player] Next track preparation failed", error));
     }
   }
+}
+
+function currentQueuePosition(s: MpdStatus, tracks: Track[]): number {
+  const pending = get(pendingPlayback);
+  const songId = pending?.songId ?? pending?.track.mpdId ?? s.songId;
+  if (typeof songId === "number" && songId >= 0) {
+    // Match the status to the SAME queue snapshot, even if it was fetched before
+    // the daemon removed preceding rows. A missing id falls back to native MPD
+    // next/previous, not a guessed index in an unrelated queue version.
+    return tracks.findIndex((track) => track.mpdId === songId);
+  }
+  return pending?.position ?? s.song;
 }
 
 function manageTicker(shouldRun: boolean): void {
@@ -532,6 +550,7 @@ function applyOptimisticTrack(track: Track): void {
     image: track.image,
     service: track.service,
     id: track.id,
+    mpdId: track.mpdId,
     stationName: track.stationName,
   }));
 }
@@ -550,7 +569,32 @@ function rollbackOptimistic(context: string, e: unknown): void {
 
 export const PlayerActions = {
   async togglePlay(): Promise<void> {
-    if (get(pendingPlayback)) return;
+    if (get(pendingPlayback)) {
+      // Loading must never lock the user out of transport controls. Cancel the
+      // optimistic selection, then pause physical MPD even if it has already
+      // started a track whose confirmation poll has not reached the UI yet.
+      const physical = playbackFallback;
+      playbackAbort?.abort();
+      completePlayback();
+      isQueueLocked.set(false);
+      ignoreUpdatesUntil = 0;
+      forceHardSync = true;
+      stopTicker();
+      if (physical) {
+        currentSong.set(physical.song);
+        status.set({ ...physical.status, state: "pause" });
+      } else {
+        status.update((value) => ({ ...value, state: "pause" }));
+      }
+      try {
+        await mpdClient.send("pause 1");
+      } catch (error) {
+        rollbackOptimistic("cancelLoading", error);
+        return;
+      }
+      await refreshStatus();
+      return;
+    }
     const s: MpdStatus = get(status);
     const isPlaying: boolean = s.state === "play";
     ignoreUpdatesUntil = performance.now() + 800;
@@ -573,18 +617,19 @@ export const PlayerActions = {
     forceHardSync = true;
     const s: MpdStatus = get(status);
     const q: Track[] = get(queue);
-    const nextPos = s.song + 1;
+    const currentPos = currentQueuePosition(s, q);
+    const nextPos = currentPos + 1;
 
-    const current: Track | undefined = q[s.song];
+    const current: Track | undefined = q[currentPos];
     if (current) {
       resolveSource(current.file)?.onSkip?.(current, s.elapsed);
     }
-    if (!s.random && nextPos >= 0 && nextPos < q.length) {
+    if (!s.random && currentPos >= 0 && nextPos < q.length) {
       await this.playQueuePosition(nextPos);
       return;
     }
 
-    const sequence = beginPlayback({ ...get(currentSong), file: "", title: "Loading…", artist: "" }, null);
+    const sequence = beginPlayback({ ...get(currentSong), mpdId: undefined, file: "", title: "Loading…", artist: "" }, null);
 
     ignoreUpdatesUntil = performance.now() + 600;
     status.update((s) => ({ ...s, elapsed: 0 }));
@@ -603,14 +648,14 @@ export const PlayerActions = {
     forceHardSync = true;
     const s: MpdStatus = get(status);
     const q: Track[] = get(queue);
-    const prevPos = s.song - 1;
+    const prevPos = currentQueuePosition(s, q) - 1;
 
     if (!s.random && prevPos >= 0 && prevPos < q.length) {
       await this.playQueuePosition(prevPos);
       return;
     }
 
-    const sequence = beginPlayback({ ...get(currentSong), file: "", title: "Loading…", artist: "" }, null);
+    const sequence = beginPlayback({ ...get(currentSong), mpdId: undefined, file: "", title: "Loading…", artist: "" }, null);
 
     ignoreUpdatesUntil = performance.now() + 600;
     status.update((s) => ({ ...s, elapsed: 0 }));
@@ -821,18 +866,25 @@ export const PlayerActions = {
       return;
     }
     const pending = get(pendingPlayback);
-    if (pending?.position === pos && pending.track.file === track.file) return;
+    if (pending && (track.mpdId !== undefined
+      ? (pending.songId ?? pending.track.mpdId) === track.mpdId
+      : pending.position === pos && pending.track.file === track.file)) return;
     const sequence = beginPlayback(track, pos);
     try {
-      // Capture MPD's stable id before a potentially slow provider request.
-      const id = await this.getQueueItemIdAt(pos);
+      // Use the id attached to this queue snapshot. Re-reading its position can
+      // resolve a DIFFERENT item after the daemon prunes preceding tracks.
+      const id = track.mpdId ?? await this.getQueueItemIdAt(pos);
       if (!await preparePlayback(sequence, track.file)) return;
       if (Number.isFinite(id)) {
         const details = MpdParser.parseKeyValue(await mpdClient.send(`playlistid ${id}`));
         if (!isCurrentPlayback(sequence)) return;
         const position = Number.parseInt(details.pos);
+        if (details.file && details.file !== track.file &&
+            !resolveSource(track.file)?.matchesPlaying?.(track, details.file)) {
+          throw new Error("Queue changed while selecting the track; try again");
+        }
         await mpdClient.send(`playid ${id}`);
-        startingPlayback(sequence, Number.isFinite(position) ? position : pos);
+        startingPlayback(sequence, Number.isFinite(position) ? position : pos, id);
       } else {
         await mpdClient.send(`play ${pos}`);
         startingPlayback(sequence, pos);
@@ -981,5 +1033,9 @@ export const PlayerActions = {
 
   async playById(songId: number): Promise<void> {
     await mpdClient.send(`playid ${songId}`);
+  },
+
+  async deleteById(songId: number): Promise<void> {
+    await mpdClient.send(`deleteid ${songId}`);
   },
 };

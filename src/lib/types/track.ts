@@ -11,6 +11,9 @@ export interface Track {
   time: number;
   track: string;
   id?: string;
+  // Stable queue-occurrence identity. Provider enrichment may replace `id` with
+  // a Yandex/YouTube id; MPD transport must keep its own id across queue shifts.
+  mpdId?: number;
   pos?: string | null;
   stationName?: string | null;
   // Neutral identifier of the TrackSource that owns this track (e.g. the source's

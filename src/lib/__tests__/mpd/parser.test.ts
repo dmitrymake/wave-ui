@@ -69,6 +69,10 @@ describe("MpdParser.parseStatus", () => {
     expect(s.playlistVersion).toBe(5);
   });
 
+  it("preserves MPD song id zero instead of treating it as missing", () => {
+    expect(MpdParser.parseStatus("state: play\nsongid: 0\n").songId).toBe(0);
+  });
+
   it("uses defaults for empty input", () => {
     const s = MpdParser.parseStatus("");
     expect(s.state).toBe("stop");
@@ -109,7 +113,15 @@ describe("MpdParser.parseCurrentSong", () => {
     expect(song.time).toBe(245);
     expect(song.track).toBe("1");
     expect(song.id).toBe("7");
+    expect(song.mpdId).toBe(7);
     expect(song.pos).toBe("0");
+  });
+
+  it("keeps an independent stable MPD queue id including zero", () => {
+    const song = MpdParser.parseCurrentSong("file: http://127.0.0.1:8767/yandex/stream/123\nId: 0\nPos: 4\n");
+    expect(song.id).toBe("0");
+    expect(song.mpdId).toBe(0);
+    expect(MpdParser.parseCurrentSong("file: test.mp3\n").mpdId).toBeUndefined();
   });
 
   it("uses defaults for missing fields", () => {

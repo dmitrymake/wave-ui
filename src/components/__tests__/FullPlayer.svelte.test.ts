@@ -62,6 +62,8 @@ vi.mock("../../lib/playerActions", () => ({
 }));
 
 import FullPlayer from "../FullPlayer.svelte";
+import { pendingPlayback } from "../../lib/stores/playback";
+import { togglePlay } from "../../lib/playerActions";
 
 // Stamp a deterministic box onto the seek bar so getPct (clientX - left) / width is
 // a clean fraction in jsdom, where every layout box is otherwise zero.
@@ -86,6 +88,8 @@ function stampBar(container: HTMLElement): HTMLElement {
 
 beforeEach(() => {
   seek.mockClear();
+  vi.mocked(togglePlay).mockClear();
+  pendingPlayback.set(null);
   status.set({
     state: "play",
     duration: 200,
@@ -100,6 +104,17 @@ beforeEach(() => {
 });
 
 describe("FullPlayer — render / transport controls", () => {
+  it("keeps cancel/pause available while audio preparation is pending", async () => {
+    pendingPlayback.set({ sequence: 1, phase: "preparing", position: 0,
+      track: { file: "Music/loading.flac", title: "Loading", artist: "Artist", album: "", genre: "", track: "", time: 180 } });
+    const { getByRole } = render(FullPlayer);
+    const cancel = getByRole("button", { name: "Cancel loading and pause" });
+    expect(cancel).not.toBeDisabled();
+    expect(cancel).toHaveAttribute("aria-busy", "true");
+    await fireEvent.click(cancel);
+    expect(togglePlay).toHaveBeenCalledOnce();
+  });
+
   it("renders the playing track and a seek slider reflecting elapsed/duration", () => {
     const { getByText, container } = render(FullPlayer);
     expect(getByText("Song")).toBeInTheDocument();

@@ -7,6 +7,9 @@ export interface PendingPlayback {
   sequence: number;
   track: Track;
   position: number | null;
+  // A position can change while the provider prepares audio or the daemon prunes
+  // its sliding window. This stable MPD identity confirms the selected occurrence.
+  songId?: number;
   phase: "preparing" | "starting";
 }
 

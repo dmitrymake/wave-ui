@@ -54,9 +54,8 @@ export interface YandexSearchResults {
 }
 
 // ─── Yandex API responses ───
-// Narrow shapes for the fields the UI actually reads off each endpoint. The PHP
-// daemon proxies Yandex's API and may emit more, but the client only commits to
-// these — anything extra is ignored rather than typed as `any`.
+// Narrow shapes for the fields the UI reads from the Python bridge through the
+// PHP proxy. Additional backend fields are ignored rather than typed as `any`.
 
 export interface YandexStatusResponse {
   authorized: boolean;
@@ -90,6 +89,9 @@ export interface YandexAlbumDetailsResponse {
 
 export interface YandexPlaylistTracksResponse {
   tracks?: YandexTrack[];
+  /** Consumed source entries, including unavailable tracks; not tracks.length. */
+  nextOffset?: number;
+  hasMore?: boolean;
 }
 
 export interface YandexSearchResponse {

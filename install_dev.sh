@@ -45,20 +45,13 @@ sudo mkdir -p "/dev/shm/yandex_music"
 
 # Copy the PHP files (overwrite existing ones)
 sudo cp "$TEMP_DIR/src/api/wave-api.php" "$WEB_ROOT/"
-sudo cp "$TEMP_DIR/src/api/wave-yandex-api.php" "$WEB_ROOT/"
-sudo cp "$TEMP_DIR/src/api/yandex-music.php" "$INC_DIR/"
-sudo cp "$TEMP_DIR/src/api/yandex-cache.php" "$INC_DIR/"
-sudo cp "$TEMP_DIR/src/api/yandex-daemon.php" "$BIN_DIR/"
 
 # Refresh ownership (in case it drifted)
 sudo chown -R www-data:www-data "$WEB_ROOT"
 sudo chown -R www-data:www-data "/var/local/www"
 sudo chown -R www-data:www-data "/dev/shm/yandex_music"
 
-# Daemon execute bit
-sudo chmod +x "$BIN_DIR/yandex-daemon.php"
-sudo chmod -R 777 "/dev/shm/yandex_music"
-
+bash "$TEMP_DIR/scripts/install-yandex.sh" "$TEMP_DIR"
 bash "$TEMP_DIR/scripts/install-youtube.sh" "$TEMP_DIR"
 
 # 4. Frontend Update
@@ -81,24 +74,7 @@ sudo chmod -R 755 "$FINAL_WEB_DIR"
 # 5. Restoring Services
 echo ">>> [5/5] Restarting Services..."
 
-# Refresh the daemon service config (in case repo params changed; note the hardcode below)
-# Rewrite the service file to guarantee a clean config
-sudo bash -c "cat > /etc/systemd/system/wave-yandex.service" <<EOF
-[Unit]
-Description=WaveUI Yandex Music Daemon
-After=network.target mpd.service
-
-[Service]
-Type=simple
-User=www-data
-Group=www-data
-ExecStart=/usr/bin/php $BIN_DIR/yandex-daemon.php
-Restart=always
-RestartSec=5
-
-[Install]
-WantedBy=multi-user.target
-EOF
+# The Yandex bridge installer owns wave-yandex.service (do not restore the PHP daemon).
 
 sudo systemctl daemon-reload
 sudo systemctl restart wave-yandex.service

@@ -313,14 +313,14 @@
   function openPlaylist(pl: YandexPlaylist) {
     if (pl.kind === "my_vibe") {
       showToast(MSG.startingMyVibe, "info");
-      YandexApi.playRadio();
+      void YandexApi.playRadio().catch((error) => reportError("My Vibe", error, MSG.RADIO_ERROR_STARTING));
       return;
     }
 
     if (pl.kind === "station") {
       if (!pl.id) return;
       showToast(MSG.startingVibe(pl.title), "info");
-      YandexApi.playStation(pl.id);
+      void YandexApi.playStation(pl.id).catch((error) => reportError("Station", error, MSG.RADIO_ERROR_STARTING));
       return;
     }
 
@@ -484,22 +484,31 @@
     kind: string | null,
     offset: number,
     seq?: number,
-  ): Promise<number> {
+  ): Promise<void> {
     if (!uid || !kind) {
       canLoadMore = false;
-      return 0;
+      return;
     }
-    const res = await YandexApi.getPlaylistTracks(uid, kind, offset);
-    if (seq !== undefined && seq !== viewSeq) return 0; // superseded
-    const tracks = res?.tracks;
-    if (tracks) {
+    while (true) {
+      const res = await YandexApi.getPlaylistTracks(uid, kind, offset);
+      if (seq !== undefined && seq !== viewSeq) return; // superseded
+      const tracks = res?.tracks;
+      if (!tracks) {
+        canLoadMore = false;
+        return;
+      }
       if (offset === 0) tracksStore.set(tracks);
-      else tracksStore.update((curr) => [...curr, ...tracks]);
-      if (tracks.length === 0) canLoadMore = false;
-      return tracks.length;
+      else if (tracks.length) tracksStore.update((curr) => [...curr, ...tracks]);
+      // Commit only after the page arrives: Play All may run during pagination.
+      // Legacy responses have fixed 50-entry windows but no cursor metadata.
+      const nextOffset = res.nextOffset ?? offset + 50;
+      currentPlaylistContext.offset = nextOffset;
+      canLoadMore = (res.hasMore ?? tracks.length > 0) && nextOffset > offset;
+      if (tracks.length || !canLoadMore) return;
+      // Empty windows do not move the sentinel, so IO may never fire again.
+      // Continue serially until a playable page or the end, checking seq each time.
+      offset = nextOffset;
     }
-    canLoadMore = false;
-    return 0;
   }
 
   async function loadMore() {
@@ -508,25 +517,18 @@
     const seq = viewSeq;
     // Own token: a superseded page load must not clear a newer one's spinner.
     const mseq = ++moreSeq;
-    const prevOffset = currentPlaylistContext.offset;
     try {
-      currentPlaylistContext.offset += 50;
       if (currentPlaylistContext.type === "playlist") {
-        const count = await loadPlaylistTracks(
+        await loadPlaylistTracks(
           currentPlaylistContext.uid,
           currentPlaylistContext.kind,
           currentPlaylistContext.offset,
           seq,
         );
-        if (seq !== viewSeq) return;
-        if (count === 0) canLoadMore = false;
       }
     } catch (e) {
-      // Superseded first: the context object may already belong to the new
-      // view — never touch it, just drop the stale failure silently.
       if (seq !== viewSeq) return;
-      // Roll back the optimistic offset bump so a retry doesn't skip a page.
-      currentPlaylistContext.offset = prevOffset;
+      // Failed pages leave the cursor unchanged, so retry the same window.
       reportError("Load more", e, MSG.YANDEX_FAILED_PLAYLIST);
     } finally {
       if (mseq === moreSeq) isLoadingMore = false;
@@ -601,14 +603,14 @@
     }
 
     // For paged contexts (favorites / user playlists) hand the daemon a source
-    // descriptor so it can keep fetching beyond the loaded page (e.g. 851 favs
-    // while the UI only loaded 50). offset = how many we already sent.
+    // descriptor so it can keep fetching beyond the loaded source window.
+    // Unavailable tracks consume source positions without adding visible rows.
     let source: PlaylistSource | null = null;
     if (viewMode === "playlist" && currentPlaylistContext.uid && currentPlaylistContext.kind) {
       source = {
         kind: currentPlaylistContext.kind,
         uid: String(currentPlaylistContext.uid),
-        offset: raw.length,
+        offset: currentPlaylistContext.offset,
       };
     }
 
