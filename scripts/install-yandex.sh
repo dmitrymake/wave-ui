@@ -7,6 +7,7 @@ YANDEX_REPO_DIR="${1:-$(cd "$(dirname "$0")/.." && pwd)}"
 YANDEX_INSTALL_DIR="/opt/wave-yandex"
 YANDEX_DATA_DIR="/var/local/www/yandex-music"
 YANDEX_TOKEN_FILE="$YANDEX_DATA_DIR/token.dat"
+YANDEX_TMPFILES="/etc/tmpfiles.d/wave-yandex.conf"
 
 echo ">>> Installing Yandex Music Python bridge..."
 sudo apt-get install -y -qq python3-venv python3-pip php-curl curl
@@ -25,7 +26,7 @@ sudo "$YANDEX_INSTALL_DIR/venv/bin/python" -m pip install --disable-pip-version-
 # Credentials are deliberately not copied into a deployment artifact.
 YANDEX_BACKUP="/var/backups/wave-yandex/$(date +%Y%m%d-%H%M%S)-$$"
 sudo install -d -m 700 "$YANDEX_BACKUP"
-YANDEX_BACKUP_PATHS=(/etc/systemd/system/wave-yandex.service /var/www/wave-yandex-api.php
+YANDEX_BACKUP_PATHS=(/etc/systemd/system/wave-yandex.service "$YANDEX_TMPFILES" /var/www/wave-yandex-api.php
                      "$YANDEX_INSTALL_DIR/yandex-music.py" "$YANDEX_INSTALL_DIR/yandex_client.py"
                      "$YANDEX_INSTALL_DIR/yandex_player.py" "$YANDEX_INSTALL_DIR/yandex_audio.py"
                      "$YANDEX_INSTALL_DIR/yandex-requirements.txt")
@@ -43,6 +44,8 @@ rollback_yandex() {
   for path in "${YANDEX_BACKUP_PATHS[@]}"; do
     if sudo test -f "$YANDEX_BACKUP$path"; then
       sudo cp -a "$YANDEX_BACKUP$path" "$path"
+    elif [[ "$path" == "$YANDEX_TMPFILES" ]]; then
+      sudo rm -f "$YANDEX_TMPFILES"
     fi
   done
   if sudo test -f "$YANDEX_BACKUP$YANDEX_INSTALL_DIR/yandex-requirements.txt"; then
@@ -63,7 +66,12 @@ for module in yandex-music.py yandex_client.py yandex_player.py yandex_audio.py 
   sudo install -m 644 "$YANDEX_REPO_DIR/src/api/$module" "$YANDEX_INSTALL_DIR/$module"
 done
 sudo install -d -m 700 -o www-data -g www-data "$YANDEX_DATA_DIR"
-sudo install -d -m 755 -o www-data -g www-data /dev/shm/yandex_music
+# /dev/shm is cleared on reboot. Recreate the directory during boot, before
+# systemd sets up the service's ReadWritePaths mount namespace.
+sudo tee "$YANDEX_TMPFILES" >/dev/null <<'EOF'
+d /dev/shm/yandex_music 0755 www-data www-data -
+EOF
+sudo systemd-tmpfiles --create "$YANDEX_TMPFILES"
 if ! sudo test -f "$YANDEX_TOKEN_FILE"; then
   if sudo test -f /var/local/www/yandex_token.dat; then
     sudo install -m 600 -o www-data -g www-data /var/local/www/yandex_token.dat "$YANDEX_TOKEN_FILE"
@@ -78,7 +86,7 @@ sudo chmod 600 "$YANDEX_TOKEN_FILE"
 sudo tee /etc/systemd/system/wave-yandex.service >/dev/null <<'EOF'
 [Unit]
 Description=WaveUI Yandex Music API, Radio and Audio Bridge
-After=network-online.target mpd.service
+After=network-online.target mpd.service systemd-tmpfiles-setup.service
 Wants=network-online.target
 
 [Service]
